@@ -3,16 +3,15 @@ import {
   HemisphereLight,
   Mesh,
   NeutralToneMapping,
-  PMREMGenerator,
   PerspectiveCamera,
   Scene,
   Sphere,
   Vector3,
   WebGLRenderer,
 } from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { GeometryCache } from './geometryCache';
 import type { MaterialLibrary } from './materials';
+import { studioEnvironment } from './environment';
 
 const SIZE = 96;
 const VIEW_DIRECTION = new Vector3(1.1, 0.95, 1.45).normalize();
@@ -35,9 +34,7 @@ export class ThumbnailRenderer {
     this.renderer.setClearColor(0x000000, 0);
 
     try {
-      const pmrem = new PMREMGenerator(this.renderer);
-      this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-      pmrem.dispose();
+      this.scene.environment = studioEnvironment(this.renderer);
     } catch (error: unknown) {
       this.renderer.dispose();
       this.renderer.forceContextLoss();

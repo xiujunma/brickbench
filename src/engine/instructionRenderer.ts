@@ -4,11 +4,9 @@ import {
   HemisphereLight,
   NeutralToneMapping,
   OrthographicCamera,
-  PMREMGenerator,
   Scene,
   WebGLRenderer,
 } from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { isOpaqueColor } from '../core/colors';
 import type { Vec3 } from '../core/grid';
 import { frameView } from '../core/instructions/camera';
@@ -23,6 +21,7 @@ import { GeometryCache } from './geometryCache';
 import { Ground } from './ground';
 import { MaterialLibrary } from './materials';
 import type { MeshSource } from './meshStore';
+import { studioEnvironment } from './environment';
 
 const JPEG_QUALITY = 0.9;
 const PAPER = '#ffffff';
@@ -66,9 +65,7 @@ export class InstructionRenderer {
       this.renderer.toneMapping = NeutralToneMapping;
       this.renderer.toneMappingExposure = 1.05;
 
-      const pmrem = new PMREMGenerator(this.renderer);
-      this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-      pmrem.dispose();
+      this.scene.environment = studioEnvironment(this.renderer);
       this.scene.environmentIntensity = 0.6;
       this.scene.background = new Color(PAPER);
 

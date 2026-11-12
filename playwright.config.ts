@@ -5,13 +5,15 @@ const CI = Boolean(process.env['CI']);
 
 export default defineConfig({
   testDir: 'e2e',
-  timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: true,
   forbidOnly: CI,
-  // software WebGL on shared CI machines is slow and now and then stalls; one retry absorbs that, and shows as "flaky"
+  // CI machines have two cores and no GPU: one test at a time, more time each, one retry
+  // (reported as "flaky"), and stop early when everything fails the same way
+  timeout: CI ? 120_000 : 60_000,
   retries: CI ? 1 : 0,
-  workers: CI ? 2 : undefined,
+  workers: CI ? 1 : undefined,
+  maxFailures: CI ? 3 : 0,
   reporter: CI ? [['github'], ['list']] : [['list']],
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
@@ -29,8 +31,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `bunx --bun vite --port ${PORT} --strictPort --host 127.0.0.1`,
+    // CI tests the production build (`vite build` runs first): far less work per page than the dev server
+    command: `bunx --bun vite ${CI ? 'preview' : ''} --port ${PORT} --strictPort --host 127.0.0.1`,
     url: `http://127.0.0.1:${PORT}`,
-    reuseExistingServer: !process.env['CI'],
+    reuseExistingServer: !CI,
   },
 });

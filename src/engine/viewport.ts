@@ -6,7 +6,6 @@ import {
   MOUSE,
   NeutralToneMapping,
   PCFShadowMap,
-  PMREMGenerator,
   PerspectiveCamera,
   SRGBColorSpace,
   Scene,
@@ -15,9 +14,9 @@ import {
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { Vec3 } from '../core/grid';
 import type { Ray } from '../core/placement/ray';
+import { isSoftwareRenderer, studioEnvironment } from './environment';
 
 const FOV = 35;
 const HOME_DISTANCE = 38;
@@ -31,16 +30,6 @@ const BACKDROP_BOTTOM = '#d9d3c8';
 export interface Bounds3 {
   readonly min: Vec3;
   readonly max: Vec3;
-}
-
-const SOFTWARE_RENDERERS = /swiftshader|llvmpipe|softpipe|software|basic render/i;
-
-/** Detects CPU-only WebGL (no GPU acceleration), where every shadow pass is expensive. */
-function isSoftwareRenderer(renderer: WebGLRenderer): boolean {
-  const gl = renderer.getContext();
-  const info = gl.getExtension('WEBGL_debug_renderer_info');
-  const name: unknown = gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER);
-  return typeof name === 'string' && SOFTWARE_RENDERERS.test(name);
 }
 
 function backdropTexture(): CanvasTexture {
@@ -103,10 +92,7 @@ export class Viewport {
   }
 
   private setupScene(): void {
-    const pmrem = new PMREMGenerator(this.renderer);
-    const environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    pmrem.dispose();
-    this.scene.environment = environment;
+    this.scene.environment = studioEnvironment(this.renderer, this.softwareRendering);
     this.scene.environmentIntensity = 0.55;
     this.scene.background = this.backdrop;
 
