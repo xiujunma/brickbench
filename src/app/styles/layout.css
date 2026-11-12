@@ -1,0 +1,131 @@
+.app {
+  display: grid;
+  grid-template-rows: var(--topbar-h) minmax(0, 1fr) var(--statusbar-h);
+  height: 100%;
+}
+
+.workspace {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--left-w) minmax(0, 1fr) var(--right-w);
+  min-height: 0;
+  /* drawers slide in from off-screen on small screens; never let them widen the page */
+  overflow: clip;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+}
+
+.panel-parts {
+  border-right: 1px solid var(--line);
+}
+
+.panel-inspector {
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.viewport {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  user-select: none;
+}
+
+.viewport-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.viewport[data-tool='build'] .viewport-canvas {
+  cursor: crosshair;
+}
+
+.viewport[data-tool='paint'] .viewport-canvas,
+.viewport[data-tool='erase'] .viewport-canvas {
+  cursor: cell;
+}
+
+.viewport-error {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: var(--ink-2);
+}
+
+.viewport-error strong {
+  color: var(--ink);
+  font-size: var(--text-lg);
+}
+
+.marquee {
+  position: absolute;
+  border: 1.5px solid var(--accent);
+  background: rgb(217 72 15 / 0.08);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* Small screens: side panels slide over the stage. */
+.drawer-toggles {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .panel-parts,
+  .panel-inspector {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 20;
+    width: min(320px, 88vw);
+    box-shadow: var(--shadow-float);
+    transition: transform var(--dur) var(--ease-out);
+  }
+
+  .panel-parts {
+    left: 0;
+    transform: translateX(-104%);
+  }
+
+  .panel-inspector {
+    right: 0;
+    transform: translateX(104%);
+  }
+
+  .app[data-drawer='parts'] .panel-parts,
+  .app[data-drawer='colors'] .panel-inspector {
+    transform: none;
+  }
+
+  .stage {
+    grid-column: 1;
+  }
+
+  .drawer-toggles {
+    display: flex;
+    gap: 4px;
+  }
+}

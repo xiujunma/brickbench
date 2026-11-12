@@ -1,0 +1,27 @@
+import { useStore } from 'zustand';
+import { createIdFactory } from '../core/model/ids';
+import { getPart } from '../core/parts/catalog';
+import { partLibrary, usesLibraryParts } from './library';
+import { restoreSession } from './session';
+import { createEditorStore } from './store';
+import type { EditorState } from './types';
+
+const nextId = createIdFactory();
+
+/** The app-wide editor store. */
+export const editorStore = createEditorStore({ lookup: getPart, nextId });
+
+/** Reopens this browser's autosave, loading the LDraw library first when the model needs it. */
+export function restoreLastSession(): Promise<void> {
+  return restoreSession({
+    store: editorStore,
+    lookup: getPart,
+    nextId,
+    loadLibrary: () => partLibrary.load(),
+    usesLibrary: usesLibraryParts,
+  });
+}
+
+export function useEditor<T>(selector: (state: EditorState) => T): T {
+  return useStore(editorStore, selector);
+}

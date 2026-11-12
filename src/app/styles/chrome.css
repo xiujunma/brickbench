@@ -1,0 +1,349 @@
+/* Top bar, menus, status bar and toasts. */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 12px 0 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  color: var(--accent);
+}
+
+.wordmark {
+  font-size: var(--text-lg);
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  font-variation-settings: 'opsz' 32;
+}
+
+.wordmark em {
+  font-style: normal;
+  color: var(--accent);
+}
+
+.menubar {
+  display: flex;
+  gap: 2px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.menu-trigger,
+.btn,
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  background: transparent;
+  font-weight: 560;
+  white-space: nowrap;
+  transition:
+    background var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+
+.menu-trigger:hover,
+.icon-btn:hover:not(:disabled),
+.btn:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+.icon-btn {
+  width: 32px;
+  padding: 0;
+  color: var(--ink-2);
+}
+
+.icon-btn:disabled {
+  color: var(--line-strong);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn-outline {
+  border-color: var(--line-strong);
+  background: var(--surface-raised);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.model-name {
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.model-name input {
+  width: min(360px, 100%);
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  background: transparent;
+  font-size: var(--text-md);
+  font-weight: 600;
+  text-align: center;
+  text-overflow: ellipsis;
+}
+
+.model-name input:hover {
+  border-color: var(--line);
+}
+
+.model-name input:focus {
+  border-color: var(--line-strong);
+  background: var(--surface-raised);
+  text-align: left;
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.save-status {
+  margin: 0 8px;
+  color: var(--ink-3);
+  font: var(--text-2xs) / 1 var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+/* Menus use the popover API for light-dismiss and top-layer stacking. */
+.menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  min-width: 232px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-float);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  text-align: left;
+}
+
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--accent-soft);
+  box-shadow: none;
+}
+
+.menu-item svg {
+  color: var(--ink-2);
+}
+
+.menu-item kbd {
+  margin-left: auto;
+}
+
+.menu-label {
+  padding: 8px 8px 4px;
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--line);
+}
+
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  margin: 2px 6px 8px;
+  border-radius: var(--radius-s);
+  background: var(--surface-sunken);
+}
+
+.segmented button {
+  flex: 1;
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.segmented button[aria-pressed='true'] {
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: var(--shadow-1);
+}
+
+.menu-swatches {
+  margin: 2px 6px 6px;
+  grid-template-columns: repeat(9, 22px);
+}
+
+/* Status bar */
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  min-width: 0;
+}
+
+.status-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-hint kbd {
+  margin: 0 2px;
+}
+
+.status-hint.is-blocked {
+  color: var(--danger);
+}
+
+.status-coords,
+.status-counts {
+  flex: none;
+  font: var(--text-2xs) / 1 var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+.status-coords span {
+  color: var(--ink-3);
+  margin-right: 3px;
+}
+
+/* Toasts */
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--statusbar-h) + 14px);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: min(380px, calc(100vw - 32px));
+  padding: 10px 10px 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ink-3);
+  border-radius: var(--radius-m);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-2);
+  font-size: var(--text-sm);
+  pointer-events: auto;
+  animation: toast-in var(--dur) var(--ease-out);
+}
+
+.toast-success {
+  border-left-color: var(--success);
+}
+
+.toast-error {
+  border-left-color: var(--danger);
+}
+
+.toast button {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font-size: 16px;
+  line-height: 1;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (max-width: 860px) {
+  .wordmark,
+  .save-status,
+  .status-hint {
+    display: none;
+  }
+
+  /* keep toasts clear of the tool dock at the bottom of small screens */
+  .toasts {
+    top: calc(var(--topbar-h) + 10px);
+    bottom: auto;
+    right: 12px;
+    left: 12px;
+    align-items: stretch;
+  }
+
+  .menubar {
+    padding-left: 6px;
+  }
+
+  .topbar {
+    gap: 6px;
+    padding: 0 8px;
+  }
+}

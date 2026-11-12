@@ -1,0 +1,7 @@
+[test]
+# e2e/ holds the Playwright browser tests: `bun run e2e`
+pathIgnorePatterns = ["e2e/**", "node_modules/**", "dist/**", "public/**"]
+coverageSkipTestFiles = true
+# the unit-tested core; React panels and WebGL views are covered by the browser tests
+coveragePathIgnorePatterns = ["src/testing/**", "**/*.verify.ts", "src/ui/**", "src/app/**", "src/editor/**"]
+coverageThreshold = { lines = 0.8, functions = 0.8 }
