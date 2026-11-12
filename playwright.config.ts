@@ -1,13 +1,18 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 5199;
+const CI = Boolean(process.env['CI']);
 
 export default defineConfig({
   testDir: 'e2e',
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: true,
-  reporter: [['list']],
+  forbidOnly: CI,
+  // software WebGL on shared CI machines is slow and now and then stalls; one retry absorbs that, and shows as "flaky"
+  retries: CI ? 1 : 0,
+  workers: CI ? 2 : undefined,
+  reporter: CI ? [['github'], ['list']] : [['list']],
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     trace: 'retain-on-failure',

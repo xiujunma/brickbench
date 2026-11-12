@@ -6,11 +6,13 @@
  *   <out>/CREDITS.txt       authors and licence, as CC BY asks
  *   <out>/build.json        what was built from what, and whether it is complete
  *
- *   bun run ldraw [--library <dir>] [--out public/ldraw] [--only 3001,3003] [--limit 200] [--if-missing]
+ *   bun run ldraw [--library <dir>] [--out public/ldraw] [--only 3001,3003] [--limit 200] [--if-missing] [--fetch-only]
  *
  * Without --library (or LDRAW_DIR) the official complete.zip is downloaded
  * into .ldraw-cache/ on first use. --if-missing leaves a complete build
  * alone, which is how `bun run build` makes sure the library ships.
+ * --fetch-only just downloads and unpacks the library, e.g. for the
+ * LDraw verification tests.
  */
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -26,6 +28,7 @@ interface Options {
   readonly only: ReadonlySet<string> | null;
   readonly limit: number;
   readonly ifMissing: boolean;
+  readonly fetchOnly: boolean;
 }
 
 const log = (message: string): void => {
@@ -42,6 +45,7 @@ function readOptions(argv: readonly string[]): Options {
       only: { type: 'string' },
       limit: { type: 'string' },
       'if-missing': { type: 'boolean', default: false },
+      'fetch-only': { type: 'boolean', default: false },
     },
   });
   const limit = values.limit === undefined ? Infinity : Number(values.limit);
@@ -54,6 +58,7 @@ function readOptions(argv: readonly string[]): Options {
     only,
     limit,
     ifMissing: values['if-missing'],
+    fetchOnly: values['fetch-only'],
   };
 }
 
@@ -76,6 +81,10 @@ function report(out: string, library: ConvertedLibrary, seconds: number): void {
 async function main(): Promise<void> {
   const started = performance.now();
   const options = readOptions(process.argv.slice(2));
+  if (options.fetchOnly) {
+    log(`The LDraw library is ready in ${(await findLibrary(options)).root}.`);
+    return;
+  }
   const output = new StagedOutput(resolve(options.out));
   if (options.ifMissing && isCompleteBuild(output.out)) {
     output.discard();

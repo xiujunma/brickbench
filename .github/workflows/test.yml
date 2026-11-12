@@ -1,0 +1,81 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# a newer push to the same branch or pull request makes an older run pointless
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: Type check and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Type check
+        run: bun run typecheck
+      - name: Unit tests, at least 80% of lines and functions covered in every file
+        run: bun run coverage
+
+  browser:
+    name: LDraw checks and browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+
+      # The LDraw library is a 150 MB download that takes a few minutes to convert.
+      # The download is kept until the cache key changes (bump v1 to pick up a newer
+      # LDraw release); the converted library until the converter itself changes.
+      - name: Restore the LDraw download
+        uses: actions/cache@v6
+        with:
+          path: .ldraw-cache/complete.zip
+          key: ldraw-download-v1
+      - name: Download and unpack the LDraw library
+        run: bun run ldraw --fetch-only
+      - name: Restore the converted library
+        uses: actions/cache@v6
+        with:
+          path: public/ldraw
+          key: ldraw-library-v1-${{ hashFiles('.ldraw-cache/complete.zip', 'scripts/ldraw/**/*.ts', 'src/core/ldraw/format.ts') }}
+      - name: Convert the LDraw library
+        run: bun run ldraw --if-missing
+      - name: Check parts against the LDraw library
+        run: bun test verify
+        env:
+          LDRAW_DIR: .ldraw-cache/ldraw
+
+      - name: Restore Playwright's browser
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+      - name: Browser tests
+        run: bun run e2e
+      - name: Keep traces of failed browser tests
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7

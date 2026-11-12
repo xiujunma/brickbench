@@ -78,11 +78,22 @@ The first time you run the browser tests, install a browser with `bunx playwrigh
 Each part records its LDraw part number and where the LDraw origin sits on it, which keeps exports correctly placed and turned. A test compares every part against the real LDraw library:
 
 ```bash
-bun run ldraw      # downloads the library into .ldraw-cache/ldraw, if you have not yet
+bun run ldraw --fetch-only    # downloads the library into .ldraw-cache/ldraw, if you have not yet
 LDRAW_DIR=.ldraw-cache/ldraw bun test src/core/parts/ldraw.verify.test.ts src/core/io/ldrawExport.verify.test.ts
 ```
 
+`LDRAW_DIR=.ldraw-cache/ldraw bun test verify` runs every check against the real library.
+
 The first file checks each part's size, origin and slope direction. The second exports every part at all four rotations and confirms the LDraw part lands exactly where the brick sits. Without `LDRAW_DIR` both are skipped. Run them whenever you add or change a part.
+
+### Continuous integration
+
+GitHub Actions runs `.github/workflows/test.yml` on every push to `main` and on every pull request, in two jobs:
+
+- **Type check and unit tests:** `bun run typecheck` and `bun run coverage`, about a minute.
+- **LDraw checks and browser tests:** builds the LDraw library, runs `bun test verify` against it, then `bun run e2e` in headless Chromium. The library download and the converted library are cached, so only the first run, or one after the converter changes, spends a few minutes converting. Traces of failed browser tests are kept for a week as a `playwright-traces` artifact.
+
+To pick up a newer LDraw release in CI, bump `ldraw-download-v1` in the workflow.
 
 ## The LDraw parts library
 
@@ -102,6 +113,7 @@ bun run ldraw                                # download complete.zip into .ldraw
 bun run ldraw --library /path/to/ldraw       # or LDRAW_DIR=…: use a library you already have
 bun run ldraw --only 3001,3003,3040b         # just these parts, handy while developing (a partial build)
 bun run ldraw --limit 200                    # the first 200 parts (also partial)
+bun run ldraw --fetch-only                   # just download and unpack it into .ldraw-cache/ldraw
 ```
 
 In the app, library parts are ordinary parts with ids like `ldraw:3001`. Each fills the smallest box of whole cells that holds its body (a fifth of a stud may stick out on a side), placed so its top studs sit over cell centres, so it stacks and collides like any brick. Jumper plates keep their half-stud offset. While a mesh loads, a plain box of the right size stands in; parts that fail to load are retried when the connection comes back.
