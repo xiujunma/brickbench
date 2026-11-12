@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, spyOn, vi } from 'bun:test';
 import { getPart } from '../core/parts/catalog';
 import type { Fetch } from '../engine/meshStore';
 import { createPartLibrary, usesLibraryParts } from './library';
@@ -18,7 +18,7 @@ function json(body: unknown, status = 200, type = 'application/json'): Response 
 }
 
 describe('part library', () => {
-  it('loads the index once, registers its parts and offers search', async () => {
+  it('loads the index once and registers its parts', async () => {
     const fetch = vi.fn(() => Promise.resolve(json(INDEX)));
     const library = createPartLibrary('/base/ldraw/', fetch);
     expect(library.store.getState().status).toBe('idle');
@@ -29,7 +29,7 @@ describe('part library', () => {
     expect(fetch).toHaveBeenCalledWith('/base/ldraw/index.json', expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(a.status).toBe('ready');
     expect(a.categories).toEqual([{ name: 'Brick', count: 1 }, { name: 'Hinge', count: 1 }]);
-    expect(a.search('hinge', null).map((e) => e.id)).toEqual(['3937']);
+    expect(a.entries.map((e) => e.id)).toEqual(['3003', '3937']);
     expect(getPart('ldraw:3003')?.name).toBe('Brick 2 × 2');
     await library.load();
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -56,6 +56,34 @@ describe('part library', () => {
     expect(await library.load()).toMatchObject({ status: 'failed', error: expect.stringMatching(/damaged/) });
     expect(await library.load()).toMatchObject({ status: 'failed', error: expect.stringMatching(/HTTP 500/) });
     expect((await library.load()).status).toBe('ready');
+  });
+
+  it('starts loading when asked, but tries a failure again only when told to', async () => {
+    const fetch = vi.fn<Fetch>().mockRejectedValueOnce(new TypeError('offline')).mockResolvedValueOnce(json(INDEX));
+    const library = createPartLibrary('/', fetch);
+    const meshesRetried = spyOn(library.meshes, 'retryFailed');
+    library.request();
+    library.request();
+    await waitFor(() => expect(library.store.getState().status).toBe('failed'));
+    // focusing the search box again must not refetch behind the user's back
+    library.request();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    library.retry();
+    expect(meshesRetried).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(library.store.getState().status).toBe('ready'));
+    library.request();
+    library.retry();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries meshes without loading a library nobody asked for', () => {
+    const fetch = vi.fn<Fetch>(() => Promise.resolve(json(INDEX)));
+    const library = createPartLibrary('/', fetch);
+    const meshesRetried = spyOn(library.meshes, 'retryFailed');
+    library.retry();
+    expect(meshesRetried).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(library.store.getState().status).toBe('idle');
   });
 
   it('gives up on an index that takes too long', async () => {

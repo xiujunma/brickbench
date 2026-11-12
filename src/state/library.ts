@@ -2,7 +2,7 @@ import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { parseLDrawIndex, toPartDef } from '../core/ldraw/catalogIndex';
 import type { LDrawIndexEntry } from '../core/ldraw/format';
-import { categoriesOf, createLibrarySearch, type CategoryCount, type LibrarySearch } from '../core/ldraw/librarySearch';
+import { categoriesOf, type CategoryCount } from '../core/ldraw/categories';
 import { registerLibraryParts } from '../core/parts/catalog';
 import { MeshStore, type Fetch } from '../engine/meshStore';
 
@@ -16,7 +16,6 @@ export interface LibraryState {
   readonly status: LibraryStatus;
   readonly entries: readonly LDrawIndexEntry[];
   readonly categories: readonly CategoryCount[];
-  readonly search: LibrarySearch;
   readonly error: string | null;
 }
 
@@ -27,12 +26,16 @@ export interface PartLibrary {
   readonly baseUrl: string;
   /** Loads the index once (again after a failure) and registers its parts with the catalogue. */
   load(): Promise<LibraryState>;
+  /** Starts loading if nothing has yet. A failure waits for `retry`, so focusing a box never refetches unseen. */
+  request(): void;
+  /** Tries any meshes that failed again, and the index if it failed; never starts a first load. */
+  retry(): void;
 }
 
 /** The index is about 1 MB; give slow connections a while, but not for ever. */
 const INDEX_TIMEOUT_MS = 30_000;
 
-const INITIAL: LibraryState = { status: 'idle', entries: [], categories: [], search: () => [], error: null };
+const INITIAL: LibraryState = { status: 'idle', entries: [], categories: [], error: null };
 
 /** Static hosts often answer unknown paths with the app's index.html instead of a 404. */
 function isMissing(response: Response): boolean {
@@ -71,7 +74,6 @@ async function fetchIndex(baseUrl: string, fetcher: Fetch, timeoutMs: number): P
       status: 'ready',
       entries: index.parts,
       categories: categoriesOf(index.parts),
-      search: createLibrarySearch(index.parts),
       error: null,
     };
   } catch (error: unknown) {
@@ -102,7 +104,16 @@ export function createPartLibrary(
     return pending;
   };
 
-  return { store, meshes, baseUrl, load };
+  const request = (): void => {
+    if (store.getState().status !== 'failed') void load();
+  };
+
+  const retry = (): void => {
+    meshes.retryFailed();
+    if (store.getState().status === 'failed') void load();
+  };
+
+  return { store, meshes, baseUrl, load, request, retry };
 }
 
 /** The library shipped in public/ldraw, built by `bun run ldraw`. */

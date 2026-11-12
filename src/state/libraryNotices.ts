@@ -1,18 +1,18 @@
 import type { StoreApi } from 'zustand/vanilla';
 import { LDRAW_PREFIX } from '../core/ldraw/catalogIndex';
 import type { MeshStore } from '../engine/meshStore';
-import { partLibrary } from './library';
+import { partLibrary, type PartLibrary } from './library';
 import type { EditorState } from './types';
 
 /** One notice per burst: when the connection drops, dozens of parts fail at once. */
 export const FAILURE_QUIET_MS = 10_000;
 
-/** Tries failed library parts again when the browser comes back online. */
+/** Tries the failed library index and parts again when the browser comes back online. */
 export function retryWhenOnline(
-  meshes: Pick<MeshStore, 'retryFailed'> = partLibrary.meshes,
+  library: Pick<PartLibrary, 'retry'> = partLibrary,
   target: Pick<Window, 'addEventListener' | 'removeEventListener'> = window,
 ): () => void {
-  const retry = (): void => meshes.retryFailed();
+  const retry = (): void => library.retry();
   target.addEventListener('online', retry);
   return () => target.removeEventListener('online', retry);
 }

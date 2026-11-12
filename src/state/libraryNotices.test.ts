@@ -22,7 +22,7 @@ describe('library failure notices', () => {
   it('tries failed parts again when the connection comes back', () => {
     const target = new EventTarget();
     let retried = 0;
-    const stop = retryWhenOnline({ retryFailed: () => void (retried += 1) }, target as unknown as Window);
+    const stop = retryWhenOnline({ retry: () => void (retried += 1) }, target as unknown as Window);
     target.dispatchEvent(new Event('online'));
     expect(retried).toBe(1);
     stop();

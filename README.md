@@ -7,7 +7,12 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 ## Features
 
 - **87 basic parts in six families:** bricks (including tall 1×1×3 to 1×2×5), plates up to 16×16, tiles, slopes (45°, 33°, 65°, inverted, cheese), round parts and cones, and arches, all generated in code.
-- **The LDraw community parts library:** over 6,000 more parts, from Technic beams and hinges to wheels, windows, doors and minifigure accessories, converted from the [LDraw](https://www.ldraw.org) library when the app is built. Browse them by category or search by name or part number; each mesh loads the first time you use it.
+- **The LDraw community parts library:** over 6,000 more parts, from Technic beams and hinges to wheels, windows, doors and minifigure accessories, converted from the [LDraw](https://www.ldraw.org) library when the app is built. Each mesh loads the first time you use it.
+- **Finding the right part:**
+  - **One search covers every part.** Type sizes any way ("2x4", "2 by 4", "two by four"), hobby nicknames ("cheese", "jumper", "macaroni", "SNOT"), US spellings ("tire", "windshield") or a part number, including BrickLink's. Sizes work either way round ("4x2" finds 2 × 4). Name a colour too ("red 2x4 brick") and the part is built in it. If you mistype, close spellings show instead.
+  - **Size, height and shape filters** narrow thousands of parts to a handful: say 1 × 2, 1 plate, with a clip.
+  - **Mine** keeps your starred favourites, recent picks and the parts already in your model. Favourites and picks stay in this browser, shared by its tabs.
+  - **Keyboard first:** press `/`, type, use ↑ ↓ and press Enter to build with the part.
 - **54 colours:** solid, transparent and metallic, following the LDraw palette.
 - **Grid snapping that understands bricks.** Point at a top face to stack, at a side to build beside it (lined up with that brick's courses), or underneath to hang below. Parts never overlap: the preview turns red when there's no room, and drops land on top of whatever is in the way.
 - **Tools:** Build, Select & move (click, Shift-click, box select, drag to move), Paint and Erase, plus an eyedropper (Alt-click) and rotate, nudge, copy, paste and duplicate.
@@ -45,6 +50,7 @@ Requires [Bun](https://bun.sh) 1.4 or later and a browser with WebGL 2. Bun runs
 | Frame / reset view | | `F` / `Home` |
 | Save / open | | `⌘S` / `⌘O` |
 | Search parts / help | | `/` / `?` |
+| Choose a search result | | `↑` `↓`, `Enter` builds with it, `Esc` clears |
 
 On Windows and Linux, use Ctrl in place of ⌘.
 
@@ -91,7 +97,9 @@ The first file checks each part's size, origin and slope direction. The second e
 GitHub Actions runs `.github/workflows/test.yml` on every push to `main` and on every pull request, in two jobs:
 
 - **Type check and unit tests:** `bun run typecheck` and `bun run coverage`, about a minute.
-- **LDraw checks and browser tests:** builds the LDraw library, runs `bun test verify` against it, then `bun run e2e` in headless Chromium. The library download and the converted library are cached, so only the first run, or one after the converter changes, spends a few minutes converting. Traces of failed browser tests are kept for a week as a `playwright-traces` artifact.
+- **LDraw checks and browser tests:** builds the LDraw library, runs `bun test verify` against it, builds the app, then runs `bun run e2e` against that build in headless Chromium. The library download and the converted library are cached, so only the first run, or one after the converter changes, spends a few minutes converting. Traces of failed browser tests are kept for a week as a `playwright-traces` artifact.
+
+The runners have no GPU, so WebGL is drawn on the CPU: with `CI` set, Playwright tests the production build (`vite preview`) one test at a time, gives each test two minutes, retries once, and stops after three failures. Run the same way locally with `bunx --bun vite build && CI=1 bun run e2e`.
 
 To pick up a newer LDraw release in CI, bump `ldraw-download-v1` in the workflow.
 
@@ -132,7 +140,8 @@ TypeScript, [three.js](https://threejs.org) for rendering, React for the panels,
 
 ```
 src/
-  core/       pure logic, no three.js: units and rotation, colours, part catalogue,
+  core/       pure logic, no three.js: units and rotation, colours, part catalogue
+              and part finder (search, nicknames, filters),
               immutable model operations, spatial index, picking and placement,
               undo history, file format, LDraw and parts-list export, and
               instruction steps, page layout and camera framing

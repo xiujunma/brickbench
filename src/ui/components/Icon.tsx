@@ -25,6 +25,7 @@ const PATHS = {
   grid: 'M4 4h16v16H4Z M4 9.3h16 M4 14.6h16 M9.3 4v16 M14.6 4v16',
   panelLeft: 'M4 5h16v14H4Z M9.5 5v14',
   panelRight: 'M4 5h16v14H4Z M14.5 5v14',
+  star: 'M12 3.8l2.5 5.1 5.6.8-4.05 3.95.96 5.6L12 16.6l-5.01 2.65.96-5.6L3.9 9.7l5.6-.8Z',
 } as const;
 
 export type IconName = keyof typeof PATHS;

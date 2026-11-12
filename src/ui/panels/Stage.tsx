@@ -6,6 +6,7 @@ import { editorStore, useEditor } from '../../state/editorStore';
 import { partLibrary } from '../../state/library';
 import type { Tool } from '../../state/types';
 import { Icon, type IconName } from '../components/Icon';
+import { BUILD_AREA_ID } from '../focusTargets';
 
 interface ToolInfo {
   readonly id: Tool;
@@ -131,7 +132,7 @@ function ViewportHost() {
 
 export function Stage() {
   return (
-    <main className="stage" aria-label="Build area">
+    <main id={BUILD_AREA_ID} className="stage" aria-label="Build area" tabIndex={-1}>
       <ViewportHost />
       <EmptyHint />
       <PasteBanner />

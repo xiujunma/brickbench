@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { getPart, registerLibraryParts } from '../parts/catalog';
 import { isLDrawPartId, parseLDrawIndex, toPartDef } from './catalogIndex';
 import type { LDrawIndexEntry } from './format';
-import { categoriesOf, createLibrarySearch } from './librarySearch';
+import { categoriesOf } from './categories';
 
 const BRICK: LDrawIndexEntry = {
   id: '3001', name: 'Brick 2 × 4', category: 'Brick', author: 'James Jessiman', w: 4, d: 2, h: 3, origin: [0, 1.2, 0], snug: true,
@@ -53,53 +53,7 @@ describe('library index', () => {
   });
 });
 
-describe('library search', () => {
-  const search = createLibrarySearch([LONG_BRICK, BRICK, HINGE]);
-
-  it('matches every word against names, numbers, categories and keywords', () => {
-    expect(search('brick', null).map((e) => e.id)).toEqual(['3008', '3001']);
-    expect(search('2x4', null).map((e) => e.id)).toEqual(['3001']);
-    expect(search('swivel', null).map((e) => e.id)).toEqual(['3937']);
-    expect(search('brick 8', null).map((e) => e.id)).toEqual(['3008']);
-    expect(search('', 'Hinge').map((e) => e.id)).toEqual(['3937']);
-    expect(search('brick', 'Hinge')).toEqual([]);
-  });
-
-  it('puts the part whose number is the query first', () => {
-    expect(search('300', null).map((e) => e.id)).toEqual(['3008', '3001']);
-    expect(search('3001', null).map((e) => e.id)).toEqual(['3001']);
-    const numbered = createLibrarySearch([LONG_BRICK, { ...HINGE, id: '3008b', name: 'Brick 1 × 8 with 3008 in its name' }, { ...BRICK, id: '3008b2' }]);
-    expect(numbered('3008b', null)[0]?.id).toBe('3008b');
-  });
-
-  it('ranks names that start with the query, then names holding every word, above keyword matches', () => {
-    const ranked = createLibrarySearch([
-      { ...HINGE, id: 'a', name: 'Arch 1 × 2', keywords: ['brick'] },
-      { ...BRICK, id: 'b', name: 'Plate with Brick 1 × 2 Side' },
-      { ...BRICK, id: 'c', name: 'Brick 1 × 2' },
-      { ...BRICK, id: 'd', name: 'Sheet Plastic Panel 11 × 23 Brick' },
-    ]);
-    expect(ranked('brick 1 x 2', null).map((e) => e.id)).toEqual(['c', 'b', 'a']);
-  });
-
-  it('prefers names where the words come early', () => {
-    const sized = createLibrarySearch([
-      { ...BRICK, id: 'bracket', name: 'Bracket 1 × 2 - 2 × 4' },
-      { ...BRICK, id: 'brick', name: 'Brick 2 × 4' },
-      { ...BRICK, id: 'plate', name: 'Plate 2 × 4' },
-    ]);
-    expect(sized('2x4', null).map((e) => e.id)).toEqual(['brick', 'plate', 'bracket']);
-  });
-
-  it('lists parts named after a category first when browsing it', () => {
-    const technic = createLibrarySearch([
-      { ...BRICK, id: 'duplo', name: 'Duplo Axle 6', category: 'Technic' },
-      { ...BRICK, id: 'axle', name: 'Technic Axle 2', category: 'Technic' },
-    ]);
-    expect(technic('', 'Technic').map((e) => e.id)).toEqual(['axle', 'duplo']);
-    expect(technic('', null).map((e) => e.id)).toEqual(['duplo', 'axle']);
-  });
-
+describe('library categories', () => {
   it('lists categories alphabetically with their sizes', () => {
     expect(categoriesOf([LONG_BRICK, HINGE, BRICK])).toEqual([
       { name: 'Brick', count: 2 },

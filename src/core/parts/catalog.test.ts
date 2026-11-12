@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { DEFAULT_PART_ID, PARTS, PART_CATEGORIES, containsToken, getPart, searchParts } from './catalog';
+import { DEFAULT_PART_ID, PARTS, PART_CATEGORIES, getPart } from './catalog';
 import type { PartDef } from './types';
 
 function isCovered(part: PartDef, x: number, y: number, z: number): boolean {
@@ -92,27 +92,5 @@ describe('part catalogue', () => {
     expect(slope?.studs).toHaveLength(2);
     expect(slope?.studs.every(([, z]) => z === 0)).toBe(true);
     expect(getPart('slope45-2x2-inv')?.studs).toHaveLength(4);
-  });
-
-  it('searches by name, size and LDraw number', () => {
-    expect(searchParts('2x4').map((p) => p.id)).toContain('brick-2x4');
-    expect(searchParts('plate 2 x 4').map((p) => p.id)).toContain('plate-2x4');
-    expect(searchParts('3001').map((p) => p.id)).toEqual(['brick-2x4']);
-    expect(searchParts('cheese').map((p) => p.id)).toContain('slope30-1x1');
-    const slopes = searchParts('slope', 'slopes');
-    expect(slopes.length).toBeGreaterThan(5);
-    expect(slopes.every((p) => p.category === 'slopes')).toBe(true);
-    expect(searchParts('', 'tiles').every((p) => p.category === 'tiles')).toBe(true);
-    expect(searchParts('nothing-matches-this')).toEqual([]);
-  });
-
-  it('matches sizes on whole numbers only', () => {
-    expect(searchParts('1x1').map((p) => p.id)).not.toContain('brick-1x16');
-    expect(containsToken('brick 1x2x3', '1x2')).toBe(true);
-    expect(containsToken('panel 11x23', '1x2')).toBe(false);
-    expect(containsToken('plate 1x20', '1x2')).toBe(false);
-    expect(containsToken('slope 1x2 and 11x2', '1x2')).toBe(true);
-    expect(containsToken('slope 0.5x1', '5x1')).toBe(false);
-    expect(containsToken('technic 32000', '3200')).toBe(true);
   });
 });

@@ -13,6 +13,7 @@ import './app/styles/dialogs.css';
 import { App } from './app/App';
 import { editorStore, restoreLastSession } from './state/editorStore';
 import { retryWhenOnline, watchLibraryFailures } from './state/libraryNotices';
+import { startPartPicks } from './state/partPicks';
 import { startAutosave } from './state/persistence';
 
 const root = document.getElementById('root');
@@ -29,6 +30,7 @@ async function boot(): Promise<void> {
   startAutosave(editorStore);
   watchLibraryFailures(editorStore);
   retryWhenOnline();
+  startPartPicks(editorStore);
   createRoot(container).render(
     <StrictMode>
       <App />

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
-import { counts, freshEditor, viewportCentre } from './helpers';
+import { autosaved, counts, freshEditor, reloadEditor, viewportCentre } from './helpers';
 
 test.describe('building', () => {
   test('places a brick, then undoes and redoes it', async ({ page }) => {
@@ -52,7 +52,9 @@ test.describe('building', () => {
     await freshEditor(page);
     await page.keyboard.press('/');
     await page.keyboard.type('cheese');
-    await expect(page.locator('.part-tile')).toHaveCount(2);
+    // the built-in cheese slopes come first; library variants may follow
+    await expect(page.locator('.part-tile').nth(0)).toHaveAttribute('title', /^Slope 30° 1 × 1 × 2\/3/);
+    await expect(page.locator('.part-tile').nth(1)).toHaveAttribute('title', /^Slope 30° 1 × 2 × 2\/3/);
   });
 });
 
@@ -169,12 +171,14 @@ test.describe('files', () => {
   });
 
   test('keeps the model after a reload', async ({ page }) => {
+    // starts the editor twice
+    test.slow();
     await freshEditor(page);
     await page.getByRole('button', { name: 'File' }).click();
     await page.getByRole('menuitem', { name: 'Open sample cottage' }).click();
     await expect(counts(page)).toHaveText('78 bricks');
-    await page.waitForTimeout(900);
-    await page.reload();
+    await autosaved(page, 78);
+    await reloadEditor(page);
     await expect(counts(page)).toHaveText('78 bricks');
     await expect(page.getByRole('textbox', { name: 'Model name' })).toHaveValue('Garden cottage');
   });
