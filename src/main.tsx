@@ -10,6 +10,9 @@ import './app/styles/chrome.css';
 import './app/styles/panels.css';
 import './app/styles/stage.css';
 import './app/styles/dialogs.css';
+import './app/styles/agent.css';
+import { agentStorage, startAgent } from './agent/connection';
+import { agentLink } from './app/agent';
 import { App } from './app/App';
 import { editorStore, restoreLastSession } from './state/editorStore';
 import { retryWhenOnline, watchLibraryFailures } from './state/libraryNotices';
@@ -31,6 +34,7 @@ async function boot(): Promise<void> {
   watchLibraryFailures(editorStore);
   retryWhenOnline();
   startPartPicks(editorStore);
+  startAgent({ link: agentLink, storage: agentStorage(), target: window });
   createRoot(container).render(
     <StrictMode>
       <App />

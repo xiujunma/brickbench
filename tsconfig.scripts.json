@@ -23,6 +23,7 @@
   },
   "include": [
     "scripts",
-    "src/core/ldraw/format.ts"
+    "src/core/ldraw/format.ts",
+    "agent"
   ]
 }

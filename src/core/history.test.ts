@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { canRedo, canUndo, createHistory, pushHistory, redo, undo } from './history';
+import { canRedo, canUndo, createHistory, pushHistory, redo, squashSince, undo } from './history';
 
 describe('history', () => {
   it('starts with nothing to undo or redo', () => {
@@ -35,4 +35,23 @@ describe('history', () => {
     for (let i = 1; i <= 10; i++) history = pushHistory(history, i, 3);
     expect(history.past).toEqual([7, 8, 9]);
   });
+
+  it('folds the steps since a snapshot into one, so one undo returns to it', () => {
+    let h = createHistory('start');
+    h = pushHistory(h, 'before');
+    for (const step of ['a', 'b', 'c']) h = pushHistory(h, step);
+    const folded = squashSince(h, 'before');
+    expect(folded).toEqual({ past: ['start', 'before'], present: 'c', future: [] });
+    expect(undo(folded).present).toBe('before');
+  });
+
+  it('leaves history alone when there is nothing to fold or the snapshot is gone', () => {
+    const one = pushHistory(createHistory('before'), 'after');
+    expect(squashSince(one, 'before')).toBe(one);
+    expect(squashSince(one, 'elsewhere')).toBe(one);
+    // undone past the snapshot: its steps are the user's now
+    const undone = undo(one);
+    expect(squashSince(undone, 'after')).toBe(undone);
+  });
 });
+

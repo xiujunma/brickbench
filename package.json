@@ -12,6 +12,7 @@
     "dev": "bunx --bun vite",
     "build": "bun run typecheck && bun run ldraw --if-missing && bunx --bun vite build",
     "preview": "bunx --bun vite preview",
+    "agent": "bun agent/main.ts",
     "typecheck": "bun check -p tsconfig.json && bun check -p tsconfig.test.json && bun check -p tsconfig.node.json && bun check -p tsconfig.scripts.json",
     "ldraw": "bun scripts/ldraw/build.ts",
     "test": "bun test",
@@ -30,6 +31,7 @@
     "zustand": "^5.1.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@playwright/test": "^1.65.0",
     "@types/bun": "^1.4.4",
     "@types/node": "^22.20.5",

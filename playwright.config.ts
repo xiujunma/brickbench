@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
+import { AGENT_PORT, APP_PORT as PORT } from './e2e/ports';
 
-const PORT = 5199;
 const CI = Boolean(process.env['CI']);
 
 export default defineConfig({
@@ -30,10 +30,23 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    // CI tests the production build (`vite build` runs first): far less work per page than the dev server
-    command: `bunx --bun vite ${CI ? 'preview' : ''} --port ${PORT} --strictPort --host 127.0.0.1`,
-    url: `http://127.0.0.1:${PORT}`,
-    reuseExistingServer: !CI,
-  },
+  webServer: [
+    {
+      // CI tests the production build (`vite build` runs first): far less work per page than the dev server
+      command: `bunx --bun vite ${CI ? 'preview' : ''} --port ${PORT} --strictPort --host 127.0.0.1`,
+      url: `http://127.0.0.1:${PORT}`,
+      reuseExistingServer: !CI,
+    },
+    {
+      // the agent bridge, with a stand-in for Claude Code that builds a small tower through MCP
+      command: 'bun agent/main.ts',
+      url: `http://127.0.0.1:${AGENT_PORT}/health`,
+      reuseExistingServer: false,
+      env: {
+        BRICKBENCH_AGENT_PORT: String(AGENT_PORT),
+        BRICKBENCH_CLAUDE: 'agent/fixtures/fakeClaude.ts',
+        FAKE_CLAUDE_MODE: 'build',
+      },
+    },
+  ],
 });

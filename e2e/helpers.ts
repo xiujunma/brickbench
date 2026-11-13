@@ -14,8 +14,8 @@ async function editorStarted(page: Page): Promise<void> {
 }
 
 /** Opens the editor. Every test runs in a new browser context, so storage starts empty. */
-export async function freshEditor(page: Page): Promise<void> {
-  await page.goto('/');
+export async function freshEditor(page: Page, path = '/'): Promise<void> {
+  await page.goto(path);
   await editorStarted(page);
 }
 

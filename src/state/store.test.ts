@@ -252,3 +252,34 @@ describe('documents and ui state', () => {
     expect(calls).toBe(0);
   });
 });
+
+describe('changes made elsewhere', () => {
+  it('records a whole new model as one step to undo, dropping gone bricks from the selection', () => {
+    const { state, bricks } = withBricks(makeBrick({ id: 'a' }), makeBrick({ id: 'b', x: 4 }));
+    state().select(['a', 'b'], 'replace');
+    const before = state().history.present;
+    state().commitModel(modelFromBricks([makeBrick({ id: 'b', x: 4 }), makeBrick({ id: 'c', y: 3 })]));
+    expect(bricks().map((b) => b.id)).toEqual(['b', 'c']);
+    expect([...state().selection]).toEqual(['b']);
+    state().undo();
+    expect(state().history.present).toBe(before);
+  });
+
+  it('folds an agent’s whole request into one step to undo', () => {
+    const { state, bricks } = withBricks(makeBrick({ id: 'a' }));
+    const before = state().history.present;
+    state().commitModel(modelFromBricks([makeBrick({ id: 'a' }), makeBrick({ id: 'b', y: 3 })]));
+    state().commitModel(modelFromBricks([makeBrick({ id: 'a' }), makeBrick({ id: 'b', y: 3 }), makeBrick({ id: 'c', y: 6 })]));
+    state().squashHistorySince(before);
+    expect(bricks()).toHaveLength(3);
+    state().undo();
+    expect(state().history.present).toBe(before);
+  });
+
+  it('leaves history alone when the model is the same', () => {
+    const { state } = withBricks(makeBrick({ id: 'a' }));
+    const history = state().history;
+    state().commitModel(state().history.present);
+    expect(state().history).toBe(history);
+  });
+});

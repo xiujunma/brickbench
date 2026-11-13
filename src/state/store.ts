@@ -1,7 +1,7 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { DEFAULT_COLOR_ID, getColor } from '../core/colors';
 import { normalizeRotation, type Vec3 } from '../core/grid';
-import { createHistory, pushHistory, redo, undo } from '../core/history';
+import { createHistory, pushHistory, redo, squashSince, undo } from '../core/history';
 import { DEFAULT_SCENE } from '../core/io/modelFile';
 import { rotateGroup } from '../core/model/geometry';
 import type { IdFactory } from '../core/model/ids';
@@ -244,6 +244,8 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
           return history === s.history ? s : { history, selection: pruneSelection(s.selection, history.present) };
         }),
 
+      commitModel: (next) => commit(next),
+      squashHistorySince: (snapshot) => set((s) => ({ history: squashSince(s.history, snapshot) })),
       newModel: () =>
         set({
           history: createHistory(emptyModel()),

@@ -13,6 +13,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
   - **Size, height and shape filters** narrow thousands of parts to a handful: say 1 × 2, 1 plate, with a clip.
   - **Mine** keeps your starred favourites, recent picks and the parts already in your model. Favourites and picks stay in this browser, shared by its tabs.
   - **Keyboard first:** press `/`, type, use ↑ ↓ and press Enter to build with the part.
+- **Build with an AI agent:** ask Claude Code, from a chat panel in the app or from your terminal, to build or change the model. It places, paints and moves bricks while you watch, checks its work with pictures of the model, and one undo takes back a whole request.
 - **54 colours:** solid, transparent and metallic, following the LDraw palette.
 - **Grid snapping that understands bricks.** Point at a top face to stack, at a side to build beside it (lined up with that brick's courses), or underneath to hang below. Parts never overlap: the preview turns red when there's no room, and drops land on top of whatever is in the way.
 - **Tools:** Build, Select & move (click, Shift-click, box select, drag to move), Paint and Erase, plus an eyedropper (Alt-click) and rotate, nudge, copy, paste and duplicate.
@@ -65,6 +66,52 @@ Choose **File › Building instructions (.pdf)…**, or **Instructions** in the 
 
 The PDF is made entirely in your browser: each step is drawn offscreen with three.js and laid out with [jsPDF](https://github.com/parallax/jsPDF), which loads only when you make a booklet.
 
+## Building with an AI agent
+
+An AI agent can build in BrickBench: Claude Code from the **Agent** panel in the app, or Claude Code (or any other agent that speaks [MCP](https://modelcontextprotocol.io)) from a terminal. It places, paints, moves and removes bricks while you watch, looks at pictures of the model to check its work, and whatever it does for one request is one step you can undo.
+
+1. Start the agent bridge, a small server on your computer, in a terminal in the BrickBench folder:
+
+   ```bash
+   bun run agent
+   ```
+
+2. Open BrickBench and click **Agent** in the top bar. Ask for something: "build a small red house with a door and two windows", "make the roof dark grey", "put a fence around it".
+
+The chat runs [Claude Code](https://code.claude.com) on your computer with your own login, so Claude Code has to be installed. It gets the BrickBench tools and nothing else: no shell, no files, and none of your Claude Code hooks, plugins or settings files. That use of your login is meant for you on your own computer; if other people will use the chat, set `ANTHROPIC_API_KEY` for the bridge so it runs on an API key instead.
+
+**From a terminal.** With the bridge running and BrickBench open, add BrickBench to Claude Code once:
+
+```bash
+claude mcp add --transport http brickbench http://127.0.0.1:7425/mcp
+```
+
+then ask Claude Code to build something in BrickBench. Any MCP client can use the same address. Agents build in the BrickBench tab you used last, and once the Agent panel has connected, BrickBench reconnects by itself on later visits (until you click Disconnect).
+
+**The tools agents get:**
+
+| Tool | What it does |
+|---|---|
+| `get_model` | The model's name, size, parts and colours, and its bricks with their ids, optionally only those in a region |
+| `find_parts` | Searches parts like the search box does, and returns part ids with their sizes |
+| `list_colors` | The colours, with names and LDraw codes |
+| `place_bricks` | Places up to 2,000 parts at once; refuses any that would overlap or leave the build area, with the reason, and points out bricks with nothing holding them up |
+| `paint_bricks`, `move_bricks`, `remove_bricks` | Change bricks named by id or reached by a region |
+| `look` | A picture of the model from any side, with bricks outlined if asked |
+| `set_model_name`, `undo`, `clear_model` | Rename, undo steps, or start afresh (only when you ask) |
+
+**Settings** (environment variables for `bun run agent`):
+
+| Variable | What it sets |
+|---|---|
+| `BRICKBENCH_AGENT_PORT` | The bridge's port, 7425 by default. Open BrickBench with `?agentPort=` and the same number to match. |
+| `BRICKBENCH_AGENT_MODEL` | The model the chat uses, such as `sonnet` or `opus`; Claude Code's default otherwise |
+| `BRICKBENCH_AGENT_BUDGET_USD` | The most one chat request may spend: $5 unless you set it, or `none` for no cap |
+| `BRICKBENCH_CLAUDE` | Where the `claude` command is, if it is not on your PATH |
+| `BRICKBENCH_AGENT_ORIGINS` | The only pages that may connect, comma-separated, such as `http://localhost:5173` |
+
+The bridge listens on this computer only (127.0.0.1) and answers only pages served from this computer. Any of them could start the chat, so if you run other web servers you do not trust, set `BRICKBENCH_AGENT_ORIGINS` to BrickBench's own address.
+
 ## Scripts
 
 | Command | What it does |
@@ -72,6 +119,7 @@ The PDF is made entirely in your browser: each step is drawn offscreen with thre
 | `bun run dev` | Start the dev server (Vite) |
 | `bun run build` | Type-check, build the LDraw library if it is missing, and build to `dist/` |
 | `bun run ldraw` | Download and convert the LDraw parts library into `public/ldraw/` |
+| `bun run agent` | Start the agent bridge, so Claude Code and other MCP agents can build in BrickBench |
 | `bun test` | Run the unit tests (`bun test`, about a second) |
 | `bun run coverage` | Run the unit tests with coverage; fails if any file drops below 80% of its lines or functions |
 | `bun run e2e` | Run the browser tests (Playwright; starts the dev server itself) |
@@ -99,7 +147,7 @@ GitHub Actions runs `.github/workflows/test.yml` on every push to `main` and on 
 - **Type check and unit tests:** `bun run typecheck` and `bun run coverage`, about a minute.
 - **LDraw checks and browser tests:** builds the LDraw library, runs `bun test verify` against it, builds the app, then runs `bun run e2e` against that build in headless Chromium. The library download and the converted library are cached, so only the first run, or one after the converter changes, spends a few minutes converting. Traces of failed browser tests are kept for a week as a `playwright-traces` artifact.
 
-The runners have no GPU, so WebGL is drawn on the CPU: with `CI` set, Playwright tests the production build (`vite preview`) one test at a time, gives each test two minutes, retries once, and stops after three failures. Run the same way locally with `bunx --bun vite build && CI=1 bun run e2e`.
+The runners have no GPU, so WebGL is drawn on the CPU: with `CI` set, Playwright tests the production build (`vite preview`) one test at a time, gives each test two minutes, retries once, and stops after three failures. Run the same way locally with `bunx --bun vite build && CI=1 bun run e2e`. The browser tests also start the agent bridge, on port 7499, with a stand-in for Claude Code that builds through MCP, so they spend nothing on a real model.
 
 To pick up a newer LDraw release in CI, bump `ldraw-download-v1` in the workflow.
 
@@ -151,9 +199,12 @@ src/
   editor/     connects state and scene: pointer gestures, keyboard, drag and drop
   state/      zustand store and actions, selectors, autosave, file commands
   ui/         React panels, dialogs and toasts
+  agent/      the build tools agents call, the link to the agent bridge, and the chat
   instructions/  building-instruction booklets: rendering steps and writing the PDF
   samples/    the sample cottage
 scripts/ldraw/  the LDraw library converter (run straight from TypeScript by Bun)
+agent/        the agent bridge: an MCP server for agents, a WebSocket for BrickBench tabs,
+              and Claude Code run headless for the chat
 e2e/          Playwright tests
 ```
 

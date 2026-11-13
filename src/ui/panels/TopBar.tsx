@@ -16,6 +16,8 @@ import { useBackupAvailable } from '../../state/sessionBackup';
 import { BrandMark, Icon } from '../components/Icon';
 import { Menu, MenuItem } from '../components/Menu';
 import { cssVars, shortcut } from '../platform';
+import { AGENT_TOGGLE_ID } from '../focusTargets';
+import { useAgentLink } from './agent/useAgent';
 
 export type Drawer = 'parts' | 'colors' | null;
 
@@ -146,9 +148,33 @@ function SaveStatus() {
 type Props = {
   readonly drawer: Drawer;
   readonly onToggleDrawer: (drawer: 'parts' | 'colors') => void;
+  readonly agentOpen: boolean;
+  readonly onToggleAgent: () => void;
 };
 
-export function TopBar({ drawer, onToggleDrawer }: Props) {
+/** Opens the agent chat; a dot shows when the agent bridge is connected. */
+function AgentToggle({ open, onToggle }: { readonly open: boolean; readonly onToggle: () => void }) {
+  const connected = useAgentLink((s) => s.status === 'connected');
+  return (
+    <button
+      id={AGENT_TOGGLE_ID}
+      type="button"
+      className="btn agent-toggle"
+      aria-label="Agent"
+      aria-pressed={open}
+      data-tip="Build with an AI agent"
+      data-tip-side="below"
+      onClick={onToggle}
+    >
+      <Icon name="sparkle" size={16} />
+      <span className="agent-toggle-label">Agent</span>
+      {/* the panel's status line says it in words */}
+      {connected && <span className="agent-toggle-dot" aria-hidden="true" />}
+    </button>
+  );
+}
+
+export function TopBar({ drawer, onToggleDrawer, agentOpen, onToggleAgent }: Props) {
   const canUndo = useEditor((s) => s.history.past.length > 0);
   const canRedo = useEditor((s) => s.history.future.length > 0);
   const undo = useEditor((s) => s.undo);
@@ -181,6 +207,7 @@ export function TopBar({ drawer, onToggleDrawer }: Props) {
       <ModelName />
       <div className="topbar-actions">
         <SaveStatus />
+        <AgentToggle open={agentOpen} onToggle={onToggleAgent} />
         <button type="button" className="icon-btn" aria-label="Undo" data-tip={`Undo (${shortcut('Z')})`} data-tip-side="below" disabled={!canUndo} onClick={undo}>
           <Icon name="undo" />
         </button>

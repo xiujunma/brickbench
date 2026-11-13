@@ -63,6 +63,10 @@ export interface EditorActions {
   duplicateSelection(): boolean;
   undo(): void;
   redo(): void;
+  /** Records a whole new model as one step to undo, as an agent's change is. */
+  commitModel(next: Model): void;
+  /** Folds the steps since `snapshot` into one, so one undo goes back to it. */
+  squashHistorySince(snapshot: Model): void;
   newModel(): void;
   loadDocument(doc: ModelDocument): void;
   setName(name: string): void;

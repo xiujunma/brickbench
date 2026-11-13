@@ -41,3 +41,14 @@ export function redo<T>(history: History<T>): History<T> {
   if (next === undefined) return history;
   return { past: [...history.past, history.present], present: next, future: rest };
 }
+
+/**
+ * Folds every step taken since `snapshot` into one, so a single undo goes
+ * back to it, as after an agent's whole request. Unchanged when the snapshot
+ * is no longer in the past: undone, or dropped off the end of the history.
+ */
+export function squashSince<T>(history: History<T>, snapshot: T): History<T> {
+  const at = history.past.lastIndexOf(snapshot);
+  if (at === -1 || at === history.past.length - 1) return history;
+  return { ...history, past: history.past.slice(0, at + 1) };
+}

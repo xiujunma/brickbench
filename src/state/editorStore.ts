@@ -6,7 +6,8 @@ import { restoreSession } from './session';
 import { createEditorStore } from './store';
 import type { EditorState } from './types';
 
-const nextId = createIdFactory();
+/** Ids for new bricks, shared by everything that adds bricks to the editor. */
+export const nextId = createIdFactory();
 
 /** The app-wide editor store. */
 export const editorStore = createEditorStore({ lookup: getPart, nextId });
