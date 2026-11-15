@@ -70,6 +70,8 @@ The PDF is made entirely in your browser: each step is drawn offscreen with thre
 
 An AI agent can build in BrickBench: Claude Code from the **Agent** panel in the app, or Claude Code (or any other agent that speaks [MCP](https://modelcontextprotocol.io)) from a terminal. It places, paints, moves and removes bricks while you watch, looks at pictures of the model to check its work, and whatever it does for one request is one step you can undo.
 
+![The Agent panel: Claude Code making a house's roof dark grey and putting a white fence around its garden](docs/agent-panel.png)
+
 1. Start the agent bridge, a small server on your computer, in a terminal in the BrickBench folder:
 
    ```bash
