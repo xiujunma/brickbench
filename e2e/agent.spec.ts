@@ -27,7 +27,12 @@ test.describe('building with an agent', () => {
     await expect(log).toContainText('Build a yellow tower');
     await expect(log).toContainText('Placing 2 bricks');
     await expect(log).toContainText('Placing 1 brick');
-    await expect(log).toContainText('Built a yellow tower of 3 bricks.');
+    await expect(log).toContainText('Built a yellow tower of 3 bricks:');
+    // the reply's markdown shows as formatting, not as asterisks and backticks
+    await expect(log.locator('strong')).toHaveText('yellow');
+    await expect(log.getByRole('listitem')).toHaveText('3 × brick-2x4, stacked');
+    await expect(log.locator('code')).toHaveText('brick-2x4');
+    await expect(log).not.toContainText('**');
     await expect(counts(page)).toHaveText('3 bricks');
     // the agent built in two steps; one undo takes back the whole request
     await page.getByRole('button', { name: 'Undo' }).click();

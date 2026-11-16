@@ -42,7 +42,8 @@ async function build(): Promise<string> {
     say({ type: 'user', session_id: session, message: { content: [{ type: 'tool_result', tool_use_id: `t${i}`, is_error: result.isError === true, content: result.content }] } });
   }
   await client.close();
-  return failed ? 'The tower could not be built.' : 'Built a yellow tower of 3 bricks.';
+  // markdown, as real agents reply
+  return failed ? 'The tower could not be built.' : 'Built a **yellow** tower of 3 bricks:\n\n- 3 × `brick-2x4`, stacked';
 }
 
 if (mode === 'old') {

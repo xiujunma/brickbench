@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { ChatEntry } from '../../../agent/chat';
 import { Icon } from '../../components/Icon';
+import { Markdown } from './Markdown';
 
 /** How close to the bottom counts as reading the latest, so new lines scroll into view. */
 const FOLLOW_PX = 48;
@@ -10,7 +11,11 @@ function Entry({ entry }: { readonly entry: ChatEntry }) {
     case 'user':
       return <p className="chat-user">{entry.text}</p>;
     case 'agent':
-      return <p className="chat-agent">{entry.text}</p>;
+      return (
+        <div className="chat-agent">
+          <Markdown text={entry.text} />
+        </div>
+      );
     case 'tool':
       return (
         <p className="chat-tool">
@@ -19,10 +24,11 @@ function Entry({ entry }: { readonly entry: ChatEntry }) {
         </p>
       );
     case 'error':
+      // errors can name a command in backticks, as in "run `bun run agent`"
       return (
-        <p className="chat-error" role="alert">
-          {entry.text}
-        </p>
+        <div className="chat-error" role="alert">
+          <Markdown text={entry.text} />
+        </div>
       );
     case 'note':
       return <p className="chat-note">{entry.text}</p>;
