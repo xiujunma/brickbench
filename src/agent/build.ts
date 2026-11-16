@@ -5,7 +5,7 @@
  */
 import { GRID_LIMIT, MAX_LAYER, normalizeRotation } from '../core/grid';
 import { MAX_BRICKS } from '../core/io/modelFile';
-import { brickCellBox, brickCells } from '../core/model/geometry';
+import { brickCells } from '../core/model/geometry';
 import type { IdFactory } from '../core/model/ids';
 import { addBricks, allBricks, emptyModel, recolorBricks, removeBricks as withoutBricks, replaceBricks } from '../core/model/model';
 import { isOutOfBounds, type SpatialIndex } from '../core/model/spatial';
@@ -61,18 +61,19 @@ function overlap(brick: Brick, model: Model, index: SpatialIndex, claimed: Reado
   return null;
 }
 
-/** Bricks it rests on or hangs from: those filling the layer just below or just above its footprint. */
+/**
+ * Bricks it rests on or hangs from: those filling a cell just below or just
+ * above one of its own, so nothing joins through the missing corner of an
+ * L-shaped plate, and a plate can hang from the top of an arch.
+ */
 function neighbours(brick: Brick, index: SpatialIndex, lookup: PartLookup): string[] {
-  const box = brickCellBox(brick, lookup);
-  const found: string[] = [];
-  for (let x = box.x0; x < box.x1; x++) {
-    for (let z = box.z0; z < box.z1; z++) {
-      for (const owner of [index.owner(x, box.y0 - 1, z), index.owner(x, box.y1, z)]) {
-        if (owner !== undefined && owner !== brick.id) found.push(owner);
-      }
+  const found = new Set<string>();
+  for (const [x, y, z] of brickCells(brick, lookup)) {
+    for (const owner of [index.owner(x, y - 1, z), index.owner(x, y + 1, z)]) {
+      if (owner !== undefined && owner !== brick.id) found.add(owner);
     }
   }
-  return found;
+  return [...found];
 }
 
 /** Bricks with no chain of bricks, each resting on or hanging from the next, down to the ground. */

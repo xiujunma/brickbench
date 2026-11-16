@@ -11,18 +11,38 @@ const HINGE: LDrawIndexEntry = {
   id: '3937', name: 'Hinge 1 × 2 Base', category: 'Hinge', keywords: ['swivel'], w: 2, d: 1, h: 2, origin: [0, 0.8, 0], snug: false,
 };
 const LONG_BRICK: LDrawIndexEntry = { ...BRICK, id: '3008', name: 'Brick 1 × 8', w: 8, d: 1 };
+/** Plate 2 × 2 Corner: three of its four cells. */
+const CORNER: LDrawIndexEntry = {
+  id: '2420', name: 'Plate 2 × 2 Corner', category: 'Plate', w: 2, d: 2, h: 1, origin: [0, 0.4, 0], snug: true,
+  solids: [[0, 0, 0, 2, 1, 1], [0, 0, 1, 1, 1, 2]],
+};
 
 describe('library index', () => {
   it('accepts a well-formed index', () => {
-    const index = parseLDrawIndex({ version: 1, generated: '2026-11-11T00:00:00Z', parts: [BRICK, HINGE] });
-    expect(index.parts.map((p) => p.id)).toEqual(['3001', '3937']);
+    const index = parseLDrawIndex({ version: 2, generated: '2026-11-11T00:00:00Z', parts: [BRICK, HINGE, CORNER] });
+    expect(index.parts.map((p) => p.id)).toEqual(['3001', '3937', '2420']);
+    expect(index.parts[2]?.solids).toEqual(CORNER.solids);
+  });
+
+  it('still reads a version 1 library, from before parts had solids', () => {
+    const index = parseLDrawIndex({ version: 1, generated: '2026-11-11T00:00:00Z', parts: [BRICK] });
+    expect(index.parts[0]?.solids).toBeUndefined();
   });
 
   it('rejects damaged or unexpected indexes with a readable message', () => {
-    expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [] })).toThrow(/damaged/);
-    expect(() => parseLDrawIndex({ version: 1, generated: '', parts: [{ ...BRICK, id: '../evil' }] })).toThrow(/damaged/);
-    expect(() => parseLDrawIndex({ version: 1, generated: '', parts: [{ ...BRICK, w: 0 }] })).toThrow(/damaged/);
+    expect(() => parseLDrawIndex({ version: 3, generated: '', parts: [] })).toThrow(/damaged/);
+    expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, id: '../evil' }] })).toThrow(/damaged/);
+    expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, w: 0 }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex('nope')).toThrow(/damaged/);
+  });
+
+  it('rejects solids that are empty or reach outside their part', () => {
+    const parse = (solids: unknown) => () => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...CORNER, solids }] });
+    expect(parse([[0, 0, 0, 3, 1, 1]])).toThrow(/damaged/);
+    expect(parse([[0, 0, 0, 2, 2, 1]])).toThrow(/damaged/);
+    expect(parse([[1, 0, 0, 1, 1, 1]])).toThrow(/damaged/);
+    expect(parse([[0, 0, 0, 1.5, 1, 1]])).toThrow(/damaged/);
+    expect(parse([])).toThrow(/damaged/);
   });
 
   it('turns entries into solid boxes drawn from their own mesh', () => {
@@ -39,6 +59,10 @@ describe('library index', () => {
       ldraw: { file: '3001.dat', origin: [0, 1.2, 0] },
     });
     expect(toPartDef(HINGE).keywords).toEqual(['hinge', 'swivel']);
+    expect(toPartDef(CORNER).solids).toEqual([
+      { x0: 0, y0: 0, z0: 0, x1: 2, y1: 1, z1: 1 },
+      { x0: 0, y0: 0, z0: 1, x1: 1, y1: 1, z1: 2 },
+    ]);
     expect(isLDrawPartId('ldraw:3001')).toBe(true);
     expect(isLDrawPartId('brick-2x4')).toBe(false);
   });

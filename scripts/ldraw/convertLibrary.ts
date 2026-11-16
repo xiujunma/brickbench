@@ -66,7 +66,7 @@ function round(n: number): number {
 }
 
 function toEntry(id: string, header: PartHeader, conversion: Extract<Conversion, { ok: true }>): LDrawIndexEntry {
-  const { fit } = conversion;
+  const { fit, solids } = conversion;
   const keywords = header.keywords.slice(0, MAX_KEYWORDS).map((k) => k.slice(0, 80));
   return {
     id,
@@ -79,6 +79,7 @@ function toEntry(id: string, header: PartHeader, conversion: Extract<Conversion,
     h: fit.h,
     origin: [round(fit.offset[0]), round(fit.offset[1]), round(fit.offset[2])],
     snug: fit.snug,
+    ...(solids ? { solids } : {}),
   };
 }
 

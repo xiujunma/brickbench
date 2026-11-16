@@ -121,7 +121,8 @@ describe('GeometryCache with library parts', () => {
     expect(cache.body('ldraw:3001')).toBe(placeholder);
     expect(placeholder.getAttribute('position').count).toBe(6);
 
-    const missing = toPartDef({ ...LIBRARY_BRICK, id: '9999', name: 'Gone', category: 'Brick', origin: [0, 0, 0], snug: true });
+    const { w, d, h } = LIBRARY_BRICK;
+    const missing = toPartDef({ id: '9999', name: 'Gone', category: 'Brick', w, d, h, origin: [0, 0, 0], snug: true });
     const withMissing = new GeometryCache((id) => (id === missing.id ? missing : lookup(id)), source);
     await expect(withMissing.preload(['ldraw:9999'])).resolves.toEqual(['ldraw:9999']);
   });

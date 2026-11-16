@@ -6,6 +6,7 @@ import { convertPart, toEditor } from './convert.ts';
 import { creditsText } from './credits.ts';
 import { Flattener } from './flatten.ts';
 import { directorySource, memorySource } from './library.ts';
+import type { V3 } from './parse.ts';
 
 /** A 1 × 1 brick: top and bottom faces 24 LDU apart, plus one stud. */
 const BRICK = [
@@ -16,6 +17,16 @@ const BRICK = [
   '1 16 0 0 0 1 0 0 0 1 0 0 0 1 stud.dat',
 ].join('\n');
 const STUD = ['0 Stud', '0 BFC CERTIFY CCW', '3 16 -6 -4 0 6 -4 0 0 -4 6'].join('\n');
+
+/** The six faces of a box between two corners, as LDraw quads. */
+function ldrawBox([x0, y0, z0]: V3, [x1, y1, z1]: V3): string[] {
+  const corners: V3[] = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
+  const quads = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [2, 3, 7, 6], [1, 2, 6, 5], [0, 4, 7, 3]];
+  return quads.map((quad) => `4 16 ${quad.map((i) => (corners[i] ?? [0, 0, 0]).join(' ')).join(' ')}`);
+}
+
+/** Plate 2 × 2 Corner: an L of two boxes, its missing quarter towards LDraw +x and +z. */
+const CORNER_PLATE = ['0 Corner Plate', '0 BFC CERTIFY CCW', ...ldrawBox([-20, 0, -20], [20, 8, 0]), ...ldrawBox([-20, 0, 0], [0, 8, 20])].join('\n');
 
 describe('converting a part', () => {
   const source = memorySource({
@@ -52,6 +63,23 @@ describe('converting a part', () => {
     const result = convertPart('round.dat', round);
     if (!result.ok) throw new Error(result.reason);
     expect(result.fit).toMatchObject({ w: 1, d: 1, h: 1, offset: [0, 0.4, 0] });
+  });
+
+  it('records the cells a part leaves empty, such as the corner of a corner plate', () => {
+    const result = convertPart('corner.dat', new Flattener(memorySource({ 'corner.dat': CORNER_PLATE })));
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.fit).toMatchObject({ w: 2, d: 2, h: 1 });
+    // LDraw's +z is the editor's -z: the free cell is at x 1, z 0
+    expect(result.solids).toEqual([
+      [0, 0, 0, 1, 1, 2],
+      [1, 0, 1, 2, 1, 2],
+    ]);
+  });
+
+  it('records no solids for a part that fills its whole box', () => {
+    const result = convertPart('brick.dat', flattener);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.solids).toBeNull();
   });
 
   it('skips parts drawn in several fixed colours and parts with no faces', () => {

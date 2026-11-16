@@ -7,7 +7,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 ## Features
 
 - **87 basic parts in six families:** bricks (including tall 1×1×3 to 1×2×5), plates up to 16×16, tiles, slopes (45°, 33°, 65°, inverted, cheese), round parts and cones, and arches, all generated in code.
-- **The LDraw community parts library:** over 6,000 more parts, from Technic beams and hinges to wheels, windows, doors and minifigure accessories, converted from the [LDraw](https://www.ldraw.org) library when the app is built. Each mesh loads the first time you use it.
+- **The LDraw community parts library:** over 6,000 more parts, from Technic beams and hinges to wheels, windows, doors and minifigure accessories, converted from the [LDraw](https://www.ldraw.org) library when the app is built. Each takes up only the space its shape fills, so a corner plate leaves its corner free and an arch its opening, and each mesh loads the first time you use it.
 - **Finding the right part:**
   - **One search covers every part.** Type sizes any way ("2x4", "2 by 4", "two by four"), hobby nicknames ("cheese", "jumper", "macaroni", "SNOT"), US spellings ("tire", "windshield") or a part number, including BrickLink's. Sizes work either way round ("4x2" finds 2 × 4). Name a colour too ("red 2x4 brick") and the part is built in it. If you mistype, close spellings show instead.
   - **Size, height and shape filters** narrow thousands of parts to a handful: say 1 × 2, 1 plate, with a clip.
@@ -157,7 +157,7 @@ To pick up a newer LDraw release in CI, bump `ldraw-download-v1` in the workflow
 
 `bun run ldraw` turns the [LDraw parts library](https://library.ldraw.org) into files the app can load quickly, in `public/ldraw/` (not committed; `bun run build` makes it whenever it is missing, incomplete or partial):
 
-- `index.json` lists every part: its name, category, keywords, author and how it sits on the grid.
+- `index.json` lists every part: its name, category, keywords, author, how it sits on the grid and, when it leaves some of its box empty, which cells it fills.
 - `parts/<number>.bin` holds one mesh per part: gzip-compressed, 16-bit positions and 8-bit normals. A 2 × 4 brick is under 5 kB.
 - `CREDITS.txt` names the author of every part and of every primitive it uses, and copies of the LDraw licence files sit alongside.
 - `build.json` says the build is complete and, for downloads, records the archive's SHA-256. `complete.zip` always holds the latest LDraw release; keep a copy and pass `--library` to pin one.
@@ -174,7 +174,7 @@ bun run ldraw --limit 200                    # the first 200 parts (also partial
 bun run ldraw --fetch-only                   # just download and unpack it into .ldraw-cache/ldraw
 ```
 
-In the app, library parts are ordinary parts with ids like `ldraw:3001`. Each fills the smallest box of whole cells that holds its body (a fifth of a stud may stick out on a side), placed so its top studs sit over cell centres, so it stacks and collides like any brick. Jumper plates keep their half-stud offset. While a mesh loads, a plain box of the right size stands in; parts that fail to load are retried when the connection comes back.
+In the app, library parts are ordinary parts with ids like `ldraw:3001`. Each sits in the smallest box of whole cells that holds its body (a fifth of a stud may stick out on a side), placed so its top studs sit over cell centres, so it stacks and collides like any brick. Within that box it fills only the cells its shape takes up: the missing corner of a corner plate, the opening of an arch, window or door frame, and the space under a bracket's overhang stay free for other parts. A cell counts as filled when the part reaches two LDraw units or more into it, or when the part closes it in on every side and from above, as it does the hollow underside of a brick. Jumper plates keep their half-stud offset. While a mesh loads, a plain box of the right size stands in; parts that fail to load are retried when the connection comes back.
 
 Opening a model or restoring the autosave loads the library index first. If bricks still cannot be restored, say because the library is unreachable or a rebuilt library gave a part a different size, the whole session is kept and **File › Recover earlier session** opens it later.
 
@@ -212,7 +212,7 @@ e2e/          Playwright tests
 
 **Grid and units.** One world unit is one stud pitch (8 mm). Bricks snap to whole studs on X/Z and whole plates (3.2 mm) on Y. A brick is stored as its part, its colour and the corner of its footprint, plus a quarter-turn rotation.
 
-**Placement.** Picking intersects the cursor ray with the boxes each part fills (arches leave their opening free), so it never needs triangle tests. The solver turns the face that was hit into a grid position, and a spatial index answers "who fills this cell?" in constant time for collision checks.
+**Placement.** Picking intersects the cursor ray with the boxes each part fills (arches leave their opening free, and library parts fill only the cells their shape takes up), so it never needs triangle tests. The solver turns the face that was hit into a grid position, and a spatial index answers "who fills this cell?" in constant time for collision checks.
 
 **Geometry.** Parts are built from three generators: a beveled loft along an axis (boxes, slopes, arches), a lathe (round parts, cones, studs) and filleted 2D paths. Explicit normals keep bevels smooth and flat faces flat.
 
@@ -238,7 +238,7 @@ e2e/          Playwright tests
 
 ## Not done yet
 
-- Connections beyond the stud grid: library parts place by their bounding box, so hinges don't swing, Technic pins don't plug into holes, minifigures don't assemble and half-stud offsets (jumper plates) aren't possible
+- Connections beyond the stud grid: library parts snap to whole studs and plates, so hinges don't swing, Technic pins don't plug into holes, minifigures don't assemble and half-stud offsets (jumper plates) aren't possible
 - Multi-colour and printed library parts (wheels with tyres, printed tiles)
 - Hollow undersides and tubes on the basic parts (library parts have them)
 - Ambient occlusion and a photoreal render mode

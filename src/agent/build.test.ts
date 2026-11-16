@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { toPartDef } from '../core/ldraw/catalogIndex';
 import { createIdFactory } from '../core/model/ids';
 import { addBricks, allBricks, emptyModel } from '../core/model/model';
 import type { Brick, Model } from '../core/model/types';
@@ -17,6 +18,13 @@ function input<T extends ToolName>(tool: T, raw: unknown): ToolInput<T> {
 
 const brick = (id: string, partId: string, x: number, y: number, z: number, colorId = 4): Brick => ({ id, partId, colorId, x, y, z, r: 0 });
 const modelOf = (...bricks: Brick[]): Model => addBricks(emptyModel(), bricks);
+
+/** A library Plate 2 × 2 Corner: three of the four cells of its box, the one at x 1, z 1 left free. */
+const corner = toPartDef({
+  id: 'test-corner', name: 'Plate 2 × 2 Corner', category: 'Plate', w: 2, d: 2, h: 1, origin: [0, 0.4, 0], snug: true,
+  solids: [[0, 0, 0, 2, 1, 1], [0, 0, 1, 1, 1, 2]],
+});
+const withCorner = (id: string) => (id === corner.id ? corner : getPart(id));
 
 describe('placing bricks', () => {
   it('places bricks, stacked in one call, as one change', () => {
@@ -159,6 +167,33 @@ describe('placing bricks', () => {
     expect(result.floating).toEqual([4, 5, 6]);
   });
 
+  it('joins bricks by the cells they fill, not by their whole boxes', () => {
+    // the underside of the arch's top over its third stud
+    const archTop = getPart('arch-1x6x2')?.solids.find((solid) => solid.x0 === 2)?.y0 ?? 0;
+    expect(archTop).toBeGreaterThan(1);
+    const { result } = placeBricks(
+      emptyModel(),
+      input('place_bricks', {
+        bricks: [
+          { part: corner.id, color: 4, x: 0, y: 0, z: 0 },
+          // a brick over a cell the corner plate fills rests on it…
+          { part: 'brick-1x1', color: 4, x: 0, y: 1, z: 0 },
+          // …one over its missing corner does not
+          { part: 'brick-1x1', color: 4, x: 1, y: 1, z: 1 },
+          // a plate under the top of an arch hangs from it
+          { part: 'arch-1x6x2', color: 4, x: 10, y: 0, z: 0 },
+          { part: 'plate-1x2', color: 4, x: 12, y: archTop - 1, z: 0 },
+          // and a corner plate's missing corner is free for a plate of its own
+          { part: corner.id, color: 4, x: 0, y: 0, z: 5 },
+          { part: 'plate-1x1', color: 4, x: 1, y: 0, z: 6 },
+        ],
+      }),
+      { ...context(), lookup: withCorner },
+    );
+    expect(result.rejected).toEqual([]);
+    expect(result.floating).toEqual([2]);
+  });
+
   it('stops at the most bricks a model may hold', () => {
     const { result } = placeBricks(
       modelOf(brick('a', 'brick-1x1', 0, 0, 0)),
@@ -188,6 +223,15 @@ describe('changing bricks', () => {
 
   it('asks for ids or a region', () => {
     expect(() => removeBricks(house(), input('remove_bricks', {}), getPart)).toThrow('Give the ids of the bricks, a region, or both.');
+  });
+
+  it('finds bricks in a region by the cells they fill, not by their whole boxes', () => {
+    // a plate in the corner plate's free corner: a region of just that cell holds the plate alone
+    const model = modelOf(brick('corner', corner.id, 0, 0, 0), brick('dot', 'plate-1x1', 1, 0, 1));
+    const cornerCell = { region: { min: { x: 1, y: 0, z: 1 }, max: { x: 1, y: 0, z: 1 } } };
+    expect(allBricks(removeBricks(model, input('remove_bricks', cornerCell), withCorner).next).map((b) => b.id)).toEqual(['corner']);
+    expect(paintBricks(model, input('paint_bricks', { ...cornerCell, color: 'blue' }), withCorner).result.painted).toBe(1);
+    expect(describeModel(model, 'Corner', input('get_model', cornerCell), withCorner).bricks.map((b) => b.id)).toEqual(['dot']);
   });
 
   it('paints bricks by name of colour', () => {

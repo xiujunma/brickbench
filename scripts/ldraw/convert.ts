@@ -1,3 +1,5 @@
+import type { SolidBox } from '../../src/core/ldraw/format.ts';
+import { filledCells } from './cells.ts';
 import type { Flattener, FlatTriangle } from './flatten.ts';
 import { fitPart, type PartFit } from './fit.ts';
 import { buildMesh, type MeshData } from './mesh.ts';
@@ -9,7 +11,14 @@ const LDU = 20;
 export const MAX_VERTICES = 200_000;
 
 export type Conversion =
-  | { readonly ok: true; readonly mesh: MeshData; readonly fit: PartFit; readonly triangles: number }
+  | {
+      readonly ok: true;
+      readonly mesh: MeshData;
+      readonly fit: PartFit;
+      /** The cells the part fills, when it leaves some of its box empty; null when it fills it all. */
+      readonly solids: readonly SolidBox[] | null;
+      readonly triangles: number;
+    }
   | { readonly ok: false; readonly reason: 'empty' | 'multicolour' | 'too detailed' };
 
 /** LDraw (-Y up, LDU) to editor units (+Y up, studs): a half turn about X, so windings survive. */
@@ -70,7 +79,8 @@ export function convertPart(file: string, flattener: Flattener): Conversion {
     const [x, y, z] = toEditor(p);
     return [x + ox, y + oy, z + oz];
   };
-  const mesh = buildMesh(part.triangles.map((t) => ({ a: place(t.a), b: place(t.b), c: place(t.c), doubleSided: t.doubleSided })));
+  const placed = part.triangles.map((t) => ({ a: place(t.a), b: place(t.b), c: place(t.c), doubleSided: t.doubleSided }));
+  const mesh = buildMesh(placed);
   if (mesh.positions.length / 3 > MAX_VERTICES) return { ok: false, reason: 'too detailed' };
-  return { ok: true, mesh, fit, triangles: part.triangles.length };
+  return { ok: true, mesh, fit, solids: filledCells(placed, fit), triangles: part.triangles.length };
 }

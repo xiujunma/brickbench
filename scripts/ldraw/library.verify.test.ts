@@ -62,6 +62,33 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(max[1]).toBeCloseTo(1.4, 2);
   });
 
+  /** The cells of its box a converted part leaves free, as sorted "x,y,z" keys. */
+  function freeCells(file: string): string[] {
+    const result = convertPart(file, flattener);
+    if (!result.ok) throw new Error(`${file} was skipped: ${result.reason}`);
+    const { w, d, h } = result.fit;
+    const filled = new Set<string>();
+    for (const [x0, y0, z0, x1, y1, z1] of result.solids ?? [[0, 0, 0, w, h, d]]) {
+      for (let x = x0; x < x1; x++) for (let y = y0; y < y1; y++) for (let z = z0; z < z1; z++) filled.add(`${x},${y},${z}`);
+    }
+    const free: string[] = [];
+    for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) for (let z = 0; z < d; z++) if (!filled.has(`${x},${y},${z}`)) free.push(`${x},${y},${z}`);
+    return free.sort();
+  }
+
+  it('fills only the cells real parts take up', () => {
+    // bricks fill their box, hollow undersides and all; so do slopes and round bricks
+    for (const file of ['3001.dat', '3039.dat', '3062b.dat', '3941.dat']) expect(freeCells(file)).toEqual([]);
+    // the missing corner of a corner plate and a corner brick
+    expect(freeCells('2420.dat')).toEqual(['1,0,0']);
+    expect(freeCells('2357.dat')).toEqual(['1,0,0', '1,1,0', '1,2,0']);
+    // the opening of an arch, and of a door frame between its posts
+    expect(freeCells('3307.dat')).toEqual(['1,0,0', '2,0,0', '2,1,0', '2,2,0', '2,3,0', '3,0,0', '3,1,0', '3,2,0', '3,3,0', '4,0,0']);
+    expect(freeCells('30179.dat')).toEqual(Array.from({ length: 16 }, (_, y) => [`1,${y + 1},0`, `2,${y + 1},0`]).flat().sort());
+    // under a bracket's top plate, where the wall its other plate hangs over goes
+    expect(freeCells('44728.dat')).toEqual(['0,0,0', '0,1,0', '0,2,0', '0,3,0', '1,0,0', '1,1,0', '1,2,0', '1,3,0']);
+  });
+
   it('skips parts drawn in several fixed colours', () => {
     // a pull-back motor with a white axle: two fixed colours
     expect(convertPart('10039.dat', flattener)).toMatchObject({ ok: false, reason: 'multicolour' });

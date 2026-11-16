@@ -82,6 +82,23 @@ test.describe('LDraw parts library', () => {
       await expect(page.getByRole('textbox', { name: 'Model name' })).toHaveValue('Mixed');
     });
 
+    test('lets other parts into the cells a library part leaves empty, however it is turned', async ({ page }, testInfo) => {
+      const path = testInfo.outputPath('corner-plates.brickbench.json');
+      // a Plate 2 × 2 Corner in each of its four turns, with a 1 × 1 plate tried in every cell of its box:
+      // only the one in its missing corner fits, as bricks that overlap others are left out
+      const bricks = [0, 1, 2, 3].flatMap((r) => [
+        { part: 'ldraw:2420', color: 15, x: r * 4, y: 0, z: 0, r },
+        ...[[0, 0], [1, 0], [0, 1], [1, 1]].map(([dx = 0, dz = 0]) => ({ part: 'plate-1x1', color: 4, x: r * 4 + dx, y: 0, z: dz, r: 0 })),
+      ]);
+      await writeFile(path, JSON.stringify({ format: 'brickbench.model', version: 1, name: 'Corners', bricks }));
+      await freshEditor(page);
+      const chooserPromise = page.waitForEvent('filechooser');
+      await page.getByRole('button', { name: 'File' }).click();
+      await page.getByRole('menuitem', { name: 'Open…' }).click();
+      await (await chooserPromise).setFiles(path);
+      await expect(counts(page)).toHaveText('8 bricks');
+    });
+
     test('keeps a session it could not fully restore, and recovers it later', async ({ page }) => {
       const bricks = [
         { part: 'brick-2x4', color: 4, x: 0, y: 0, z: 0, r: 0 },

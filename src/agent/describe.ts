@@ -1,4 +1,4 @@
-import { brickCellBox } from '../core/model/geometry';
+import { brickCellBox, brickSolids } from '../core/model/geometry';
 import { allBricks } from '../core/model/model';
 import type { Brick, Model } from '../core/model/types';
 import type { PartLookup } from '../core/parts/types';
@@ -51,14 +51,17 @@ function countBy<K>(items: readonly Brick[], key: (brick: Brick) => K): [K, numb
   return [...counts].sort((a, b) => b[1] - a[1]);
 }
 
-/** Whether a brick reaches into a region (corners in any order, both included). */
+/**
+ * Whether a cell the brick fills lies in a region (corners in any order, both
+ * included): the free corner of an L-shaped plate is not the plate's.
+ */
 export function touchesRegion(brick: Brick, region: Region, lookup: PartLookup): boolean {
-  const box = brickCellBox(brick, lookup);
   const overlaps = (lo: number, hi: number, a: number, b: number): boolean => lo <= Math.max(a, b) && hi > Math.min(a, b);
-  return (
-    overlaps(box.x0, box.x1, region.min.x, region.max.x) &&
-    overlaps(box.y0, box.y1, region.min.y, region.max.y) &&
-    overlaps(box.z0, box.z1, region.min.z, region.max.z)
+  return brickSolids(brick, lookup).some(
+    (box) =>
+      overlaps(box.x0, box.x1, region.min.x, region.max.x) &&
+      overlaps(box.y0, box.y1, region.min.y, region.max.y) &&
+      overlaps(box.z0, box.z1, region.min.z, region.max.z),
   );
 }
 

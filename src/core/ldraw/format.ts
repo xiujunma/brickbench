@@ -15,6 +15,15 @@
  *           int8 normals × 3 per vertex, padded to 4 bytes
  *           uint16 or uint32 indices
  */
+/**
+ * A box of cells a part fills, [x0, y0, z0, x1, y1, z1]: studs along X and Z
+ * and plates up Y, counted from the corner of its footprint, ends exclusive.
+ */
+export type SolidBox = readonly [x0: number, y0: number, z0: number, x1: number, y1: number, z1: number];
+
+/** At most this many boxes describe one part's shape; a part that needs more keeps its whole box. */
+export const MAX_SOLIDS = 2048;
+
 /** One part in index.json. */
 export interface LDrawIndexEntry {
   /** LDraw part number, e.g. "3001" or "3040b". */
@@ -32,12 +41,22 @@ export interface LDrawIndexEntry {
   readonly origin: readonly [number, number, number];
   /** The body lands on whole studs and plates. */
   readonly snug: boolean;
+  /**
+   * The cells the part fills, when its shape leaves some of its box empty,
+   * as under an arch or in the corner of an L-shaped plate. Absent, it fills
+   * the whole box.
+   */
+  readonly solids?: readonly SolidBox[];
 }
 
-export const LDRAW_INDEX_VERSION = 1;
+/** The index format written now. Version 2 added solids. */
+export const LDRAW_INDEX_VERSION = 2;
+
+/** Index formats the app reads: in a version 1 library every part fills its whole box. */
+export const READABLE_INDEX_VERSIONS = [1, 2] as const;
 
 export interface LDrawIndex {
-  readonly version: typeof LDRAW_INDEX_VERSION;
+  readonly version: (typeof READABLE_INDEX_VERSIONS)[number];
   readonly generated: string;
   readonly parts: readonly LDrawIndexEntry[];
 }
