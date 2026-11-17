@@ -1,0 +1,64 @@
+# Packages BrickBench as a desktop app: `bun run desktop:dist` (see scripts/desktop.ts).
+appId: app.brickbench.desktop
+productName: BrickBench
+copyright: BrickBench. LEGO® is a trademark of the LEGO Group, which does not sponsor, authorise or endorse this software.
+
+directories:
+  # the bundled main process and preload, with a package.json of their own: no dependencies,
+  # since the web app is bundled already
+  app: .desktop
+  output: release
+  buildResources: build
+
+# into the app's archive: the main process, the preload, and the built web app with its parts
+# library (one archive file, rather than thousands of loose ones)
+files:
+  - package.json
+  - main.cjs
+  - preload.cjs
+  - from: ../dist
+    to: web
+# no dependencies to install, rebuild or collect: see the hook
+beforeBuild: scripts/desktopBeforeBuild.cjs
+
+# open LDraw and Studio files with BrickBench, without taking them over from other apps
+fileAssociations:
+  - ext: ldr
+    name: LDraw Model
+    role: Viewer
+    rank: Alternate
+  - ext: mpd
+    name: LDraw Multi-Part Model
+    role: Viewer
+    rank: Alternate
+  - ext: io
+    name: BrickLink Studio Model
+    role: Viewer
+    rank: Alternate
+
+# The icons are made once from build/icon.png, with electron-builder's own icon tool (it needs
+# Node: under Bun it never finishes), so packaging itself never has to convert them:
+#   node <electron-builder cache>/icons@1.2.3/icons-bundle-*/icon-tool.js --input=build/icon.png --format=icns --out=build
+# and the same with --format=ico, and --format=set --out=build/icons.
+mac:
+  category: public.app-category.graphics-design
+  icon: build/icon.icns
+  target: dmg
+  # signed ad hoc until there is a Developer ID: unsigned apps from the web are "damaged" on Apple
+  # silicon, ad-hoc ones only "from an unidentified developer" (right-click › Open the first time).
+  # Hardened runtime would refuse Electron's own frameworks under an ad-hoc signature.
+  identity: '-'
+  hardenedRuntime: false
+
+win:
+  icon: build/icon.ico
+  target: nsis
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+linux:
+  icon: build/icons
+  target: AppImage
+  category: Graphics

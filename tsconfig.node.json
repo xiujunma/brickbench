@@ -12,8 +12,10 @@
   },
   "include": [
     "e2e",
+    "e2e-desktop",
     "vite.config.ts",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "playwright.desktop.config.ts"
   ],
   "exclude": []
 }

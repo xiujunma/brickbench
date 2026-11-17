@@ -5,6 +5,8 @@
  * stops DNS rebinding.
  */
 const LOCAL_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
+/** BrickBench's desktop app serves the page from its own scheme (src/desktop/protocol.ts); no web page can claim it. */
+const DESKTOP_ORIGIN = 'brickbench://app';
 
 function parseUrl(value: string): URL | null {
   try {
@@ -15,10 +17,11 @@ function parseUrl(value: string): URL | null {
   }
 }
 
-/** Whether a page at this origin may connect: one served from this machine, or, given a list, only those. */
+/** Whether a page at this origin may connect: one served from this machine or the desktop app, or, given a list, only those. */
 export function isAllowedOrigin(origin: string | null, only: readonly string[] = []): boolean {
   if (!origin) return false;
   if (only.length > 0) return only.includes(origin);
+  if (origin === DESKTOP_ORIGIN) return true;
   const url = parseUrl(origin);
   return url !== null && (url.protocol === 'http:' || url.protocol === 'https:') && LOCAL_HOSTS.has(url.hostname);
 }

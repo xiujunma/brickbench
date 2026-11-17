@@ -11,3 +11,7 @@ test-results
 /public/ldraw.partial
 /public/ldraw.old
 /.ldraw-cache
+
+# desktop app: the bundled Electron app folder and the packaged installers (`bun run desktop:dist`)
+/.desktop
+/release

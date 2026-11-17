@@ -21,6 +21,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 - **Unlimited undo** (up to 200 steps) and **autosave** in the browser.
 - **Files:** save and open `.brickbench.json`, or load the sample cottage.
 - **Open models from elsewhere:** LDraw files (`.ldr`, `.mpd`) and BrickLink Studio files (`.io`) open as BrickBench models, built in the model's own order, with a report on any parts that couldn't come in. Use File › Open, or drop a file on the window. See [Opening LDraw and Studio files](#opening-ldraw-and-studio-files).
+- **A desktop app** for macOS, Windows and Linux, with the parts library inside, a native menu, and LDraw and Studio files opened from Finder or Explorer. See [Desktop app](#desktop-app).
 - **Building instructions:** a printable PDF booklet with a cover, the parts list, then one page per step showing the parts to add and the model so far, with the new parts outlined.
 - **Time-lapse video:** a video of your model being built, each brick dropping into place while the camera circles, ready to share. See [Time-lapse video](#time-lapse-video).
 - **Exports:** LDraw (`.ldr`, opens in Studio, LeoCAD and LDView), glTF (`.glb`, at real-world scale for Blender), PNG, a time-lapse video (MP4 or WebM), and a parts list (CSV).
@@ -125,6 +126,20 @@ Set how many copies of a set you have, and BrickBench counts with all of them:
 
 Your lists stay in this browser, like favourites, and are shared by its tabs.
 
+## Desktop app
+
+BrickBench also runs as a desktop app, built with [Electron](https://www.electronjs.org): the same app, with the parts library inside it, so it works offline.
+
+- **Open models from your desktop:** choose BrickBench in a file's **Open With** menu for LDraw (`.ldr`, `.mpd`) and Studio (`.io`) files (it offers to open them without taking them over from other apps), drop a file on the window or on the Dock icon, or use **File › Open…**.
+- **A native menu** with File, Edit and View. The keys work as in the browser: ⌘Z undoes in the scene, and undoes your typing in a text box.
+- **Saving** asks where to save, as other desktop apps do.
+- **Your work stays in the app:** autosave, favourites and your parts lists are kept in the app's own storage, apart from your browser's.
+- **The agent chat** works too, once the agent bridge runs (`bun run agent`, as for the browser).
+
+To run it from this repository, `bun run desktop` builds the web app and opens it in Electron (`bun scripts/desktop.ts start --skip-web` reuses the last build). To make an installer, `bun run desktop:dist` builds everything and writes it to `release/`: a `.dmg` on macOS, an installer on Windows and an AppImage on Linux. Build each on its own system; `bun scripts/desktop.ts dist --dir` makes just the app, unpacked, which is quicker to try. The installers aren't signed with a developer certificate yet (that needs an Apple Developer ID and a Windows code-signing certificate). The macOS app is signed ad hoc, so the first time you open a downloaded copy, macOS needs **right-click › Open**; Windows asks before running the installer.
+
+**How it works.** Electron shows the built web app from a scheme of its own, `brickbench://app`, which serves only the app's own files (a `file://` page couldn't load the parts library). The page runs sandboxed, with no access to Node or your files; a small preload script passes it menu commands and the files you open. Links to websites open in your browser, and the page can't navigate anywhere else. The main process is in `electron/`, bundled by Bun; `bun run e2e:desktop` builds the app and runs its tests in Electron, and with `BRICKBENCH_DESKTOP_APP` set to a packaged app's executable, `bunx --bun playwright test -c playwright.desktop.config.ts` runs them against that instead. The tests keep their own storage, apart from your copy of the app.
+
 ## Building with an AI agent
 
 An AI agent can build in BrickBench: Claude Code from the **Agent** panel in the app, or Claude Code (or any other agent that speaks [MCP](https://modelcontextprotocol.io)) from a terminal. It places, paints, moves and removes bricks while you watch, looks at pictures of the model to check its work, and whatever it does for one request is one step you can undo.
@@ -185,6 +200,9 @@ The bridge listens on this computer only (127.0.0.1) and answers only pages serv
 | `bun test` | Run the unit tests (`bun test`, about a second) |
 | `bun run coverage` | Run the unit tests with coverage; fails if any file drops below 80% of its lines or functions |
 | `bun run e2e` | Run the browser tests (Playwright; starts the dev server itself) |
+| `bun run desktop` | Build the web app and open it in the desktop app (Electron) |
+| `bun run desktop:dist` | Build everything and package the desktop app into `release/` |
+| `bun run e2e:desktop` | Build the desktop app and run its tests in Electron |
 | `bun run typecheck` | Type-check the app, tests and tooling with `bun check` |
 
 The first time you run the browser tests, install a browser with `bunx playwright install chromium`. Unit tests share one process, so they must not depend on each other's state: `bun test --randomize` and `bun test --isolate` should pass too.
@@ -268,11 +286,13 @@ src/
   ui/         React panels, dialogs and toasts
   agent/      the build tools agents call, the link to the agent bridge, and the chat
   instructions/  building-instruction booklets: rendering steps and writing the PDF
+  desktop/    what the desktop app and the page say to each other
   samples/    the sample cottage
 scripts/ldraw/  the LDraw library converter (run straight from TypeScript by Bun)
 agent/        the agent bridge: an MCP server for agents, a WebSocket for BrickBench tabs,
               and Claude Code run headless for the chat
-e2e/          Playwright tests
+electron/     the desktop app's main process and preload script
+e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 ```
 
 **Grid and units.** One world unit is one stud pitch (8 mm). Bricks snap to whole studs on X/Z and whole plates (3.2 mm) on Y. A brick is stored as its part, its colour and the corner of its footprint, plus a quarter-turn rotation.
@@ -315,6 +335,8 @@ e2e/          Playwright tests
 Part numbers, colour codes and colour values follow the [LDraw](https://www.ldraw.org) standard. The library parts are converted from the LDraw.org Parts Library, made by its contributors and licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (older contributions also [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)); `bun run ldraw` writes the full credits to `public/ldraw/CREDITS.txt`, and the app links to them. LDraw™ is a trademark of the Estate of James Jessiman.
 
 Rebrickable's and BrickLink's colour numbers are matched to LDraw's with [Rebrickable](https://rebrickable.com)'s colour cross-references (`src/core/inventory/colourNumbers.ts`, written by `scripts/colourNumbers.ts`). Opened models' colours are matched with LDraw's colour table, LDConfig.ldr (`src/core/io/ldrawImport/colourTable.ts`, written by `scripts/ldrawColours.ts`).
+
+The desktop app is built with [Electron](https://www.electronjs.org) and [electron-builder](https://www.electron.build) (both MIT).
 
 Studio files are read with [zip.js](https://gildas-lormeau.github.io/zip.js/) (BSD-3-Clause). BrickLink Studio is BrickLink's; BrickBench reads the LDraw model it saves, as the [LDraw wiki](https://wiki.ldraw.org/wiki/Studio) describes.
 

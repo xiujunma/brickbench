@@ -14,6 +14,7 @@ import './app/styles/agent.css';
 import { agentStorage, startAgent } from './agent/connection';
 import { agentLink } from './app/agent';
 import { App } from './app/App';
+import { startDesktop } from './app/desktop';
 import { editorStore, restoreLastSession } from './state/editorStore';
 import { startInventoryMatching } from './state/inventory';
 import { partLibrary } from './state/library';
@@ -43,6 +44,8 @@ async function boot(): Promise<void> {
       <App />
     </StrictMode>,
   );
+  // in the desktop app: its menu, and files opened from the desktop (those waiting come now)
+  startDesktop();
 }
 
 void boot();

@@ -9,6 +9,11 @@ describe('who may use the bridge', () => {
     expect(isAllowedOrigin('http://[::1]:5173')).toBe(true);
   });
 
+  it('lets in the desktop app, which serves the page from its own scheme', () => {
+    expect(isAllowedOrigin('brickbench://app')).toBe(true);
+    expect(isAllowedOrigin('brickbench://other')).toBe(false);
+  });
+
   it('keeps out other sites, odd schemes and pages that give no origin', () => {
     expect(isAllowedOrigin('https://evil.example')).toBe(false);
     expect(isAllowedOrigin('http://localhost.evil.example')).toBe(false);
