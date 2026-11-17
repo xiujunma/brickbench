@@ -47,6 +47,7 @@ function FileMenu() {
             <MenuItem icon="cube" label="3D model (.glb)" onSelect={run(exportGlbFile)} />
             <MenuItem icon="image" label="Image (.png)" onSelect={run(exportImage)} />
             <MenuItem icon="book" label="Building instructions (.pdf)…" onSelect={run(() => openDialog('instructions'))} />
+            <MenuItem icon="rotate" label="Time-lapse video…" onSelect={run(() => openDialog('timelapse'))} />
             <MenuItem icon="list" label="Parts list…" onSelect={run(() => openDialog('parts-list'))} />
           </>
         );

@@ -21,7 +21,8 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 - **Unlimited undo** (up to 200 steps) and **autosave** in the browser.
 - **Files:** save and open `.brickbench.json`, or load the sample cottage.
 - **Building instructions:** a printable PDF booklet with a cover, the parts list, then one page per step showing the parts to add and the model so far, with the new parts outlined.
-- **Exports:** LDraw (`.ldr`, opens in Studio, LeoCAD and LDView), glTF (`.glb`, at real-world scale for Blender), PNG, and a parts list (CSV).
+- **Time-lapse video:** a video of your model being built, each brick dropping into place while the camera circles, ready to share. See [Time-lapse video](#time-lapse-video).
+- **Exports:** LDraw (`.ldr`, opens in Studio, LeoCAD and LDView), glTF (`.glb`, at real-world scale for Blender), PNG, a time-lapse video (MP4 or WebM), and a parts list (CSV).
 - **Fast with big models.** Resting bricks are instanced, one draw call per part type, and studs hidden under other bricks are skipped. Rendering only happens when something changes.
 
 ## Getting started
@@ -66,6 +67,18 @@ Choose **File › Building instructions (.pdf)…**, or **Instructions** in the 
 - **Pictures use your current view.** Turn the model to show its best side before you start. Every page uses the same view and scale, so the model grows in place from page to page. New parts get an outline that stays the same width in every picture: blue on red, orange, yellow and tan bricks, orange on the rest.
 
 The PDF is made entirely in your browser: each step is drawn offscreen with three.js and laid out with [jsPDF](https://github.com/parallax/jsPDF), which loads only when you make a booklet.
+
+## Time-lapse video
+
+Choose **File › Time-lapse video…** to film your model going together, brick by brick, for a clip to share.
+
+- **Order:** "As you built it" replays the order you placed the bricks; "Bottom up" builds layer by layer, as the instructions do.
+- **Length:** 5 to 60 seconds. However many bricks the model has, they arrive evenly over the video, each dropping into place, and the finished model stays on screen for the last couple of seconds.
+- **Shape and size:** landscape (16:9), square, or portrait (9:16) for phones, at 1080p or 720p, 30 frames a second.
+- **Camera:** it starts on the side you are looking from, at about the same height (kept between a low and a high angle), and circles the model: once round for 20 seconds or more, part of the way for shorter videos. Untick the option to keep it still. It stays at one distance all the way round, as near as it can while keeping the whole model in the picture.
+- **Brick count:** "312 / 1,504 bricks" in a corner as the bricks arrive, unless you turn it off.
+
+The video is made in your browser and saved to your downloads: an MP4 (H.264), or a WebM where the browser can't make MP4. Frames are drawn offscreen in the editor's light and encoded with WebCodecs and [Mediabunny](https://mediabunny.dev) (MPL-2.0), which loads only when you make a video. On a computer with a graphics card, a 10-second 1080p video of a model of a few thousand bricks takes a few seconds; bigger models take longer, and software graphics much longer.
 
 ## Building with the parts you own
 

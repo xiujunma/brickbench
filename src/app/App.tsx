@@ -4,6 +4,7 @@ import { HelpDialog } from '../ui/dialogs/HelpDialog';
 import { InstructionsDialog } from '../ui/dialogs/InstructionsDialog';
 import { MyPartsDialog } from '../ui/dialogs/MyPartsDialog';
 import { PartsListDialog } from '../ui/dialogs/PartsListDialog';
+import { TimelapseDialog } from '../ui/dialogs/TimelapseDialog';
 import { AgentPanel } from '../ui/panels/agent/AgentPanel';
 import { InspectorPanel } from '../ui/panels/InspectorPanel';
 import { PartsPanel } from '../ui/panels/PartsPanel';
@@ -48,6 +49,7 @@ export function App() {
       <PartsListDialog />
       <InstructionsDialog />
       <MyPartsDialog />
+      <TimelapseDialog />
     </div>
   );
 }

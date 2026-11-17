@@ -5,7 +5,7 @@ import type { Brick, Model } from '../core/model/types';
 import type { Payload } from '../core/placement/payload';
 
 export type Tool = 'select' | 'build' | 'paint' | 'erase';
-export type DialogId = 'help' | 'parts-list' | 'instructions' | 'my-parts';
+export type DialogId = 'help' | 'parts-list' | 'instructions' | 'my-parts' | 'timelapse';
 export type ToastTone = 'info' | 'success' | 'error';
 export type SelectMode = 'replace' | 'add' | 'toggle';
 

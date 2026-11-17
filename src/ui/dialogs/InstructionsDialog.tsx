@@ -17,9 +17,10 @@ import { editorStore, useEditor } from '../../state/editorStore';
 import { downloadBlob } from '../../state/files';
 import { partLibrary } from '../../state/library';
 import { bricksOf, distinctPieces } from '../../state/selectors';
+import { Choice } from '../components/Choice';
 import { Dialog } from '../components/Dialog';
 import { Icon } from '../components/Icon';
-import { cssVars } from '../platform';
+import { ProgressBar } from '../components/ProgressBar';
 
 const STEP_SIZES = [3, 6, 10, 20, 40] as const;
 const LARGEST_STEP = 40;
@@ -31,40 +32,6 @@ const PAPERS: readonly { readonly id: PageSize; readonly label: string }[] = [
   { id: 'a4', label: 'A4' },
   { id: 'letter', label: 'US Letter' },
 ];
-
-type ChoiceProps<T extends string | number> = {
-  readonly legend: string;
-  readonly choices: readonly { readonly id: T; readonly label: string }[];
-  readonly value: T;
-  readonly onChange: (value: T) => void;
-};
-
-function Choice<T extends string | number>({ legend, choices, value, onChange }: ChoiceProps<T>) {
-  return (
-    <fieldset className="field">
-      <legend>{legend}</legend>
-      <div className="segmented" role="group" aria-label={legend}>
-        {choices.map((choice) => (
-          <button key={choice.id} type="button" aria-pressed={choice.id === value} onClick={() => onChange(choice.id)}>
-            {choice.label}
-          </button>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
-
-function ProgressBar({ progress }: { readonly progress: InstructionProgress }) {
-  const fraction = progress.total > 0 ? Math.min(1, progress.done / progress.total) : 0;
-  return (
-    <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction * 100)}>
-      <div className="progress-track">
-        <span className="progress-fill" style={cssVars({ '--progress': String(fraction) })} />
-      </div>
-      <span className="progress-label">{progress.message}</span>
-    </div>
-  );
-}
 
 export function InstructionsDialog() {
   const isOpen = useEditor((s) => s.dialog === 'instructions');
@@ -131,6 +98,8 @@ export function InstructionsDialog() {
     <>
       <ProgressBar progress={progress} />
       <button
+        // its own key: the Make button that had focus goes, rather than turning into Stop under the keyboard
+        key="stop"
         type="button"
         className="btn btn-outline"
         onClick={(event) => {
@@ -148,6 +117,7 @@ export function InstructionsDialog() {
         {summary}
       </span>
       <button
+        key="make"
         type="button"
         className="btn btn-primary"
         onClick={() => void handleMake()}

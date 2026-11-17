@@ -72,7 +72,7 @@ export function nextTask(): Promise<void> {
 }
 
 /** Yields to the browser at most every few dozen milliseconds, so progress and Stop stay live. */
-function breather(): (force?: boolean) => Promise<void> {
+export function breather(): (force?: boolean) => Promise<void> {
   let last = performance.now();
   return async (force = false) => {
     if (!force && performance.now() - last < YIELD_EVERY_MS) return;
@@ -111,7 +111,7 @@ function partArt(key: string, lookup: PartLookup, thumbnails: ThumbnailRenderer)
 }
 
 /** Settles with the work, or rejects the moment the signal aborts. */
-function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+export function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
   if (!signal) return work;
   return new Promise((resolve, reject) => {
     const stop = (): void => reject(new DOMException('Making the instructions was stopped.', 'AbortError'));
