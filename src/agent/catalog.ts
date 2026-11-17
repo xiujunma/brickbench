@@ -1,5 +1,5 @@
 import { COLORS, getColor, type ColorFinish } from '../core/colors';
-import type { Finder } from '../core/parts/finder/finder';
+import type { Finder, FinderFilters } from '../core/parts/finder/finder';
 import { colourInQuery } from '../core/parts/finder/colourWords';
 import type { PartDef } from '../core/parts/types';
 
@@ -37,8 +37,13 @@ export function paletteList(): { readonly id: number; readonly name: string; rea
 }
 
 /** Parts matching a search, best first, with their sizes. */
-export function searchParts(finder: Finder, query: string, limit: number): { readonly parts: (PartInfo & { readonly source: string })[]; readonly total: number } {
-  const { items } = finder.find(query);
+export function searchParts(
+  finder: Finder,
+  query: string,
+  limit: number,
+  filters: FinderFilters = {},
+): { readonly parts: (PartInfo & { readonly source: string })[]; readonly total: number } {
+  const { items } = finder.find(query, filters);
   const parts = items.slice(0, limit).map((item) => ({ part: item.partId, name: item.name, w: item.w, d: item.d, h: item.h, source: item.source }));
   return { parts, total: items.length };
 }

@@ -7,10 +7,12 @@ type Props = {
   readonly filters: PartFilters;
   readonly footprints: readonly FootprintCount[];
   readonly onChange: (filters: PartFilters) => void;
+  /** Offers the Owned filter: the user has added parts lists. */
+  readonly ownable?: boolean;
 };
 
-/** Size, height and shape: three quick ways to narrow thousands of parts to a handful. */
-export function FilterBar({ filters, footprints, onChange }: Props) {
+/** Size, height and shape: three quick ways to narrow thousands of parts to a handful, and the parts the user owns. */
+export function FilterBar({ filters, footprints, onChange, ownable = false }: Props) {
   // the library's sizes join the list once it loads, so start as soon as the filters are in reach
   const prepare = (): void => partLibrary.request();
   // a value can also change without focus or a pointer, e.g. from assistive technology
@@ -19,7 +21,7 @@ export function FilterBar({ filters, footprints, onChange }: Props) {
     onChange(next);
   };
   return (
-    <div className="filter-bar" role="group" aria-label="Filter parts" onFocus={prepare} onPointerEnter={prepare}>
+    <div className={ownable ? 'filter-bar has-owned' : 'filter-bar'} role="group" aria-label="Filter parts" onFocus={prepare} onPointerEnter={prepare}>
       <select
         aria-label="Part size"
         className="select select-sm"
@@ -59,6 +61,17 @@ export function FilterBar({ filters, footprints, onChange }: Props) {
           </option>
         ))}
       </select>
+      {ownable && (
+        <button
+          type="button"
+          className="filter-toggle"
+          aria-pressed={Boolean(filters.owned)}
+          title="Only parts you own"
+          onClick={() => change({ ...filters, owned: filters.owned ? undefined : true })}
+        >
+          Owned
+        </button>
+      )}
     </div>
   );
 }

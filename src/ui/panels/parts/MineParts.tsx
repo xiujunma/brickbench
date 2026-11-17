@@ -2,10 +2,12 @@ import { useEffect, useId, useMemo } from 'react';
 import { isLDrawPartId } from '../../../core/ldraw/catalogIndex';
 import type { Finder, FinderItem } from '../../../core/parts/finder/finder';
 import { useEditor } from '../../../state/editorStore';
+import { useInventory } from '../../../state/inventory';
 import { partLibrary, useLibrary } from '../../../state/library';
 import { usePartPicks } from '../../../state/partPicks';
 import { bricksOf } from '../../../state/selectors';
 import { LibraryNotice } from './LibraryNotice';
+import { OwnedParts, OwnedPartsPrompt } from './OwnedParts';
 import { PartGrid, usePaging, type TileContext } from './PartGrid';
 
 type Props = TileContext & { readonly finder: Finder };
@@ -61,10 +63,11 @@ function MineSection({ title, items, badges, ...tile }: Section & TileContext) {
   );
 }
 
-/** Your parts: favourites, recent picks and what the model already uses. */
+/** Your parts: favourites, recent picks, what the model already uses and the parts of your sets. */
 export function MineParts({ finder, ...tile }: Props) {
   const { sections, needsLibrary } = useMineSections(finder);
   const libraryStatus = useLibrary((s) => s.status);
+  const hasSets = useInventory((s) => s.lists.length > 0);
   const waiting = needsLibrary && (libraryStatus === 'idle' || libraryStatus === 'loading');
 
   useEffect(() => {
@@ -76,7 +79,7 @@ export function MineParts({ finder, ...tile }: Props) {
   return (
     <>
       {needsLibrary && <LibraryNotice />}
-      {sections.length === 0 && emptyNote && (
+      {sections.length === 0 && !hasSets && emptyNote && (
         <p className="empty-note" role="status">
           {emptyNote}
         </p>
@@ -84,6 +87,7 @@ export function MineParts({ finder, ...tile }: Props) {
       {sections.map((section) => (
         <MineSection key={section.title} {...section} {...tile} />
       ))}
+      {hasSets ? <OwnedParts onPick={tile.onPick} /> : <OwnedPartsPrompt />}
     </>
   );
 }

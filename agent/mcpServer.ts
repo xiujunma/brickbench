@@ -9,7 +9,7 @@ export const SERVER_NAME = 'brickbench';
 export const SERVER_VERSION = '1.0.0';
 
 /** Tools that only read: clients may run them without asking. */
-const READ_ONLY: ReadonlySet<ToolName> = new Set(['get_model', 'find_parts', 'list_colors', 'look']);
+const READ_ONLY: ReadonlySet<ToolName> = new Set(['get_model', 'find_parts', 'list_colors', 'list_owned_parts', 'look']);
 
 export function toCallToolResult(outcome: ToolOutcome): CallToolResult {
   if (!outcome.ok) return { content: [{ type: 'text', text: outcome.error }], isError: true };

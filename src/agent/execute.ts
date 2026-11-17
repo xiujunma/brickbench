@@ -5,16 +5,19 @@
  */
 import type { StoreApi } from 'zustand/vanilla';
 import { canUndo } from '../core/history';
+import type { OwnedList } from '../core/inventory/stock';
 import type { SceneSettings } from '../core/io/modelFile';
 import { isLDrawPartId } from '../core/ldraw/catalogIndex';
 import type { IdFactory } from '../core/model/ids';
 import { allBricks } from '../core/model/model';
 import type { Brick, Model } from '../core/model/types';
+import { colourInQuery } from '../core/parts/finder/colourWords';
 import type { Finder } from '../core/parts/finder/finder';
 import type { PartLookup } from '../core/parts/types';
 import type { EditorState } from '../state/types';
 import { BuildError, clearModel, describeModel, moveBricks, paintBricks, placeBricks, removeBricks, type Change } from './build';
-import { paletteList, searchParts } from './catalog';
+import { paletteList, resolveColour, searchParts } from './catalog';
+import { NO_LISTS_NOTE, overOwned, ownedColours, ownedLots, ownedPartIds, tally } from './owned';
 import { isToolName, parseToolInput, type ToolInput, type ToolName, type ToolOutcome, type View } from './protocol';
 
 export interface LookRequest {
@@ -35,6 +38,8 @@ export interface AgentHost {
   /** Loads the LDraw library; resolves whether its parts are there to use. */
   readonly loadLibrary: () => Promise<boolean>;
   readonly look: (request: LookRequest) => Promise<{ readonly data: string; readonly mimeType: 'image/jpeg' | 'image/png' }>;
+  /** The parts lists of the sets the user owns; none when left out. */
+  readonly ownedLists?: () => readonly OwnedList[];
 }
 
 type Handler<T extends ToolName> = (host: AgentHost, input: ToolInput<T>) => Promise<ToolOutcome> | ToolOutcome;
@@ -74,6 +79,64 @@ async function lookAt(host: AgentHost, input: ToolInput<'look'>): Promise<ToolOu
   }
 }
 
+const listsOf = (host: AgentHost): readonly OwnedList[] => host.ownedLists?.() ?? [];
+
+async function findParts(host: AgentHost, input: ToolInput<'find_parts'>): Promise<ToolOutcome> {
+  const library = await withLibrary(host);
+  const lists = listsOf(host);
+  const only = input.owned_only && lists.length > 0 ? ownedPartIds(lists) : undefined;
+  const found = searchParts(host.finder(), input.query, input.limit, { only });
+  const notes = [library ? null : LIBRARY_NOTE, input.owned_only && lists.length === 0 ? NO_LISTS_NOTE : null].filter(Boolean).join(' ');
+  // with the user's sets known, each part says which of its colours they own and how many are left
+  const counts = lists.length > 0 ? tally(lists, allBricks(modelOf(host)), host.lookup) : null;
+  const parts = counts ? found.parts.map((p) => ({ ...p, owned: ownedColours(p.part, counts, host.lookup) })) : found.parts;
+  return { ok: true, data: notes ? { ...found, parts, note: notes } : { ...found, parts } };
+}
+
+async function listOwnedParts(host: AgentHost, input: ToolInput<'list_owned_parts'>): Promise<ToolOutcome> {
+  const lists = listsOf(host);
+  if (lists.length === 0) return { ok: true, data: { lists: [], parts: [], total: 0, note: NO_LISTS_NOTE } };
+  const library = await withLibrary(host);
+  const { colorId, rest } = colourInQuery(input.query);
+  const matching = rest === '' ? null : new Set(host.finder().find(rest, { only: ownedPartIds(lists) }).items.map((item) => item.partId));
+  const lots = ownedLots(tally(lists, allBricks(modelOf(host)), host.lookup), host.lookup).filter(
+    (lot) => (matching === null || matching.has(lot.part)) && (colorId === null || lot.color === colorId) && (!input.only_left || lot.left > 0),
+  );
+  return {
+    ok: true,
+    data: {
+      lists: lists.map((list) => ({ name: list.name, copies: list.copies })),
+      parts: lots.slice(0, input.limit),
+      total: lots.length,
+      truncated: lots.length > input.limit,
+      ...(library ? {} : { note: 'The LDraw library is not available, so only the basic parts among them are listed.' }),
+    },
+  };
+}
+
+async function placeOwnedAware(host: AgentHost, input: ToolInput<'place_bricks'>): Promise<ToolOutcome> {
+  if (input.bricks.some((b) => isLDrawPartId(b.part))) await withLibrary(host);
+  const outcome = apply(host, placeBricks(modelOf(host), input, { lookup: host.lookup, nextId: host.nextId }));
+  const lists = listsOf(host);
+  if (!outcome.ok || lists.length === 0) return outcome;
+  // building from the user's own parts: say which parts and colours now run past what they have
+  const result = outcome.data as { readonly ids: readonly string[] };
+  const model = modelOf(host);
+  const placed = result.ids.flatMap((id) => model.bricks.get(id) ?? []);
+  return { ok: true, data: { ...result, over_owned: overOwned(placed, tally(lists, allBricks(model), host.lookup), host.lookup) } };
+}
+
+/** Painting can use up a colour too: with the user's sets known, say which parts in it now run past what they have. */
+function paintOwnedAware(host: AgentHost, input: ToolInput<'paint_bricks'>): ToolOutcome {
+  const outcome = apply(host, paintBricks(modelOf(host), input, host.lookup));
+  const lists = listsOf(host);
+  const colour = resolveColour(input.color);
+  if (!outcome.ok || lists.length === 0 || colour === null) return outcome;
+  const bricks = allBricks(modelOf(host));
+  const inColour = bricks.filter((brick) => brick.colorId === colour);
+  return { ok: true, data: { ...(outcome.data as object), over_owned: overOwned(inColour, tally(lists, bricks, host.lookup), host.lookup) } };
+}
+
 function undoSteps(host: AgentHost, steps: number): ToolOutcome {
   let undone = 0;
   while (undone < steps && canUndo(host.store.getState().history)) {
@@ -85,18 +148,12 @@ function undoSteps(host: AgentHost, steps: number): ToolOutcome {
 
 const HANDLERS: { readonly [T in ToolName]: Handler<T> } = {
   get_model: (host, input) => ({ ok: true, data: describeModel(modelOf(host), host.store.getState().name, input, host.lookup) }),
-  find_parts: async (host, input) => {
-    const library = await withLibrary(host);
-    const found = searchParts(host.finder(), input.query, input.limit);
-    return { ok: true, data: library ? found : { ...found, note: LIBRARY_NOTE } };
-  },
+  find_parts: findParts,
   list_colors: () => ({ ok: true, data: { colors: paletteList() } }),
-  place_bricks: async (host, input) => {
-    if (input.bricks.some((b) => isLDrawPartId(b.part))) await withLibrary(host);
-    return apply(host, placeBricks(modelOf(host), input, { lookup: host.lookup, nextId: host.nextId }));
-  },
+  list_owned_parts: listOwnedParts,
+  place_bricks: placeOwnedAware,
   remove_bricks: (host, input) => apply(host, removeBricks(modelOf(host), input, host.lookup)),
-  paint_bricks: (host, input) => apply(host, paintBricks(modelOf(host), input, host.lookup)),
+  paint_bricks: paintOwnedAware,
   move_bricks: (host, input) => apply(host, moveBricks(modelOf(host), input, host.lookup)),
   clear_model: (host) => apply(host, clearModel(modelOf(host))),
   set_model_name: (host, input) => {

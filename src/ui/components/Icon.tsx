@@ -16,6 +16,7 @@ const PATHS = {
   close: 'M6 6l12 12 M18 6 6 18',
   chevron: 'M6.5 9.5 12 15l5.5-5.5',
   plus: 'M12 5v14 M5 12h14',
+  minus: 'M5 12h14',
   folder: 'M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z',
   save: 'M12 4v11 M7 10l5 5 5-5 M5 20h14',
   image: 'M4 5h16v14H4Z M4 16l5-5 4 4 3-3 4 4 M15.5 9.5h.01',

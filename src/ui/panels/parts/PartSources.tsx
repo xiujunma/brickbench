@@ -1,5 +1,6 @@
 import type { Finder } from '../../../core/parts/finder/finder';
 import { editorStore } from '../../../state/editorStore';
+import { inventory } from '../../../state/inventory';
 import { partLibrary } from '../../../state/library';
 import { partPicks } from '../../../state/partPicks';
 import { BasicParts } from './BasicParts';
@@ -11,7 +12,7 @@ export type PartSource = 'mine' | 'basic' | 'library';
 
 /** The visible label is the button's name; the hint says more to those who hover. */
 const SOURCES: readonly { readonly id: PartSource; readonly label: string; readonly hint: string }[] = [
-  { id: 'mine', label: 'Mine', hint: 'Your favourites, recent picks and the parts in this model' },
+  { id: 'mine', label: 'Mine', hint: 'Your favourites, recent picks, the parts in this model and the parts you own' },
   { id: 'basic', label: 'Basic', hint: 'The basic parts that come with BrickBench' },
   { id: 'library', label: 'Library', hint: 'The LDraw community parts library' },
 ];
@@ -20,7 +21,8 @@ const SOURCES: readonly { readonly id: PartSource; readonly label: string; reado
 export function initialSource(): PartSource {
   const { recent, favourites } = partPicks.store.getState();
   const building = editorStore.getState().history.present.bricks.size > 0;
-  return recent.length > 0 || favourites.length > 0 || building ? 'mine' : 'basic';
+  const ownsSets = inventory.store.getState().lists.length > 0;
+  return recent.length > 0 || favourites.length > 0 || building || ownsSets ? 'mine' : 'basic';
 }
 
 type Props = TileContext & {

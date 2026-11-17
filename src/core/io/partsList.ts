@@ -58,10 +58,12 @@ export function csvCell(value: string | number): string {
   return `"${safe.replace(/"/g, '""')}"`;
 }
 
-export function partsListCsv(rows: readonly PartsListRow[]): string {
-  const header = ['Quantity', 'Part', 'LDraw ID', 'Colour', 'LDraw colour'].join(',');
+/** The model's parts as CSV; with how many the user has and still needs when the rows carry it. */
+export function partsListCsv(rows: readonly (PartsListRow & { readonly have?: number; readonly missing?: number })[]): string {
+  const stocked = rows.length > 0 && rows.every((row) => row.have !== undefined && row.missing !== undefined);
+  const header = ['Quantity', 'Part', 'LDraw ID', 'Colour', 'LDraw colour', ...(stocked ? ['Have', 'Missing'] : [])].join(',');
   const lines = rows.map((row) =>
-    [row.quantity, row.partName, row.ldraw ?? '', row.colorName, row.colorId].map(csvCell).join(','),
+    [row.quantity, row.partName, row.ldraw ?? '', row.colorName, row.colorId, ...(stocked ? [row.have ?? 0, row.missing ?? 0] : [])].map(csvCell).join(','),
   );
   return [header, ...lines].join('\r\n') + '\r\n';
 }

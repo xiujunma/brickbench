@@ -28,6 +28,13 @@ describe('parts list', () => {
     expect(lines).toHaveLength(4);
   });
 
+  it('adds how many the user has and still needs when it knows', () => {
+    const rows = buildPartsList(bricks, getPart).map((row, i) => ({ ...row, have: i, missing: row.quantity - i }));
+    const lines = partsListCsv(rows).trim().split('\r\n');
+    expect(lines[0]).toBe('Quantity,Part,LDraw ID,Colour,LDraw colour,Have,Missing');
+    expect(lines[1]).toBe('2,"Brick 2 × 4","3001","Red",4,0,2');
+  });
+
   it('escapes quotes and neutralises spreadsheet formulas', () => {
     expect(csvCell('say "hi"')).toBe('"say ""hi"""');
     expect(csvCell('=SUM(A1)')).toBe('"\'=SUM(A1)"');

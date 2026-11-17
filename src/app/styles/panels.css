@@ -236,6 +236,7 @@
   margin-left: 5px;
   color: var(--accent);
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .part-tile {
@@ -627,4 +628,71 @@
   margin: 2px 0 0;
   font: 500 var(--text-xl) / 1.1 var(--font-mono);
   letter-spacing: -0.02em;
+}
+
+/* Parts you own, under Mine */
+.part-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-right: 16px;
+}
+
+.owned-prompt {
+  padding: 14px 16px 18px;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.owned-prompt .link-button,
+.part-section-head .link-button {
+  font-size: inherit;
+}
+
+.part-section-head .link-button {
+  font-size: var(--text-2xs);
+}
+
+.part-badge.is-over {
+  color: var(--danger);
+}
+
+/* with the Owned toggle, two rows of two so no filter gets squeezed */
+.filter-bar.has-owned {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.filter-toggle {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.filter-toggle:hover {
+  border-color: var(--ink-3);
+}
+
+.filter-toggle[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* how many of the part being built with the user has left */
+.building-stock {
+  margin-top: 8px;
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+}
+
+.building-stock.is-over {
+  color: var(--danger);
+  font-weight: 600;
 }

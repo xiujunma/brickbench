@@ -39,6 +39,7 @@ function FileMenu() {
             <MenuItem icon="folder" label="Open…" shortcut={shortcut('O')} onSelect={run(openModelFile)} />
             <MenuItem icon="save" label="Save to file" shortcut={shortcut('S')} onSelect={run(saveModelFile)} />
             <MenuItem icon="brick" label="Open sample cottage" onSelect={run(openSample)} />
+            <MenuItem icon="grid" label="Your parts…" onSelect={run(() => openDialog('my-parts'))} />
             {canRecover && <MenuItem icon="rotate" label="Recover earlier session" onSelect={run(recoverEarlierSession)} />}
             <div className="menu-sep" role="separator" />
             <div className="menu-label">Export</div>

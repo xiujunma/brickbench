@@ -29,8 +29,16 @@ describe('library index', () => {
     expect(index.parts[0]?.solids).toBeUndefined();
   });
 
+  it('reads the part numbers LDraw renamed, and refuses ones that are not part numbers', () => {
+    const index = parseLDrawIndex({ version: 4, generated: '', parts: [BRICK], aliases: [['3001old', '3001']] });
+    expect(index.aliases).toEqual([['3001old', '3001']]);
+    expect(parseLDrawIndex({ version: 3, generated: '', parts: [BRICK] }).aliases).toBeUndefined();
+    expect(() => parseLDrawIndex({ version: 4, generated: '', parts: [], aliases: [['../x', '3001']] })).toThrow(/damaged/);
+    expect(() => parseLDrawIndex({ version: 4, generated: '', parts: [], aliases: [['3001']] })).toThrow(/damaged/);
+  });
+
   it('rejects damaged or unexpected indexes with a readable message', () => {
-    expect(() => parseLDrawIndex({ version: 4, generated: '', parts: [] })).toThrow(/damaged/);
+    expect(() => parseLDrawIndex({ version: 5, generated: '', parts: [] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, id: '../evil' }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, w: 0 }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex('nope')).toThrow(/damaged/);

@@ -13,8 +13,9 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
   - **Size, height and shape filters** narrow thousands of parts to a handful: say 1 × 2, 1 plate, with a clip.
   - **Mine** keeps your starred favourites, recent picks and the parts already in your model. Favourites and picks stay in this browser, shared by its tabs.
   - **Keyboard first:** press `/`, type, use ↑ ↓ and press Enter to build with the part.
+- **Build with the parts you own:** add the parts lists of your sets from Rebrickable or BrickLink, and BrickBench counts how many of each part you have left as you build. The parts list shows what's missing, and an agent can build from your parts too. See [Building with the parts you own](#building-with-the-parts-you-own).
 - **Build with an AI agent:** ask Claude Code, from a chat panel in the app or from your terminal, to build or change the model. It places, paints and moves bricks while you watch, checks its work with pictures of the model, and one undo takes back a whole request.
-- **54 colours:** solid, transparent and metallic, following the LDraw palette.
+- **68 colours:** solid, transparent and metallic, following the LDraw palette, the newer ones included (Dark Purple, Light Aqua, Warm Tan, Reddish Orange and more).
 - **Grid snapping that understands bricks.** Point at a top face to stack, at a side to build beside it (lined up with that brick's courses), or underneath to hang below. Parts never overlap: the preview turns red when there's no room, and drops land on top of whatever is in the way.
 - **Tools:** Build, Select & move (click, Shift-click, box select, drag to move), Paint and Erase, plus an eyedropper (Alt-click) and rotate, nudge, copy, paste and duplicate.
 - **Unlimited undo** (up to 200 steps) and **autosave** in the browser.
@@ -66,6 +67,26 @@ Choose **File › Building instructions (.pdf)…**, or **Instructions** in the 
 
 The PDF is made entirely in your browser: each step is drawn offscreen with three.js and laid out with [jsPDF](https://github.com/parallax/jsPDF), which loads only when you make a booklet.
 
+## Building with the parts you own
+
+Choose **File › Your parts…**, or **Add their parts lists** under **Mine** in the parts panel, and add a parts list for each set you own:
+
+- **From Rebrickable:** open a set's inventory and choose Export Parts, as Rebrickable CSV or BrickLink XML. A CSV with Part, Color and Quantity columns works too, such as an export of all your parts.
+- **From BrickLink:** download a set's inventory as XML. Wanted lists and BrickStore files work too.
+
+Set how many copies of a set you have, and BrickBench counts with all of them:
+
+- **Mine** gets a **Parts you own** section: every part in the colours you have, each with how many are left. Click one to build with it in that colour.
+- **Part tiles** say how many you have left in the colour they show (under "In this model", how many the model uses). The count turns red when the model uses more than you have.
+- **The Owned filter** over the search box keeps a search to your parts.
+- **Building with** in the inspector says how many of the part, in the current colour, are left.
+- **The parts list** gets Have and Missing columns, in the CSV as well, so you know what to buy.
+- **An agent** can see your parts: ask it to build something from your sets, and it is told whenever a change uses more of a part than you have.
+
+**How lists are matched.** BrickLink and Rebrickable mostly number parts as LDraw does. Where they differ, LDraw parts note the other numbers ("BrickLink 4073" on 6141), and the library build records the numbers LDraw moved or merged (3040 is now 3040b). Colours are matched with Rebrickable's table of colour numbers. Checked against Rebrickable's inventories of 3,145 sets from 2018 on, about 98% of their parts match. The rest are listed with each set, with the reason: mostly printed parts, which BrickBench doesn't have yet, and parts too new for the LDraw library. Minifigures and alternate parts in BrickLink inventories are left out, and you are told how many. A list added while the parts library could not load is matched again once it does, as are all lists when a rebuilt library has more parts.
+
+Your lists stay in this browser, like favourites, and are shared by its tabs.
+
 ## Building with an AI agent
 
 An AI agent can build in BrickBench: Claude Code from the **Agent** panel in the app, or Claude Code (or any other agent that speaks [MCP](https://modelcontextprotocol.io)) from a terminal. It places, paints, moves and removes bricks while you watch, looks at pictures of the model to check its work, and whatever it does for one request is one step you can undo.
@@ -95,10 +116,11 @@ then ask Claude Code to build something in BrickBench. Any MCP client can use th
 | Tool | What it does |
 |---|---|
 | `get_model` | The model's name, size, parts and colours, and its bricks with their ids, optionally only those in a region |
-| `find_parts` | Searches parts like the search box does, and returns part ids with their sizes |
+| `find_parts` | Searches parts like the search box does, and returns part ids with their sizes; with your sets added, also the colours you own and how many are left, or only your parts |
 | `list_colors` | The colours, with names and LDraw codes |
-| `place_bricks` | Places up to 2,000 parts at once; refuses any that would overlap or leave the build area, with the reason, and points out bricks with nothing holding them up |
-| `paint_bricks`, `move_bricks`, `remove_bricks` | Change bricks named by id or reached by a region |
+| `list_owned_parts` | The parts of your sets, each part and colour with how many you own, the model uses and are left |
+| `place_bricks` | Places up to 2,000 parts at once; refuses any that would overlap or leave the build area, with the reason, and points out bricks with nothing holding them up and parts the model now uses more of than you own |
+| `paint_bricks`, `move_bricks`, `remove_bricks` | Change bricks named by id or reached by a region; painting, too, points out parts the model now uses more of than you own |
 | `look` | A picture of the model from any side, with bricks outlined if asked |
 | `set_model_name`, `undo`, `clear_model` | Rename, undo steps, or start afresh (only when you ask) |
 
@@ -129,6 +151,8 @@ The bridge listens on this computer only (127.0.0.1) and answers only pages serv
 
 The first time you run the browser tests, install a browser with `bunx playwright install chromium`. Unit tests share one process, so they must not depend on each other's state: `bun test --randomize` and `bun test --isolate` should pass too.
 
+`bun scripts/colourNumbers.ts <colours.json> <LDConfig.ldr>` rewrites the table that matches Rebrickable's and BrickLink's colour numbers to LDraw's, from Rebrickable's colour list (as its API gives it) and LDraw's colour table. Run it when the catalogues add colours.
+
 ### Checking LDraw mappings
 
 Each part records its LDraw part number and where the LDraw origin sits on it, which keeps exports correctly placed and turned. A test compares every part against the real LDraw library:
@@ -157,7 +181,7 @@ To pick up a newer LDraw release in CI, bump `ldraw-download-v1` in the workflow
 
 `bun run ldraw` turns the [LDraw parts library](https://library.ldraw.org) into files the app can load quickly, in `public/ldraw/` (not committed; `bun run build` makes it whenever it is missing, incomplete or partial):
 
-- `index.json` lists every part: its name, category, keywords, author, how it sits on the grid and, when it leaves some of its box empty, which cells it fills.
+- `index.json` lists every part: its name, category, keywords, author, how it sits on the grid and, when it leaves some of its box empty, which cells it fills. It also lists the part numbers LDraw moved or merged, each with the part it now is (4073 is 6141), so parts lists that use the old numbers still match.
 - `parts/<number>.bin` holds one mesh per part: gzip-compressed, 16-bit positions and 8-bit normals, with its triangles in runs by colour when the part fixes colours of its own. A 2 × 4 brick is under 5 kB.
 - `CREDITS.txt` names the author of every part and of every primitive it uses, and copies of the LDraw licence files sit alongside.
 - `build.json` says the build is complete and, for downloads, records the archive's SHA-256. `complete.zip` always holds the latest LDraw release; keep a copy and pass `--library` to pin one.
@@ -248,5 +272,7 @@ e2e/          Playwright tests
 ## Credits
 
 Part numbers, colour codes and colour values follow the [LDraw](https://www.ldraw.org) standard. The library parts are converted from the LDraw.org Parts Library, made by its contributors and licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (older contributions also [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)); `bun run ldraw` writes the full credits to `public/ldraw/CREDITS.txt`, and the app links to them. LDraw™ is a trademark of the Estate of James Jessiman.
+
+Rebrickable's and BrickLink's colour numbers are matched to LDraw's with [Rebrickable](https://rebrickable.com)'s colour cross-references (`src/core/inventory/colourNumbers.ts`, written by `scripts/colourNumbers.ts`).
 
 LEGO® is a trademark of the LEGO Group, which does not sponsor, authorise or endorse this project.

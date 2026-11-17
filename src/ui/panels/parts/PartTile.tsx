@@ -34,10 +34,12 @@ type Props = {
   readonly credit?: string | undefined;
   /** A short note under the name, such as how many the model uses. */
   readonly badge?: string | undefined;
+  /** Shows the note as a warning, such as when the model uses more than the user owns. */
+  readonly badgeAlert?: boolean;
   readonly id?: string | undefined;
 };
 
-export function PartTile({ part, colorId, isActive, onPick, isStarred, onStar, isHighlighted = false, credit, badge, id }: Props) {
+export function PartTile({ part, colorId, isActive, onPick, isStarred, onStar, isHighlighted = false, credit, badge, badgeAlert = false, id }: Props) {
   const url = useThumbnail(part.id, colorId);
   const code = part.ldraw?.file.replace(/\.dat$/, '');
   const title = [part.name, code ? `LDraw ${code}` : null, credit].filter(Boolean).join(' · ');
@@ -68,7 +70,7 @@ export function PartTile({ part, colorId, isActive, onPick, isStarred, onStar, i
           {(code || badge) && (
             <span className="part-code">
               {code}
-              {badge && <span className="part-badge">{badge}</span>}
+              {badge && <span className={badgeAlert ? 'part-badge is-over' : 'part-badge'}>{badge}</span>}
             </span>
           )}
         </span>

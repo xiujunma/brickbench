@@ -48,6 +48,26 @@ export function exclusionReason(header: PartHeader): string | null {
   return null;
 }
 
+/**
+ * The part another number now stands for: "~Moved to 6141" parts name it in
+ * their description, alias parts ("=…") draw it as their one sub-file. Null
+ * for every other part. Catalogues still use the old numbers, so parts lists
+ * name 4073 for what the library keeps as 6141.
+ */
+export function aliasTarget(header: PartHeader, text: string): string | null {
+  const moved = /^~Moved to\s+(\S+)/i.exec(header.description);
+  const target = moved?.[1] ?? (header.description.startsWith('=') ? firstSubFile(text) : null);
+  return target ? target.toLowerCase().replace(/\.dat$/, '') : null;
+}
+
+function firstSubFile(text: string): string | null {
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^\s*1\s+(?:\S+\s+){13}(\S+)\s*$/.exec(line);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
 /** "Brick  2 x  4" → "Brick 2 × 4". */
 export function displayName(description: string): string {
   return description

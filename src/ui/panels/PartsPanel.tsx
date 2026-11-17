@@ -9,6 +9,7 @@ import { tileId, type TileContext } from './parts/PartGrid';
 import { initialSource, PartSources, type PartSource } from './parts/PartSources';
 import { useFinder } from './parts/useFinder';
 import { useFinderSession, type FinderSession } from './parts/useFinderSession';
+import { useOwnedPartIds } from '../useStock';
 
 /** Footprints offered in the size filter: those at least this many parts have. */
 const FOOTPRINT_MINIMUM = 5;
@@ -52,7 +53,8 @@ function usePicking(session: FinderSession, onPicked: (() => void) | undefined) 
 
 export function PartsPanel({ onPicked }: Props) {
   const finder = useFinder();
-  const session = useFinderSession(finder);
+  const owned = useOwnedPartIds();
+  const session = useFinderSession(finder, owned);
   const { result, highlighted, dispatch } = session;
   const searchRef = useRef<HTMLInputElement>(null);
   const { tile, buildWithChosen, colourName } = usePicking(session, onPicked);
@@ -85,7 +87,7 @@ export function PartsPanel({ onPicked }: Props) {
         onEnter={buildWithChosen}
         onEscape={clear}
       />
-      <FilterBar filters={session.filters} footprints={footprints} onChange={(filters) => dispatch({ type: 'filters', filters })} />
+      <FilterBar filters={session.filters} footprints={footprints} ownable={owned !== null} onChange={(filters) => dispatch({ type: 'filters', filters })} />
       {result ? (
         <FindResults
           {...tile}

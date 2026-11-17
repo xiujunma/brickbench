@@ -7,6 +7,7 @@ import type { Model } from '../core/model/types';
 import { getPart } from '../core/parts/catalog';
 import { editorStore, nextId } from '../state/editorStore';
 import { partLibrary } from '../state/library';
+import { inventory } from '../state/inventory';
 import { finderFor } from '../state/partFinder';
 
 const host: AgentHost = {
@@ -17,6 +18,7 @@ const host: AgentHost = {
   loadLibrary: async () => (await partLibrary.load()).status === 'ready',
   // the renderer loads only when an agent first looks
   look: async (request) => (await import('../agent/look')).renderLook(request),
+  ownedLists: () => inventory.store.getState().lists,
 };
 
 export const agentLink: AgentLink = createAgentLink({

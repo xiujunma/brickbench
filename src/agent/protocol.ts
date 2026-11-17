@@ -12,6 +12,9 @@ export const MAX_BATCH = 2000;
 export const DEFAULT_LIST_LIMIT = 400;
 export const MAX_LIST_LIMIT = 2000;
 export const MAX_PROMPT_LENGTH = 8000;
+/** Most owned parts list_owned_parts lists by default and at all. */
+export const DEFAULT_OWNED_LIST = 200;
+export const MAX_OWNED_LIST = 2000;
 
 const int = z.number().int();
 const studs = int.min(-GRID_LIMIT).max(GRID_LIMIT);
@@ -44,8 +47,14 @@ export const TOOL_INPUTS = {
   find_parts: {
     query: z.string().trim().min(1).max(120),
     limit: int.min(1).max(50).default(12),
+    owned_only: z.boolean().default(false),
   },
   list_colors: {},
+  list_owned_parts: {
+    query: z.string().trim().max(120).default(''),
+    only_left: z.boolean().default(false),
+    limit: int.min(1).max(MAX_OWNED_LIST).default(DEFAULT_OWNED_LIST),
+  },
   place_bricks: {
     bricks: z.array(brickSpecSchema).min(1).max(MAX_BATCH),
     all_or_nothing: z.boolean().default(false),

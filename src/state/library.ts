@@ -15,6 +15,8 @@ export type LibraryStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'failed';
 export interface LibraryState {
   readonly status: LibraryStatus;
   readonly entries: readonly LDrawIndexEntry[];
+  /** Old part numbers and the library part each now is ("4073" → "6141"). */
+  readonly aliases: ReadonlyMap<string, string>;
   readonly categories: readonly CategoryCount[];
   readonly error: string | null;
 }
@@ -35,7 +37,7 @@ export interface PartLibrary {
 /** The index is about 1 MB; give slow connections a while, but not for ever. */
 const INDEX_TIMEOUT_MS = 30_000;
 
-const INITIAL: LibraryState = { status: 'idle', entries: [], categories: [], error: null };
+const INITIAL: LibraryState = { status: 'idle', entries: [], aliases: new Map(), categories: [], error: null };
 
 /** Static hosts often answer unknown paths with the app's index.html instead of a 404. */
 function isMissing(response: Response): boolean {
@@ -73,6 +75,7 @@ async function fetchIndex(baseUrl: string, fetcher: Fetch, timeoutMs: number): P
     return {
       status: 'ready',
       entries: index.parts,
+      aliases: new Map(index.aliases ?? []),
       categories: categoriesOf(index.parts),
       error: null,
     };

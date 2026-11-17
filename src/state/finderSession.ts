@@ -9,12 +9,14 @@ export interface PartFilters {
   readonly footprint?: string | undefined;
   readonly height?: HeightClass | undefined;
   readonly feature?: Feature | undefined;
+  /** Only parts the user owns, from the parts lists of their sets. */
+  readonly owned?: boolean | undefined;
 }
 
 export const NO_FILTERS: PartFilters = {};
 
 export function hasFilters(filters: PartFilters): boolean {
-  return Boolean(filters.footprint || filters.height || filters.feature);
+  return Boolean(filters.footprint || filters.height || filters.feature || filters.owned);
 }
 
 /** Searching means words typed or a filter set; otherwise the panel shows its browsing views. Punctuation alone is no words. */

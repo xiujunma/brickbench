@@ -15,14 +15,20 @@ Building well
 - Plan the model first, then build from the bottom up, a layer at a time, in few place_bricks calls (up to ${MAX_BATCH} bricks each). Overlap the joints between layers, as real brickwork does, so walls hold together.
 - Read each reply: refused bricks come with the reason, and "floating" lists bricks with nothing holding them up.
 - Check your work with look, which returns a picture, and fix what is off. get_model lists bricks with their ids for moving, painting or removing them.
-- Leave the user's own bricks alone unless they ask you to change them.`;
+- Leave the user's own bricks alone unless they ask you to change them.
+
+The user's own parts
+- The user may have added the parts lists of LEGO sets they own. list_owned_parts lists each part and colour they have, with how many are left after what the model already uses.
+- When they ask you to build with their own parts (or from a set they own), plan with list_owned_parts or find_parts with owned_only, and keep every part and colour within its "left" count. place_bricks and paint_bricks then answer with "over_owned": parts and colours the model now uses more of than they have, to swap or remove.`;
 
 export const TOOL_DESCRIPTIONS: Readonly<Record<ToolName, string>> = {
   get_model:
     'Describe the model: its name, size, the parts and colours it uses, and its bricks (id, part, color, x, y, z, r), bottom layer first. Give a region to list only the bricks reaching into it; limit caps the list.',
   find_parts:
-    'Search parts by everyday words, size or part number: "2x4 brick", "1x2 plate with clip", "window", "3001". Returns part ids with sizes: w along x and d along z in studs, h in plates.',
+    'Search parts by everyday words, size or part number: "2x4 brick", "1x2 plate with clip", "window", "3001". Returns part ids with sizes: w along x and d along z in studs, h in plates. Once the user has added the parts lists of sets they own, each part also lists the colours they own with how many are left, and owned_only keeps to their parts.',
   list_colors: 'List every colour with its LDraw code and name.',
+  list_owned_parts:
+    'List the parts the user owns, from the parts lists of their sets: each part and colour with owned, used (by the model) and left. query narrows it by words, size or colour ("red 2x4 brick", "plate"); only_left keeps the ones with some left.',
   place_bricks: `Place up to ${MAX_BATCH} parts. Each needs part (an id), color (name or code), x, y, z (minimum corner in studs, bottom layer in plates) and rotation (quarter turns, 0 to 3). Bricks that would overlap or leave the build area are refused with the reason and the rest are placed; with all_or_nothing, one refusal places none. Returns the new bricks' ids, the refusals, and "floating": indexes of placed bricks with nothing holding them up.`,
   remove_bricks:
     'Remove bricks by id, or every brick reaching into a region (min and max corner cells, both included), or both.',

@@ -15,6 +15,8 @@ export interface FinderFilters {
   readonly footprint?: string | undefined;
   readonly height?: HeightClass | undefined;
   readonly feature?: Feature | undefined;
+  /** Only these parts, such as the ones the user owns. */
+  readonly only?: ReadonlySet<string> | undefined;
 }
 
 export interface FinderResult {
@@ -46,6 +48,7 @@ function inScope(entry: Indexed, filters: FinderFilters): boolean {
 
 function passes(entry: Indexed, filters: FinderFilters): boolean {
   if (!inScope(entry, filters)) return false;
+  if (filters.only && !filters.only.has(entry.item.partId)) return false;
   if (filters.footprint !== undefined && entry.footprint !== filters.footprint) return false;
   if (filters.height !== undefined && entry.height !== filters.height) return false;
   return filters.feature === undefined || entry.features.has(filters.feature);

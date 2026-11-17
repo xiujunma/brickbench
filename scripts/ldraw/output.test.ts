@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { convertLibrary, writeLibraryFiles } from './convertLibrary.ts';
+import { convertLibrary, keptAliases, writeLibraryFiles } from './convertLibrary.ts';
 import { isSafeName } from './library.ts';
 import { isCompleteBuild, MARKER, StagedOutput, writeInfo } from './output.ts';
 
@@ -49,6 +49,44 @@ describe('converting a library folder', () => {
     expect(credits).toContain('parts/3005.dat\tBrick  1 x  1\tJane Doe');
     expect(credits).toContain('p/stud.dat\tStud\tJames Jessiman');
     expect(readFileSync(join(out, 'CAreadme.txt'), 'utf8')).toBe('licence');
+  });
+
+  it('lists the old numbers LDraw moved or aliased, followed to the parts it keeps', () => {
+    const root = makeLibrary();
+    // 3005a moved to 3005b, which moved on to 3005; 3005x is an alias drawing 3005; 3005z moved to a part left out
+    writeFileSync(join(root, 'parts', '3005b.dat'), ['0 ~Moved to 3005', '0 !LDRAW_ORG Part'].join('\n'));
+    writeFileSync(join(root, 'parts', '3005a.dat'), ['0 ~Moved to 3005B', '0 !LDRAW_ORG Part'].join('\n'));
+    writeFileSync(join(root, 'parts', '3005x.dat'), ['0 =Brick  1 x  1', '0 !LDRAW_ORG Part Alias', '1 16 0 0 0 1 0 0 0 1 0 0 0 1 3005.dat'].join('\n'));
+    writeFileSync(join(root, 'parts', '3005z.dat'), ['0 ~Moved to 3005p01', '0 !LDRAW_ORG Part'].join('\n'));
+    writeFileSync(join(root, 'parts', '3005o.dat'), ['0 ~Brick  1 x  1 (Obsolete)', '0 !LDRAW_ORG Part'].join('\n'));
+    const out = join(dir, 'out');
+    mkdirSync(join(out, 'parts'), { recursive: true });
+    const converted = convertLibrary(root, join(out, 'parts'), { only: null, limit: Infinity });
+    writeLibraryFiles(out, root, converted, '2026-11-11T00:00:00Z');
+
+    expect(JSON.parse(readFileSync(join(out, 'index.json'), 'utf8')).aliases).toEqual([
+      ['3005a', '3005'],
+      ['3005b', '3005'],
+      ['3005x', '3005'],
+    ]);
+  });
+
+  it('follows renames without looping, and leaves kept parts and dead ends out', () => {
+    const loop = new Map([
+      ['a', 'b'],
+      ['b', 'a'],
+      ['c', 'kept'],
+      ['kept', 'other'],
+    ]);
+    expect(keptAliases(loop, new Set(['kept']))).toEqual([['c', 'kept']]);
+  });
+
+  it('writes no renames when LDraw has none', () => {
+    const root = makeLibrary();
+    const out = join(dir, 'out');
+    mkdirSync(join(out, 'parts'), { recursive: true });
+    writeLibraryFiles(out, root, convertLibrary(root, join(out, 'parts'), { only: null, limit: Infinity }), 'now');
+    expect(JSON.parse(readFileSync(join(out, 'index.json'), 'utf8'))).not.toHaveProperty('aliases');
   });
 
   it('can stop early or stick to chosen parts', () => {

@@ -1,13 +1,13 @@
 import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { encodePartMesh, LDRAW_INDEX_VERSION, type LDrawIndex, type LDrawIndexEntry } from '../../src/core/ldraw/format.ts';
+import { encodePartMesh, LDRAW_INDEX_VERSION, MAX_ALIASES, type LDrawIndex, type LDrawIndexEntry } from '../../src/core/ldraw/format.ts';
 import { readColourTable, type ColourTable } from './colours.ts';
 import { convertPart, type Conversion } from './convert.ts';
 import { creditsText, type Credit } from './credits.ts';
 import { Flattener } from './flatten.ts';
 import { directorySource, normalizeName, type LibrarySource } from './library.ts';
-import { displayName, exclusionReason, readHeader, type PartHeader } from './select.ts';
+import { aliasTarget, displayName, exclusionReason, readHeader, type PartHeader } from './select.ts';
 
 /** Same rule as the app's index schema. */
 const PART_ID = /^[0-9a-z_-]{1,40}$/;
@@ -38,6 +38,8 @@ export class Tally {
 
 export interface ConvertedLibrary {
   readonly entries: readonly LDrawIndexEntry[];
+  /** Old part numbers and what LDraw says they now are, as found (not yet followed to kept parts). */
+  readonly aliases: ReadonlyMap<string, string>;
   readonly credits: ReadonlyMap<string, Credit>;
   readonly tally: Tally;
   /** Size of the mesh files written. */
@@ -84,14 +86,20 @@ function toEntry(id: string, header: PartHeader, conversion: Extract<Conversion,
   };
 }
 
-type Outcome = { readonly ok: true; readonly entry: LDrawIndexEntry; readonly data: Uint8Array } | { readonly ok: false; readonly reason: string; readonly example?: string };
+type Outcome =
+  | { readonly ok: true; readonly entry: LDrawIndexEntry; readonly data: Uint8Array }
+  | { readonly ok: false; readonly reason: string; readonly example?: string; readonly aliasOf?: string };
 
-/** Decides about one part file: left out (and why), or converted. */
+/** Decides about one part file: left out (and why, and what it now stands for), or converted. */
 function convertOne(root: string, file: string, flattener: Flattener, colours: ColourTable): Outcome {
   const id = file.slice(0, -4).toLowerCase();
-  const header = readHeader(readFileSync(join(root, 'parts', file), 'utf8'));
+  const text = readFileSync(join(root, 'parts', file), 'utf8');
+  const header = readHeader(text);
   const excluded = exclusionReason(header) ?? (PART_ID.test(id) ? null : 'unusual file name');
-  if (excluded) return { ok: false, reason: excluded };
+  if (excluded) {
+    const target = aliasTarget(header, text);
+    return target && PART_ID.test(id) && PART_ID.test(target) && target !== id ? { ok: false, reason: excluded, aliasOf: target } : { ok: false, reason: excluded };
+  }
   let result: Conversion;
   try {
     result = convertPart(file, flattener, colours);
@@ -118,6 +126,7 @@ export function convertLibrary(root: string, partsDir: string, options: ConvertO
   const colours = readColours(root);
   const tally = new Tally();
   const entries: LDrawIndexEntry[] = [];
+  const aliases = new Map<string, string>();
   let bytes = 0;
   const files = readdirSync(join(root, 'parts')).filter((f) => f.toLowerCase().endsWith('.dat')).sort();
   for (const file of files) {
@@ -126,6 +135,7 @@ export function convertLibrary(root: string, partsDir: string, options: ConvertO
     const outcome = convertOne(root, file, flattener, colours);
     if (!outcome.ok) {
       tally.add(outcome.reason, outcome.example);
+      if (outcome.aliasOf) aliases.set(file.slice(0, -4).toLowerCase(), outcome.aliasOf);
       continue;
     }
     writeFileSync(join(partsDir, `${outcome.entry.id}.bin`), outcome.data);
@@ -133,15 +143,32 @@ export function convertLibrary(root: string, partsDir: string, options: ConvertO
     entries.push(outcome.entry);
     options.onProgress?.(entries.length);
   }
-  return { entries, credits, tally, bytes };
+  return { entries, aliases, credits, tally, bytes };
+}
+
+/** Renames that end at a kept part, followed through LDraw's chains of moves (4073 → 6141), sorted by old number. */
+export function keptAliases(aliases: ReadonlyMap<string, string>, kept: ReadonlySet<string>): [string, string][] {
+  const resolved: [string, string][] = [];
+  for (const [from] of aliases) {
+    let to = aliases.get(from);
+    const seen = new Set([from]);
+    while (to !== undefined && !kept.has(to) && !seen.has(to)) {
+      seen.add(to);
+      to = aliases.get(to);
+    }
+    if (to !== undefined && kept.has(to) && !kept.has(from)) resolved.push([from, to]);
+  }
+  return resolved.sort(([a], [b]) => a.localeCompare(b)).slice(0, MAX_ALIASES);
 }
 
 /** Writes index.json, the credits and LDraw's licence files next to the meshes. */
 export function writeLibraryFiles(dir: string, root: string, library: ConvertedLibrary, generated: string): void {
+  const aliases = keptAliases(library.aliases, new Set(library.entries.map((e) => e.id)));
   const index: LDrawIndex = {
     version: LDRAW_INDEX_VERSION,
     generated,
     parts: [...library.entries].sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true })),
+    ...(aliases.length > 0 ? { aliases } : {}),
   };
   writeFileSync(join(dir, 'index.json'), JSON.stringify(index));
   const shipped = new Set(library.entries.map((e) => `parts/${e.id}.dat`));

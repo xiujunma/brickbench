@@ -1,3 +1,4 @@
+import { allotStock, ownedCounts } from '../core/inventory/stock';
 import { toLDraw, slugify } from '../core/io/ldraw';
 import { parseDocument, serializeDocument, type ParsedDocument, type Result } from '../core/io/modelFile';
 import { buildPartsList, partsListCsv } from '../core/io/partsList';
@@ -7,6 +8,7 @@ import { getEngine } from '../editor/engineRegistry';
 import { cottageSample } from '../samples/cottage';
 import { editorStore } from './editorStore';
 import { downloadBlob, downloadText, pickFile } from './files';
+import { inventory } from './inventory';
 import { partLibrary, usesLibraryParts } from './library';
 import { bricksOf } from './selectors';
 import { discardBackup, readBackup } from './sessionBackup';
@@ -117,7 +119,11 @@ export function exportLDrawFile(): void {
 
 export function exportPartsCsv(): void {
   const { name, history, toast } = state();
-  downloadText(partsListCsv(buildPartsList(bricksOf(history.present), getPart)), `${slugify(name)}-parts.csv`, 'text/csv');
+  const rows = buildPartsList(bricksOf(history.present), getPart);
+  const { lists } = inventory.store.getState();
+  // with the user's sets added, the list says how many of each they have and still need
+  const csv = partsListCsv(lists.length > 0 ? allotStock(rows, ownedCounts(lists), getPart) : rows);
+  downloadText(csv, `${slugify(name)}-parts.csv`, 'text/csv');
   toast('Parts list downloaded.', 'success');
 }
 

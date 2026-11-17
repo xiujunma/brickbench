@@ -7,6 +7,7 @@ import { useEditor } from '../../state/editorStore';
 import { distinctPieces, selectedBricks } from '../../state/selectors';
 import { Icon } from '../components/Icon';
 import { cssVars, shortcut, withAlpha } from '../platform';
+import { useStock } from '../useStock';
 import { useThumbnail } from '../thumbnails';
 
 function ColorSection() {
@@ -91,6 +92,27 @@ function rotateCurrent(): void {
   }
 }
 
+/** How many of the part, in the colour, the user has left: shown once they have added their sets. */
+function StockLine({ partId, colorId }: { readonly partId: string; readonly colorId: number }) {
+  const stock = useStock();
+  if (!stock.active) return null;
+  const owned = stock.of(partId, colorId);
+  const colour = getColor(colorId)?.name ?? 'this colour';
+  if (!owned) return <p className="building-stock">None in your parts in {colour}.</p>;
+  if (owned.left < 0) {
+    return (
+      <p className="building-stock is-over">
+        {-owned.left} more in {colour} than your {owned.owned}.
+      </p>
+    );
+  }
+  return (
+    <p className="building-stock">
+      {owned.left} of your {owned.owned} left in {colour}.
+    </p>
+  );
+}
+
 function BuildingSection() {
   const partId = useEditor((s) => s.activePartId);
   const colorId = useEditor((s) => s.activeColorId);
@@ -147,6 +169,7 @@ function BuildingSection() {
           </span>
         </div>
       </div>
+      <StockLine partId={partId} colorId={colorId} />
       <div className="action-row">
         <button type="button" className="btn btn-outline" onClick={rotateCurrent}>
           <Icon name="rotate" size={16} /> Rotate <kbd>R</kbd>

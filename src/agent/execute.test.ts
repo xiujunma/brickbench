@@ -4,7 +4,9 @@ import { allBricks } from '../core/model/model';
 import { getPart, PARTS } from '../core/parts/catalog';
 import { createFinder } from '../core/parts/finder/finder';
 import { createEditorStore } from '../state/store';
+import type { OwnedList } from '../core/inventory/stock';
 import { runTool, type AgentHost, type LookRequest } from './execute';
+import { NO_LISTS_NOTE } from './owned';
 
 function setup(overrides: Partial<AgentHost> = {}) {
   const store = createEditorStore({ lookup: getPart, nextId: createIdFactory('s') });
@@ -126,5 +128,99 @@ describe('running agent tools', () => {
     });
     await runTool(broken.host, 'place_bricks', placeTwo);
     expect(await runTool(broken.host, 'look', {})).toEqual({ ok: false, error: 'BrickBench could not draw the model: WebGL is off' });
+  });
+});
+
+const MY_SETS: readonly OwnedList[] = [
+  {
+    id: 'shop',
+    name: 'Flower Shop',
+    catalogue: 'rebrickable',
+    copies: 2,
+    lots: [
+      { part: '3001', colour: 4, quantity: 1 },
+      { part: '3023b', colour: 15, quantity: 3 },
+    ],
+    unmatched: [],
+  },
+];
+
+describe("building with the user's own parts", () => {
+  it('lists the parts the user owns with how many the model leaves', async () => {
+    const { host } = setup({ ownedLists: () => MY_SETS });
+    await runTool(host, 'place_bricks', { bricks: [{ part: 'brick-2x4', color: 'red', x: 0, y: 0, z: 0 }] });
+    expect(await runTool(host, 'list_owned_parts', {})).toEqual({
+      ok: true,
+      data: {
+        lists: [{ name: 'Flower Shop', copies: 2 }],
+        parts: [
+          { part: 'brick-2x4', name: 'Brick 2 × 4', w: 4, d: 2, h: 3, color: 4, color_name: 'Red', owned: 2, used: 1, left: 1 },
+          { part: 'plate-1x2', name: 'Plate 1 × 2', w: 2, d: 1, h: 1, color: 15, color_name: 'White', owned: 6, used: 0, left: 6 },
+        ],
+        total: 2,
+        truncated: false,
+      },
+    });
+  });
+
+  it('narrows the list by words, colour and what is left', async () => {
+    const { host } = setup({ ownedLists: () => MY_SETS });
+    const parts = async (input: object) => {
+      const outcome = await runTool(host, 'list_owned_parts', input);
+      return outcome.ok ? (outcome.data as { parts: { part: string }[] }).parts.map((p) => p.part) : outcome.error;
+    };
+    expect(await parts({ query: 'plate' })).toEqual(['plate-1x2']);
+    expect(await parts({ query: 'red' })).toEqual(['brick-2x4']);
+    expect(await parts({ limit: 1 })).toEqual(['brick-2x4']);
+    await runTool(host, 'place_bricks', {
+      bricks: [
+        { part: 'brick-2x4', color: 'red', x: 0, y: 0, z: 0 },
+        { part: 'brick-2x4', color: 'red', x: 0, y: 3, z: 0 },
+      ],
+    });
+    expect(await parts({ only_left: true })).toEqual(['plate-1x2']);
+  });
+
+  it('says when the user has added no parts lists', async () => {
+    const { host } = setup();
+    expect(await runTool(host, 'list_owned_parts', {})).toEqual({ ok: true, data: { lists: [], parts: [], total: 0, note: NO_LISTS_NOTE } });
+    expect(await runTool(host, 'find_parts', { query: 'brick 2x4', limit: 1, owned_only: true })).toMatchObject({ ok: true, data: { note: NO_LISTS_NOTE } });
+  });
+
+  it('finds owned parts only when asked, with the colours the user has', async () => {
+    const { host } = setup({ ownedLists: () => MY_SETS });
+    expect(await runTool(host, 'find_parts', { query: 'brick', limit: 2, owned_only: true })).toEqual({
+      ok: true,
+      data: { parts: [{ part: 'brick-2x4', name: 'Brick 2 × 4', w: 4, d: 2, h: 3, source: 'basic', owned: [{ color: 4, color_name: 'Red', left: 2 }] }], total: 1 },
+    });
+    const any = await runTool(host, 'find_parts', { query: 'brick 1x2', limit: 1 });
+    expect(any).toMatchObject({ ok: true, data: { parts: [{ part: 'brick-1x2', owned: [] }] } });
+  });
+
+  it('says which parts the model now uses more of than the user owns', async () => {
+    const { host } = setup({ ownedLists: () => MY_SETS });
+    const three = await runTool(host, 'place_bricks', {
+      bricks: [
+        { part: 'brick-2x4', color: 'red', x: 0, y: 0, z: 0 },
+        { part: 'brick-2x4', color: 'red', x: 0, y: 3, z: 0 },
+        { part: 'brick-2x4', color: 'red', x: 0, y: 6, z: 0 },
+        { part: 'plate-1x2', color: 'white', x: 4, y: 0, z: 0 },
+      ],
+    });
+    expect(three).toMatchObject({ ok: true, data: { placed: 4, over_owned: [{ part: 'brick-2x4', color: 4, owned: 2, used: 3 }] } });
+    const noSets = setup();
+    const plain = await runTool(noSets.host, 'place_bricks', placeTwo);
+    expect(plain.ok && 'over_owned' in (plain.data as object)).toBe(false);
+  });
+
+  it('says when painting uses up more of a colour than the user owns', async () => {
+    const { host } = setup({ ownedLists: () => MY_SETS });
+    const placed = await runTool(host, 'place_bricks', { bricks: [0, 3, 6].map((y) => ({ part: 'brick-2x4', color: 'blue', x: 0, y, z: 0 })) });
+    const ids = placed.ok ? (placed.data as { ids: string[] }).ids : [];
+    expect(await runTool(host, 'paint_bricks', { ids: ids.slice(0, 2), color: 'red' })).toEqual({ ok: true, data: { painted: 2, not_found: [], over_owned: [] } });
+    expect(await runTool(host, 'paint_bricks', { ids, color: 'red' })).toEqual({
+      ok: true,
+      data: { painted: 3, not_found: [], over_owned: [{ part: 'brick-2x4', color: 4, owned: 2, used: 3 }] },
+    });
   });
 });

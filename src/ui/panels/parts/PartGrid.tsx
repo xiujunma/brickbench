@@ -3,6 +3,7 @@ import type { FinderItem } from '../../../core/parts/finder/finder';
 import { getPart } from '../../../core/parts/catalog';
 import { PAGE } from '../../../state/finderSession';
 import { partPicks, usePartPicks } from '../../../state/partPicks';
+import { stockBadge, useStock } from '../../useStock';
 import { PartTile } from './PartTile';
 
 /** What every list of parts needs to draw and pick its tiles. */
@@ -31,6 +32,8 @@ type Props = TileContext & {
 export function PartGrid({ items, highlighted, limit = PAGE, onMore, badges, empty, label, ...tile }: Props) {
   const favourites = usePartPicks((s) => s.favourites);
   const starred = useMemo(() => new Set(favourites), [favourites]);
+  // with the user's sets added, each tile says how many of it, in the colour shown, are left
+  const stock = useStock();
   if (items.length === 0) return <>{empty}</>;
   const remaining = items.length - limit;
   return (
@@ -39,6 +42,7 @@ export function PartGrid({ items, highlighted, limit = PAGE, onMore, badges, emp
         {items.slice(0, limit).map((item, index) => {
           const part = getPart(item.partId);
           if (!part) return null;
+          const owned = stock.active ? stock.of(part.id, tile.colorId) : null;
           return (
             <PartTile
               key={item.partId}
@@ -51,7 +55,8 @@ export function PartGrid({ items, highlighted, limit = PAGE, onMore, badges, emp
               onStar={partPicks.toggleFavourite}
               isHighlighted={index === highlighted}
               credit={item.author ? `by ${item.author}` : undefined}
-              badge={badges?.get(item.partId)}
+              badge={badges?.get(item.partId) ?? stockBadge(owned)}
+              badgeAlert={!badges?.has(item.partId) && owned !== null && owned.left < 0}
             />
           );
         })}

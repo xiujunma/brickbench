@@ -56,17 +56,29 @@ export interface LDrawIndexEntry {
   readonly solids?: readonly SolidBox[];
 }
 
-/** The index format written now. Version 2 added solids, version 3 parts drawn in several colours. */
-export const LDRAW_INDEX_VERSION = 3;
+/**
+ * The index format written now. Version 2 added solids, version 3 parts
+ * drawn in several colours, version 4 the part numbers LDraw renamed.
+ */
+export const LDRAW_INDEX_VERSION = 4;
 
 /** Index formats the app reads: in a version 1 library every part fills its whole box. */
-export const READABLE_INDEX_VERSIONS = [1, 2, 3] as const;
+export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4] as const;
 
 export interface LDrawIndex {
   readonly version: (typeof READABLE_INDEX_VERSIONS)[number];
   readonly generated: string;
   readonly parts: readonly LDrawIndexEntry[];
+  /**
+   * Old part numbers and the kept part each now is, e.g. ["4073", "6141"]:
+   * LDraw moved or merged them, but parts lists still use them. Optional, so
+   * libraries built before it still load.
+   */
+  readonly aliases?: readonly (readonly [string, string])[];
 }
+
+/** Most renamed part numbers an index may list. */
+export const MAX_ALIASES = 20_000;
 
 /** LDraw's colour code for "the colour of whatever uses this": the brick's own colour. */
 export const MAIN_COLOUR = 16;

@@ -15,6 +15,8 @@ import { agentStorage, startAgent } from './agent/connection';
 import { agentLink } from './app/agent';
 import { App } from './app/App';
 import { editorStore, restoreLastSession } from './state/editorStore';
+import { startInventoryMatching } from './state/inventory';
+import { partLibrary } from './state/library';
 import { retryWhenOnline, watchLibraryFailures } from './state/libraryNotices';
 import { startPartPicks } from './state/partPicks';
 import { startAutosave } from './state/persistence';
@@ -34,6 +36,7 @@ async function boot(): Promise<void> {
   watchLibraryFailures(editorStore);
   retryWhenOnline();
   startPartPicks(editorStore);
+  startInventoryMatching(partLibrary.store);
   startAgent({ link: agentLink, storage: agentStorage(), target: window });
   createRoot(container).render(
     <StrictMode>
