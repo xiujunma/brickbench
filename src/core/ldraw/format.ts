@@ -6,14 +6,21 @@
  * mesh per part, optionally gzip-compressed, in this binary layout:
  *
  * Layout (little-endian):
- *   0  u32  magic "BBM1"
+ *   0  u32  magic "BBM2"
  *   4  u32  vertex count
  *   8  u32  index count
  *   12 f32  position scale (world units per int16 step)
  *   16 u32  flags (bit 0: 32-bit indices)
- *   20      int16 positions × 3 per vertex
+ *   20 u32  layer count
+ *   24      16 bytes per layer, the indices split into runs by colour, in order:
+ *           u32 first index, u32 index count, u32 LDraw colour code (16: the
+ *           brick's own), u8 × 3 that colour's RGB, u8 finish (see FINISHES)
+ *           int16 positions × 3 per vertex
  *           int8 normals × 3 per vertex, padded to 4 bytes
  *           uint16 or uint32 indices
+ *
+ * "BBM1", the first format, has no layer table: it is drawn wholly in the
+ * brick's colour.
  */
 /**
  * A box of cells a part fills, [x0, y0, z0, x1, y1, z1]: studs along X and Z
@@ -49,11 +56,11 @@ export interface LDrawIndexEntry {
   readonly solids?: readonly SolidBox[];
 }
 
-/** The index format written now. Version 2 added solids. */
-export const LDRAW_INDEX_VERSION = 2;
+/** The index format written now. Version 2 added solids, version 3 parts drawn in several colours. */
+export const LDRAW_INDEX_VERSION = 3;
 
 /** Index formats the app reads: in a version 1 library every part fills its whole box. */
-export const READABLE_INDEX_VERSIONS = [1, 2] as const;
+export const READABLE_INDEX_VERSIONS = [1, 2, 3] as const;
 
 export interface LDrawIndex {
   readonly version: (typeof READABLE_INDEX_VERSIONS)[number];
@@ -61,14 +68,49 @@ export interface LDrawIndex {
   readonly parts: readonly LDrawIndexEntry[];
 }
 
+/** LDraw's colour code for "the colour of whatever uses this": the brick's own colour. */
+export const MAIN_COLOUR = 16;
+
+/** How a colour is drawn; the same finishes as the app's palette. */
+export type MeshFinish = 'solid' | 'transparent' | 'pearl' | 'chrome';
+
+/** Finishes in the order their numbers are stored. */
+const FINISHES: readonly MeshFinish[] = ['solid', 'transparent', 'pearl', 'chrome'];
+
+/**
+ * A run of a mesh's indices drawn in one colour: the brick's own (code 16),
+ * or one fixed by the part, such as a wheel's black tyre.
+ */
+export interface MeshLayer {
+  readonly start: number;
+  readonly count: number;
+  /** The LDraw colour code. */
+  readonly code: number;
+  /** That colour as #rrggbb, for colours the app's palette does not have. */
+  readonly hex: string;
+  readonly finish: MeshFinish;
+}
+
 export interface PartMesh {
   readonly positions: Float32Array;
   readonly normals: Float32Array;
   readonly indices: Uint16Array | Uint32Array;
+  /** The indices split into runs by colour, in order; without them, all of it is the brick's colour. */
+  readonly layers?: readonly MeshLayer[];
 }
 
-const MAGIC = 0x314d4242; // "BBM1"
-const HEADER_BYTES = 20;
+/** A mesh's colour layers: one in the brick's colour when it has none of its own. */
+export function meshLayers(mesh: PartMesh): readonly MeshLayer[] {
+  return mesh.layers ?? [{ start: 0, count: mesh.indices.length, code: MAIN_COLOUR, hex: '#ffffff', finish: 'solid' }];
+}
+
+const MAGIC = 0x324d4242; // "BBM2"
+const MAGIC_FIRST = 0x314d4242; // "BBM1", without layers
+const HEADER_BYTES = 24;
+const HEADER_BYTES_FIRST = 20;
+const LAYER_BYTES = 16;
+/** More colours than any LDraw part uses. */
+const MAX_LAYERS = 256;
 const WIDE_INDICES = 1;
 /** Finest position step, in studs; parts larger than ±32 studs get a coarser one. */
 const MIN_SCALE = 1 / 1000;
@@ -77,7 +119,23 @@ function align4(n: number): number {
   return Math.ceil(n / 4) * 4;
 }
 
+function writeLayers(view: DataView, layers: readonly MeshLayer[]): void {
+  view.setUint32(20, layers.length, true);
+  layers.forEach((layer, i) => {
+    const at = HEADER_BYTES + i * LAYER_BYTES;
+    const rgb = Number.parseInt(layer.hex.slice(1), 16);
+    view.setUint32(at, layer.start, true);
+    view.setUint32(at + 4, layer.count, true);
+    view.setUint32(at + 8, layer.code, true);
+    view.setUint8(at + 12, (rgb >> 16) & 0xff);
+    view.setUint8(at + 13, (rgb >> 8) & 0xff);
+    view.setUint8(at + 14, rgb & 0xff);
+    view.setUint8(at + 15, Math.max(0, FINISHES.indexOf(layer.finish)));
+  });
+}
+
 export function encodePartMesh(mesh: PartMesh): Uint8Array {
+  const layers = meshLayers(mesh);
   const vertexCount = mesh.positions.length / 3;
   const indexCount = mesh.indices.length;
   const wide = vertexCount > 0xffff;
@@ -85,28 +143,30 @@ export function encodePartMesh(mesh: PartMesh): Uint8Array {
   for (const value of mesh.positions) extent = Math.max(extent, Math.abs(value));
   const scale = Math.max(MIN_SCALE, extent / 32767);
 
+  const headerBytes = HEADER_BYTES + layers.length * LAYER_BYTES;
   const positionBytes = vertexCount * 6;
   const normalBytes = align4(vertexCount * 3);
   const indexBytes = indexCount * (wide ? 4 : 2);
-  const buffer = new ArrayBuffer(HEADER_BYTES + align4(positionBytes) + normalBytes + indexBytes);
+  const buffer = new ArrayBuffer(headerBytes + align4(positionBytes) + normalBytes + indexBytes);
   const view = new DataView(buffer);
   view.setUint32(0, MAGIC, true);
   view.setUint32(4, vertexCount, true);
   view.setUint32(8, indexCount, true);
   view.setFloat32(12, scale, true);
   view.setUint32(16, wide ? WIDE_INDICES : 0, true);
+  writeLayers(view, layers);
 
-  let offset = HEADER_BYTES;
+  let offset = headerBytes;
   for (const value of mesh.positions) {
     view.setInt16(offset, Math.round(value / scale), true);
     offset += 2;
   }
-  offset = HEADER_BYTES + align4(positionBytes);
+  offset = headerBytes + align4(positionBytes);
   for (const value of mesh.normals) {
     view.setInt8(offset, Math.max(-127, Math.min(127, Math.round(value * 127))));
     offset += 1;
   }
-  offset = HEADER_BYTES + align4(positionBytes) + normalBytes;
+  offset = headerBytes + align4(positionBytes) + normalBytes;
   for (const index of mesh.indices) {
     if (wide) view.setUint32(offset, index, true);
     else view.setUint16(offset, index, true);
@@ -115,28 +175,51 @@ export function encodePartMesh(mesh: PartMesh): Uint8Array {
   return new Uint8Array(buffer);
 }
 
+/** Reads the layer table: whole triangles, in order, covering every index exactly once. */
+function readLayers(view: DataView, count: number, indexCount: number): MeshLayer[] {
+  const layers: MeshLayer[] = [];
+  let next = 0;
+  for (let i = 0; i < count; i++) {
+    const at = HEADER_BYTES + i * LAYER_BYTES;
+    const start = view.getUint32(at, true);
+    const length = view.getUint32(at + 4, true);
+    const finish = FINISHES[view.getUint8(at + 15)];
+    if (start !== next || length % 3 !== 0 || !finish) throw new Error('The part mesh is damaged.');
+    const hex = `#${[12, 13, 14].map((k) => view.getUint8(at + k).toString(16).padStart(2, '0')).join('')}`;
+    layers.push({ start, count: length, code: view.getUint32(at + 8, true), hex, finish });
+    next = start + length;
+  }
+  if (next !== indexCount) throw new Error('The part mesh is damaged.');
+  return layers;
+}
+
 export function decodePartMesh(data: ArrayBuffer | Uint8Array): PartMesh {
   // copy views into a standalone buffer so offsets below are absolute
   const buffer = data instanceof Uint8Array ? new Uint8Array(data).buffer : data;
-  if (buffer.byteLength < HEADER_BYTES) throw new Error('This is not a BrickBench part mesh.');
+  if (buffer.byteLength < HEADER_BYTES_FIRST) throw new Error('This is not a BrickBench part mesh.');
   const view = new DataView(buffer);
-  if (view.getUint32(0, true) !== MAGIC) throw new Error('This is not a BrickBench part mesh.');
+  const magic = view.getUint32(0, true);
+  if (magic !== MAGIC && magic !== MAGIC_FIRST) throw new Error('This is not a BrickBench part mesh.');
   const vertexCount = view.getUint32(4, true);
   const indexCount = view.getUint32(8, true);
   const scale = view.getFloat32(12, true);
   if (!(scale > 0) || !Number.isFinite(scale) || indexCount % 3 !== 0) throw new Error('The part mesh is damaged.');
   const wide = (view.getUint32(16, true) & WIDE_INDICES) !== 0;
+  const layerCount = magic === MAGIC ? (buffer.byteLength >= HEADER_BYTES ? view.getUint32(20, true) : 0) : 0;
+  if (magic === MAGIC && (layerCount < 1 || layerCount > MAX_LAYERS)) throw new Error('The part mesh is damaged.');
+  const headerBytes = magic === MAGIC ? HEADER_BYTES + layerCount * LAYER_BYTES : HEADER_BYTES_FIRST;
   const positionBytes = align4(vertexCount * 6);
   const normalBytes = align4(vertexCount * 3);
-  const expected = HEADER_BYTES + positionBytes + normalBytes + indexCount * (wide ? 4 : 2);
+  const expected = headerBytes + positionBytes + normalBytes + indexCount * (wide ? 4 : 2);
   if (buffer.byteLength < expected) throw new Error('The part mesh is truncated.');
+  const layers = magic === MAGIC ? readLayers(view, layerCount, indexCount) : undefined;
 
   const positions = new Float32Array(vertexCount * 3);
-  const rawPositions = new Int16Array(buffer.slice(HEADER_BYTES, HEADER_BYTES + vertexCount * 6));
+  const rawPositions = new Int16Array(buffer.slice(headerBytes, headerBytes + vertexCount * 6));
   for (let i = 0; i < positions.length; i++) positions[i] = (rawPositions[i] ?? 0) * scale;
 
   const normals = new Float32Array(vertexCount * 3);
-  const rawNormals = new Int8Array(buffer, HEADER_BYTES + positionBytes, vertexCount * 3);
+  const rawNormals = new Int8Array(buffer, headerBytes + positionBytes, vertexCount * 3);
   // 8-bit normals come back a little off unit length; renderers and exporters expect exactly 1
   for (let i = 0; i < normals.length; i += 3) {
     const x = rawNormals[i] ?? 0;
@@ -148,12 +231,13 @@ export function decodePartMesh(data: ArrayBuffer | Uint8Array): PartMesh {
     normals[i + 2] = z / length;
   }
 
-  const indexStart = HEADER_BYTES + positionBytes + normalBytes;
+  const indexStart = headerBytes + positionBytes + normalBytes;
   const indices = wide
     ? new Uint32Array(buffer.slice(indexStart, indexStart + indexCount * 4))
     : new Uint16Array(buffer.slice(indexStart, indexStart + indexCount * 2));
   for (const index of indices) {
     if (index >= vertexCount) throw new Error('The part mesh is damaged.');
   }
-  return { positions, normals, indices };
+  const mesh = { positions, normals, indices };
+  return { ...mesh, layers: layers ?? meshLayers(mesh) };
 }

@@ -26,7 +26,7 @@ export function creditsText(parts: readonly Credit[], sources: readonly Credit[]
     '',
     'Modifications: parts and the subparts and primitives they use were flattened into',
     'triangle meshes, moved so they stand centred on the stud grid, and stripped of',
-    'edge lines and fixed colours.',
+    'edge lines; the colours parts fix are kept, read from LDConfig.ldr.',
     '',
     'LDraw is a trademark of the Estate of James Jessiman. LEGO is a trademark of the',
     'LEGO Group, which does not sponsor, authorise or endorse this software.',

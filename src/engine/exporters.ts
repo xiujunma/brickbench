@@ -30,11 +30,19 @@ export async function exportGlb(
   for (const brick of bricks) {
     const part = lookup(brick.partId);
     if (!part) continue;
-    const mesh = new Mesh(geometries.part(brick.partId), materials.solid(brick.colorId));
-    mesh.name = `${part.name} · ${getColor(brick.colorId)?.name ?? brick.colorId}`;
-    brickMatrix(brick, lookup, mesh.matrix);
-    mesh.matrix.decompose(mesh.position, mesh.quaternion, mesh.scale);
-    root.add(mesh);
+    const body = geometries.part(brick.partId);
+    const colour = getColor(brick.colorId)?.name ?? String(brick.colorId);
+    // a part drawn wholly in colours of its own has nothing in the brick's colour
+    const node = (body.getIndex()?.count ?? 1) > 0 ? new Mesh(body, materials.solid(brick.colorId)) : new Group();
+    node.name = `${part.name} · ${colour}`;
+    for (const layer of geometries.layers(brick.partId)) {
+      const piece = new Mesh(layer.geometry, materials.fixed(layer));
+      piece.name = `${part.name} · fixed colour ${layer.code}`;
+      node.add(piece);
+    }
+    brickMatrix(brick, lookup, node.matrix);
+    node.matrix.decompose(node.position, node.quaternion, node.scale);
+    root.add(node);
   }
 
   const result = await new GLTFExporter().parseAsync(scene, { binary: true });

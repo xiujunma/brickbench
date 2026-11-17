@@ -64,6 +64,19 @@ export function colorHex(colorId: number): string {
   return getColor(colorId)?.hex ?? FALLBACK_HEX;
 }
 
+/** A colour a library part fixes, by its LDraw code, with the look the part gives it. */
+export interface FixedColour {
+  readonly code: number;
+  readonly hex: string;
+  readonly finish: ColorFinish;
+}
+
+/** How a fixed colour is drawn: as the palette's own colour when the app has that code, else as the part gives it. */
+export function fixedLook({ code, hex, finish }: FixedColour): { readonly hex: string; readonly finish: ColorFinish } {
+  const known = getColor(code);
+  return known ? { hex: known.hex, finish: known.finish } : { hex, finish };
+}
+
 function makeMaterial(finish: ColorFinish, hex: string): MeshStandardMaterial {
   const look = FINISHES[finish];
   const transparent = look.opacity < 1;
@@ -137,6 +150,12 @@ export class MaterialLibrary {
 
   solid(colorId: number): MeshStandardMaterial {
     return this.cached(`solid:${colorId}`, () => makeMaterial(finishOf(colorId), colorHex(colorId)));
+  }
+
+  /** For a colour a library part fixes, in single meshes such as thumbnails and exports. */
+  fixed(colour: FixedColour): MeshStandardMaterial {
+    const { hex, finish } = fixedLook(colour);
+    return this.cached(`fixed:${hex}:${finish}`, () => makeMaterial(finish, hex));
   }
 
   selected(colorId: number): MeshStandardMaterial {

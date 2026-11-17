@@ -1,7 +1,15 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { autosaved, counts, freshEditor, reloadEditor, viewportCentre } from './helpers';
+
+/** Opens a model file through File › Open…. */
+async function openModelFile(page: Page, path: string): Promise<void> {
+  const chooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'File' }).click();
+  await page.getByRole('menuitem', { name: 'Open…' }).click();
+  await (await chooserPromise).setFiles(path);
+}
 
 /** Built by `bun run ldraw`; without it only the "not installed" path can be checked. */
 const LIBRARY_BUILT = existsSync('public/ldraw/index.json');
@@ -74,10 +82,7 @@ test.describe('LDraw parts library', () => {
       ];
       await writeFile(path, JSON.stringify({ format: 'brickbench.model', version: 1, name: 'Mixed', bricks }));
       await freshEditor(page);
-      const chooserPromise = page.waitForEvent('filechooser');
-      await page.getByRole('button', { name: 'File' }).click();
-      await page.getByRole('menuitem', { name: 'Open…' }).click();
-      await (await chooserPromise).setFiles(path);
+      await openModelFile(page, path);
       await expect(counts(page)).toHaveText('2 bricks');
       await expect(page.getByRole('textbox', { name: 'Model name' })).toHaveValue('Mixed');
     });
@@ -92,11 +97,21 @@ test.describe('LDraw parts library', () => {
       ]);
       await writeFile(path, JSON.stringify({ format: 'brickbench.model', version: 1, name: 'Corners', bricks }));
       await freshEditor(page);
-      const chooserPromise = page.waitForEvent('filechooser');
-      await page.getByRole('button', { name: 'File' }).click();
-      await page.getByRole('menuitem', { name: 'Open…' }).click();
-      await (await chooserPromise).setFiles(path);
+      await openModelFile(page, path);
       await expect(counts(page)).toHaveText('8 bricks');
+    });
+
+    test('builds with parts drawn in several colours, such as a wheel with its tyre', async ({ page }, testInfo) => {
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      const path = testInfo.outputPath('wheel.brickbench.json');
+      // the rim takes the brick's red; the tyre keeps its rubber black
+      const bricks = [{ part: 'ldraw:11208c01', color: 4, x: 0, y: 0, z: 0, r: 0 }];
+      await writeFile(path, JSON.stringify({ format: 'brickbench.model', version: 1, name: 'Wheel', bricks }));
+      await freshEditor(page);
+      await openModelFile(page, path);
+      await expect(counts(page)).toHaveText('1 brick');
+      expect(errors).toEqual([]);
     });
 
     test('keeps a session it could not fully restore, and recovers it later', async ({ page }) => {

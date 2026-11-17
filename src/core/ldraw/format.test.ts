@@ -48,6 +48,40 @@ describe('part mesh format', () => {
     expect(() => decodePartMesh(truncated.buffer)).toThrow(/truncated/);
   });
 
+  it('keeps colour layers: a run of triangles per colour, and the colour to draw it in', () => {
+    const layers = [
+      { start: 0, count: 3, code: 16, hex: '#ffffff', finish: 'solid' },
+      { start: 3, count: 6, code: 256, hex: '#1b2a34', finish: 'solid' },
+      { start: 9, count: 3, code: 47, hex: '#fcfcfc', finish: 'transparent' },
+    ] as const;
+    const decoded = decodePartMesh(encodePartMesh({ ...mesh(12), layers }));
+    expect(decoded.layers).toEqual(layers);
+  });
+
+  it('reads a mesh without layers as one layer in the colour of the brick', () => {
+    expect(decodePartMesh(encodePartMesh(mesh(12))).layers).toEqual([{ start: 0, count: 12, code: 16, hex: '#ffffff', finish: 'solid' }]);
+  });
+
+  it('still reads meshes from before parts had colour layers', () => {
+    // the first format: the same without the layer table, under the magic "BBM1"
+    const current = encodePartMesh(mesh(12));
+    const first = new Uint8Array(current.length - 20);
+    first.set(current.subarray(0, 20));
+    first.set(current.subarray(40), 20);
+    new DataView(first.buffer).setUint32(0, 0x314d4242, true);
+    const decoded = decodePartMesh(first);
+    expect(decoded.indices).toEqual(Uint16Array.from(mesh(12).indices));
+    expect(decoded.layers).toEqual([{ start: 0, count: 12, code: 16, hex: '#ffffff', finish: 'solid' }]);
+  });
+
+  it('rejects layers that leave triangles out or overlap', () => {
+    const bytes = encodePartMesh({ ...mesh(12), layers: [{ start: 0, count: 6, code: 16, hex: '#ffffff', finish: 'solid' }, { start: 6, count: 6, code: 0, hex: '#000000', finish: 'solid' }] });
+    const view = new DataView(bytes.buffer);
+    // the second layer's index count
+    view.setUint32(24 + 16 + 4, 3, true);
+    expect(() => decodePartMesh(bytes)).toThrow(/damaged/);
+  });
+
   it('rejects meshes whose triangles point past their vertices', () => {
     const bytes = encodePartMesh(mesh(30));
     const view = new DataView(bytes.buffer);

@@ -7,7 +7,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 ## Features
 
 - **87 basic parts in six families:** bricks (including tall 1×1×3 to 1×2×5), plates up to 16×16, tiles, slopes (45°, 33°, 65°, inverted, cheese), round parts and cones, and arches, all generated in code.
-- **The LDraw community parts library:** over 6,000 more parts, from Technic beams and hinges to wheels, windows, doors and minifigure accessories, converted from the [LDraw](https://www.ldraw.org) library when the app is built. Each takes up only the space its shape fills, so a corner plate leaves its corner free and an arch its opening, and each mesh loads the first time you use it.
+- **The LDraw community parts library:** over 7,000 more parts, from Technic beams and hinges to wheels with their tyres, windows, doors and minifigure accessories, converted from the [LDraw](https://www.ldraw.org) library when the app is built. Parts made in several colours keep the colours they fix, so a wheel's tyre stays black whatever colour you build the wheel in. Each takes up only the space its shape fills, so a corner plate leaves its corner free and an arch its opening, and each mesh loads the first time you use it.
 - **Finding the right part:**
   - **One search covers every part.** Type sizes any way ("2x4", "2 by 4", "two by four"), hobby nicknames ("cheese", "jumper", "macaroni", "SNOT"), US spellings ("tire", "windshield") or a part number, including BrickLink's. Sizes work either way round ("4x2" finds 2 × 4). Name a colour too ("red 2x4 brick") and the part is built in it. If you mistype, close spellings show instead.
   - **Size, height and shape filters** narrow thousands of parts to a handful: say 1 × 2, 1 plate, with a clip.
@@ -158,13 +158,13 @@ To pick up a newer LDraw release in CI, bump `ldraw-download-v1` in the workflow
 `bun run ldraw` turns the [LDraw parts library](https://library.ldraw.org) into files the app can load quickly, in `public/ldraw/` (not committed; `bun run build` makes it whenever it is missing, incomplete or partial):
 
 - `index.json` lists every part: its name, category, keywords, author, how it sits on the grid and, when it leaves some of its box empty, which cells it fills.
-- `parts/<number>.bin` holds one mesh per part: gzip-compressed, 16-bit positions and 8-bit normals. A 2 × 4 brick is under 5 kB.
+- `parts/<number>.bin` holds one mesh per part: gzip-compressed, 16-bit positions and 8-bit normals, with its triangles in runs by colour when the part fixes colours of its own. A 2 × 4 brick is under 5 kB.
 - `CREDITS.txt` names the author of every part and of every primitive it uses, and copies of the LDraw licence files sit alongside.
 - `build.json` says the build is complete and, for downloads, records the archive's SHA-256. `complete.zip` always holds the latest LDraw release; keep a copy and pass `--library` to pin one.
 
 A build is written to `public/ldraw.partial/` and swapped in only when it has finished, so an interrupted run leaves the previous library in place. The tool only ever deletes folders it built itself.
 
-The converter (`scripts/ldraw/`) follows each part's sub-files and primitives, honouring LDraw's back-face rules (winding, inverted and mirrored references, double-sided sections), drops edge lines, smooths curved surfaces, and moves the part so its body stands centred on its footprint with the top studs over cell centres. It leaves out printed and sticker parts, obsolete and alias files, third-party parts, and parts drawn in more than one fixed colour, such as wheels with their tyres. It also leaves out the two twisted strings whose meshes run past 200,000 vertices. That leaves about 6,300 parts and 110 MB of meshes in as many files.
+The converter (`scripts/ldraw/`) follows each part's sub-files and primitives, honouring LDraw's back-face rules (winding, inverted and mirrored references, double-sided sections), drops edge lines, smooths curved surfaces, and moves the part so its body stands centred on its footprint with the top studs over cell centres. Parts drawn in several colours, such as wheels with their tyres, keep the colours they fix, read from LDraw's colour table (`LDConfig.ldr`), apart from the part's own. It leaves out printed and sticker parts, obsolete and alias files and third-party parts, and the two twisted strings whose meshes run past 200,000 vertices. That leaves about 7,700 parts and 175 MB of meshes in as many files.
 
 ```bash
 bun run ldraw                                # download complete.zip into .ldraw-cache/ and convert everything
@@ -174,7 +174,7 @@ bun run ldraw --limit 200                    # the first 200 parts (also partial
 bun run ldraw --fetch-only                   # just download and unpack it into .ldraw-cache/ldraw
 ```
 
-In the app, library parts are ordinary parts with ids like `ldraw:3001`. Each sits in the smallest box of whole cells that holds its body (a fifth of a stud may stick out on a side), placed so its top studs sit over cell centres, so it stacks and collides like any brick. Within that box it fills only the cells its shape takes up: the missing corner of a corner plate, the opening of an arch, window or door frame, and the space under a bracket's overhang stay free for other parts. A cell counts as filled when the part reaches two LDraw units or more into it, or when the part closes it in on every side and from above, as it does the hollow underside of a brick. Jumper plates keep their half-stud offset. While a mesh loads, a plain box of the right size stands in; parts that fail to load are retried when the connection comes back.
+In the app, library parts are ordinary parts with ids like `ldraw:3001`. Each sits in the smallest box of whole cells that holds its body (a fifth of a stud may stick out on a side), placed so its top studs sit over cell centres, so it stacks and collides like any brick. Within that box it fills only the cells its shape takes up: the missing corner of a corner plate, the opening of an arch, window or door frame, and the space under a bracket's overhang stay free for other parts. A cell counts as filled when the part reaches two LDraw units or more into it, or when the part closes it in on every side and from above, as it does the hollow underside of a brick. Jumper plates keep their half-stud offset. A part drawn in several colours takes the colour you choose wherever LDraw draws it in the part's own colour; the colours it fixes are drawn as the palette's version of that colour when there is one, and as LDraw defines them otherwise. While a mesh loads, a plain box of the right size stands in; parts that fail to load are retried when the connection comes back.
 
 Opening a model or restoring the autosave loads the library index first. If bricks still cannot be restored, say because the library is unreachable or a rebuilt library gave a part a different size, the whole session is kept and **File › Recover earlier session** opens it later.
 
@@ -239,7 +239,7 @@ e2e/          Playwright tests
 ## Not done yet
 
 - Connections beyond the stud grid: library parts snap to whole studs and plates, so hinges don't swing, Technic pins don't plug into holes, minifigures don't assemble and half-stud offsets (jumper plates) aren't possible
-- Multi-colour and printed library parts (wheels with tyres, printed tiles)
+- Printed library parts (printed tiles, minifigure faces and torsos)
 - Hollow undersides and tubes on the basic parts (library parts have them)
 - Ambient occlusion and a photoreal render mode
 - Editing instruction steps by hand, sub-assemblies and per-step camera angles (steps are planned automatically)

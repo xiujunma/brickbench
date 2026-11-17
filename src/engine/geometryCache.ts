@@ -1,8 +1,8 @@
-import type { BufferGeometry } from 'three';
-import type { PartMesh } from '../core/ldraw/format';
+import { BufferGeometry } from 'three';
+import { MAIN_COLOUR, meshLayers, type MeshLayer, type PartMesh } from '../core/ldraw/format';
 import { requirePart } from '../core/model/geometry';
 import type { PartDef, PartLookup } from '../core/parts/types';
-import { fillGeometry, fillOutlineGeometry, geometryFromMesh, outlineGeometryFor } from './geometry/meshGeometry';
+import { fillGeometry, fillOutlineGeometry, geometryFromMesh, outlineGeometryFor, runGeometry } from './geometry/meshGeometry';
 import {
   STUD_DETAIL,
   STUD_DETAIL_LOW,
@@ -12,16 +12,29 @@ import {
 } from './geometry/partGeometry';
 import type { MeshSource } from './meshStore';
 
+/** A colour a library part fixes, such as a wheel's black tyre, and the triangles drawn in it. */
+export interface PartLayer extends Pick<MeshLayer, 'code' | 'hex' | 'finish'> {
+  readonly geometry: BufferGeometry;
+}
+
+const NO_LAYERS: readonly PartLayer[] = [];
+const NOTHING = { start: 0, count: 0 };
+
 /**
  * Builds each part mesh once and shares it between every brick using it.
  * Library parts show a plain box until their mesh arrives; the box's
  * geometry is then filled in place, so whatever draws it updates by itself.
+ * A library part's body holds the triangles in the brick's own colour; the
+ * colours it fixes come as layers, drawn alongside.
  */
 export class GeometryCache {
   private readonly bodies = new Map<string, BufferGeometry>();
   private readonly full = new Map<string, BufferGeometry>();
   private readonly outlines = new Map<string, BufferGeometry>();
   private readonly studs = new Map<'normal' | 'low', BufferGeometry>();
+  /** The library meshes in use, for their layers and outlines. */
+  private readonly meshesInUse = new Map<string, PartMesh>();
+  private readonly layerSets = new Map<string, readonly PartLayer[]>();
   /** Library parts still drawn as placeholder boxes. */
   private readonly placeholders = new Set<string>();
   private readonly listeners = new Set<(partId: string) => void>();
@@ -66,16 +79,29 @@ export class GeometryCache {
     return geometry;
   }
 
-  /** What outlines are drawn from: the body, with normals that keep a pushed-out hull closed. */
+  /** The colours a library part fixes, each with its triangles; none for built-in parts or while a mesh loads. */
+  layers(partId: string): readonly PartLayer[] {
+    this.body(partId);
+    return this.layerSets.get(partId) ?? NO_LAYERS;
+  }
+
+  /** What outlines are drawn from: the whole part, with normals that keep a pushed-out hull closed. */
   outline(partId: string): BufferGeometry {
     const part = requirePart(this.lookup, partId);
     if (part.shape.kind !== 'mesh') return this.body(partId);
     let geometry = this.outlines.get(partId);
     if (!geometry) {
-      geometry = outlineGeometryFor(this.body(partId));
+      geometry = outlineGeometryFor(this.whole(partId));
       this.outlines.set(partId, geometry);
     }
     return geometry;
+  }
+
+  /** A library part's every triangle, whatever its colour, or its placeholder box. */
+  private whole(partId: string): BufferGeometry {
+    const body = this.body(partId);
+    const mesh = this.meshesInUse.get(partId);
+    return mesh ? geometryFromMesh(mesh) : body;
   }
 
   stud(detail: 'normal' | 'low' = 'normal'): BufferGeometry {
@@ -120,27 +146,43 @@ export class GeometryCache {
       map.get(partId)?.dispose();
       map.delete(partId);
     }
+    for (const layer of this.layerSets.get(partId) ?? NO_LAYERS) layer.geometry.dispose();
+    this.layerSets.delete(partId);
+    this.meshesInUse.delete(partId);
     this.placeholders.delete(partId);
   }
 
   private libraryGeometry(part: PartDef): BufferGeometry {
     const mesh = this.meshes?.request(part.id) ?? null;
-    if (mesh) return geometryFromMesh(mesh);
+    if (mesh) return this.useMesh(part.id, mesh, new BufferGeometry());
     this.placeholders.add(part.id);
     return buildBodyGeometry(part);
+  }
+
+  /** Fills a library part's body with the triangles in the brick's colour, and makes a layer of each colour it fixes. */
+  private useMesh(partId: string, mesh: PartMesh, body: BufferGeometry): BufferGeometry {
+    const layers = meshLayers(mesh);
+    fillGeometry(body, mesh, layers.find((layer) => layer.code === MAIN_COLOUR) ?? NOTHING);
+    for (const layer of this.layerSets.get(partId) ?? NO_LAYERS) layer.geometry.dispose();
+    this.layerSets.set(
+      partId,
+      layers.filter((layer) => layer.code !== MAIN_COLOUR).map(({ code, hex, finish, start, count }) => ({ code, hex, finish, geometry: runGeometry(body, mesh, { start, count }) })),
+    );
+    this.meshesInUse.set(partId, mesh);
+    return body;
   }
 
   private adopt(partId: string, mesh: PartMesh, create: boolean): void {
     const body = this.bodies.get(partId);
     if (!body) {
-      if (create) this.bodies.set(partId, geometryFromMesh(mesh));
+      if (create) this.bodies.set(partId, this.useMesh(partId, mesh, new BufferGeometry()));
       return;
     }
     if (!this.placeholders.has(partId)) return;
     this.placeholders.delete(partId);
-    fillGeometry(body, mesh);
+    this.useMesh(partId, mesh, body);
     const outline = this.outlines.get(partId);
-    if (outline) fillOutlineGeometry(outline, body);
+    if (outline) fillOutlineGeometry(outline, geometryFromMesh(mesh));
     for (const listener of this.listeners) listener(partId);
   }
 
@@ -151,6 +193,9 @@ export class GeometryCache {
       for (const geometry of map.values()) geometry.dispose();
       map.clear();
     }
+    for (const layers of this.layerSets.values()) for (const layer of layers) layer.geometry.dispose();
+    this.layerSets.clear();
+    this.meshesInUse.clear();
     this.placeholders.clear();
   }
 }

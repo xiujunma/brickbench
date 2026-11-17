@@ -6,8 +6,11 @@
  * Opt-in because it needs the library on disk:
  *   LDRAW_DIR=/path/to/ldraw bun test scripts/ldraw/library.verify.test.ts
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import { decodePartMesh, encodePartMesh } from '../../src/core/ldraw/format.ts';
+import { readColourTable } from './colours.ts';
 import { convertPart } from './convert.ts';
 import { Flattener } from './flatten.ts';
 import { directorySource } from './library.ts';
@@ -89,8 +92,19 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(freeCells('44728.dat')).toEqual(['0,0,0', '0,1,0', '0,2,0', '0,3,0', '1,0,0', '1,1,0', '1,2,0', '1,3,0']);
   });
 
-  it('skips parts drawn in several fixed colours', () => {
-    // a pull-back motor with a white axle: two fixed colours
-    expect(convertPart('10039.dat', flattener)).toMatchObject({ ok: false, reason: 'multicolour' });
+  it('keeps the colours parts fix in layers of their own', () => {
+    const colours = readColourTable(readFileSync(join(LDRAW_DIR ?? '', 'LDConfig.ldr'), 'utf8'));
+    const layersOf = (file: string) => {
+      const result = convertPart(file, flattener, colours);
+      if (!result.ok) throw new Error(`${file} was skipped: ${result.reason}`);
+      return (result.mesh.layers ?? []).map(({ code, hex, finish }) => ({ code, hex, finish }));
+    };
+    // a wheel rim in the brick's colour with its rubber tyre
+    expect(layersOf('11208c01.dat')).toEqual([
+      { code: 16, hex: '#ffffff', finish: 'solid' },
+      { code: 256, hex: '#1b2a34', finish: 'solid' },
+    ]);
+    // a pull-back motor with an axle of its own colours
+    expect(layersOf('10039.dat').length).toBeGreaterThan(1);
   });
 });

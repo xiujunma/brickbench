@@ -2,7 +2,7 @@
  * Converts the LDraw parts library into the meshes BrickBench ships with:
  *
  *   <out>/index.json        every part: name, category, grid size, origin
- *   <out>/parts/<id>.bin    one gzip-compressed BBM1 mesh per part
+ *   <out>/parts/<id>.bin    one gzip-compressed BBM2 mesh per part, its colours in layers
  *   <out>/CREDITS.txt       authors and licence, as CC BY asks
  *   <out>/build.json        what was built from what, and whether it is complete
  *
@@ -65,6 +65,8 @@ function readOptions(argv: readonly string[]): Options {
 async function findLibrary(options: Options): Promise<Library> {
   const library: Library = options.library ? { root: resolve(options.library) } : await ensureLibrary(options.cache, log);
   if (!existsSync(join(library.root, 'parts'))) throw new Error(`${library.root} is not an LDraw library: it has no parts folder.`);
+  // without it every colour a part fixes would come out grey
+  if (!existsSync(join(library.root, 'LDConfig.ldr'))) throw new Error(`${library.root} is not a complete LDraw library: it has no LDConfig.ldr colour table.`);
   return library;
 }
 

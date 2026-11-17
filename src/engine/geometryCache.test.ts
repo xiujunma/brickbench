@@ -156,3 +156,45 @@ describe('GeometryCache with library parts', () => {
     expect(changed).not.toHaveBeenCalled();
   });
 });
+
+/** FOLD with its second triangle in a colour the part fixes, like a tyre on a wheel. */
+const TWO_TONE: PartMesh = {
+  ...FOLD,
+  layers: [
+    { start: 0, count: 3, code: 16, hex: '#ffffff', finish: 'solid' },
+    { start: 3, count: 3, code: 256, hex: '#1b2a34', finish: 'solid' },
+  ],
+};
+
+describe('GeometryCache with parts drawn in several colours', () => {
+  it("keeps the brick's colour in the body and each fixed colour in a layer of its own", () => {
+    const source = new FakeSource();
+    source.meshes.set('ldraw:3001', TWO_TONE);
+    const cache = new GeometryCache(lookup, source);
+    const body = cache.body('ldraw:3001');
+    expect([...(body.getIndex()?.array ?? [])]).toEqual([0, 1, 2]);
+    const layers = cache.layers('ldraw:3001');
+    expect(layers.map(({ code, hex, finish }) => ({ code, hex, finish }))).toEqual([{ code: 256, hex: '#1b2a34', finish: 'solid' }]);
+    expect([...(layers[0]?.geometry.getIndex()?.array ?? [])]).toEqual([3, 4, 5]);
+    // one set of vertices for them all, and an outline around the whole part
+    expect(layers[0]?.geometry.getAttribute('position')).toBe(body.getAttribute('position'));
+    expect(cache.outline('ldraw:3001').getIndex()?.count).toBe(6);
+  });
+
+  it('adds the layers when the mesh arrives after its placeholder', () => {
+    const source = new FakeSource();
+    const cache = new GeometryCache(lookup, source);
+    cache.outline('ldraw:3001');
+    expect(cache.layers('ldraw:3001')).toEqual([]);
+    source.arrive('ldraw:3001', TWO_TONE);
+    expect(cache.layers('ldraw:3001')).toHaveLength(1);
+    expect(cache.body('ldraw:3001').getIndex()?.count).toBe(3);
+    expect(cache.outline('ldraw:3001').getIndex()?.count).toBe(6);
+    cache.release('ldraw:3001');
+    expect(cache.isPlaceholder('ldraw:3001')).toBe(false);
+  });
+
+  it('gives built-in parts no layers', () => {
+    expect(new GeometryCache(lookup).layers('brick-2x4')).toEqual([]);
+  });
+});

@@ -1,3 +1,4 @@
+import type { MeshFinish, MeshLayer } from '../../src/core/ldraw/format.ts';
 import type { V3 } from './parse.ts';
 
 export interface MeshTriangle {
@@ -109,4 +110,39 @@ export function buildMesh(triangles: readonly MeshTriangle[], creaseDegrees = 35
     }
   }
   return { positions: new Float32Array(positions), normals: new Float32Array(normals), indices: new Uint32Array(indices) };
+}
+
+/** A mesh with its indices in runs by colour; without layers, all of it is the brick's colour. */
+export interface LayeredMeshData extends MeshData {
+  readonly layers?: readonly MeshLayer[];
+}
+
+/** One colour's triangles, built into a mesh, and how that colour is drawn. */
+export interface ColourMesh {
+  readonly mesh: MeshData;
+  readonly code: number;
+  readonly hex: string;
+  readonly finish: MeshFinish;
+}
+
+/** Joins meshes into one whose indices run colour by colour, in the order given. */
+export function joinColourMeshes(parts: readonly ColourMesh[]): LayeredMeshData {
+  const vertices = parts.reduce((sum, { mesh }) => sum + mesh.positions.length / 3, 0);
+  const positions = new Float32Array(vertices * 3);
+  const normals = new Float32Array(vertices * 3);
+  const indices = new Uint32Array(parts.reduce((sum, { mesh }) => sum + mesh.indices.length, 0));
+  const layers: MeshLayer[] = [];
+  let vertexBase = 0;
+  let indexBase = 0;
+  for (const { mesh, code, hex, finish } of parts) {
+    positions.set(mesh.positions, vertexBase * 3);
+    normals.set(mesh.normals, vertexBase * 3);
+    mesh.indices.forEach((index, i) => {
+      indices[indexBase + i] = index + vertexBase;
+    });
+    layers.push({ start: indexBase, count: mesh.indices.length, code, hex, finish });
+    vertexBase += mesh.positions.length / 3;
+    indexBase += mesh.indices.length;
+  }
+  return { positions, normals, indices, layers };
 }

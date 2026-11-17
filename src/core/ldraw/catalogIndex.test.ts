@@ -30,7 +30,7 @@ describe('library index', () => {
   });
 
   it('rejects damaged or unexpected indexes with a readable message', () => {
-    expect(() => parseLDrawIndex({ version: 3, generated: '', parts: [] })).toThrow(/damaged/);
+    expect(() => parseLDrawIndex({ version: 4, generated: '', parts: [] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, id: '../evil' }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, w: 0 }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex('nope')).toThrow(/damaged/);

@@ -2,6 +2,7 @@ import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } fr
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { encodePartMesh, LDRAW_INDEX_VERSION, type LDrawIndex, type LDrawIndexEntry } from '../../src/core/ldraw/format.ts';
+import { readColourTable, type ColourTable } from './colours.ts';
 import { convertPart, type Conversion } from './convert.ts';
 import { creditsText, type Credit } from './credits.ts';
 import { Flattener } from './flatten.ts';
@@ -86,14 +87,14 @@ function toEntry(id: string, header: PartHeader, conversion: Extract<Conversion,
 type Outcome = { readonly ok: true; readonly entry: LDrawIndexEntry; readonly data: Uint8Array } | { readonly ok: false; readonly reason: string; readonly example?: string };
 
 /** Decides about one part file: left out (and why), or converted. */
-function convertOne(root: string, file: string, flattener: Flattener): Outcome {
+function convertOne(root: string, file: string, flattener: Flattener, colours: ColourTable): Outcome {
   const id = file.slice(0, -4).toLowerCase();
   const header = readHeader(readFileSync(join(root, 'parts', file), 'utf8'));
   const excluded = exclusionReason(header) ?? (PART_ID.test(id) ? null : 'unusual file name');
   if (excluded) return { ok: false, reason: excluded };
   let result: Conversion;
   try {
-    result = convertPart(file, flattener);
+    result = convertPart(file, flattener, colours);
   } catch (error) {
     return { ok: false, reason: 'missing file', example: `${file}: ${error instanceof Error ? error.message : String(error)}` };
   }
@@ -104,10 +105,17 @@ function convertOne(root: string, file: string, flattener: Flattener): Outcome {
   return { ok: true, entry: toEntry(id, header, result), data: gzipSync(encodePartMesh(result.mesh), { level: 9 }) };
 }
 
+/** LDraw's colour table, for the colours parts fix; without one they are drawn grey. */
+function readColours(root: string): ColourTable {
+  const path = join(root, 'LDConfig.ldr');
+  return existsSync(path) ? readColourTable(readFileSync(path, 'utf8')) : new Map();
+}
+
 /** Converts the parts of an unpacked LDraw library, writing one mesh file per part into `partsDir`. */
 export function convertLibrary(root: string, partsDir: string, options: ConvertOptions): ConvertedLibrary {
   const credits = new Map<string, Credit>();
   const flattener = new Flattener(crediting(directorySource(root), credits));
+  const colours = readColours(root);
   const tally = new Tally();
   const entries: LDrawIndexEntry[] = [];
   let bytes = 0;
@@ -115,7 +123,7 @@ export function convertLibrary(root: string, partsDir: string, options: ConvertO
   for (const file of files) {
     if (entries.length >= options.limit) break;
     if (options.only && !options.only.has(file.slice(0, -4).toLowerCase())) continue;
-    const outcome = convertOne(root, file, flattener);
+    const outcome = convertOne(root, file, flattener, colours);
     if (!outcome.ok) {
       tally.add(outcome.reason, outcome.example);
       continue;

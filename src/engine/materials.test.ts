@@ -84,3 +84,16 @@ describe('material library', () => {
     expect(materials.batch('solid')).not.toBe(batch);
   });
 });
+
+describe('colours library parts fix', () => {
+  const materials = new MaterialLibrary();
+
+  it('are drawn as the palette has them, or else as the part gives them', () => {
+    // black is in the palette; Electric Contact Alloy is not
+    expect(`#${materials.fixed({ code: 0, hex: '#123456', finish: 'transparent' }).color.getHexString()}`).toBe(colorHex(0).toLowerCase());
+    const alloy = materials.fixed({ code: 494, hex: '#d0d0d0', finish: 'pearl' });
+    expect(`#${alloy.color.getHexString()}`).toBe('#d0d0d0');
+    expect(alloy.metalness).toBeGreaterThan(0);
+    expect(materials.fixed({ code: 494, hex: '#d0d0d0', finish: 'pearl' })).toBe(alloy);
+  });
+});

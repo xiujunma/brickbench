@@ -21,6 +21,7 @@ import {
   OUTLINE_WIDTH,
   colorHex,
   finishOf,
+  fixedLook,
   highlightFor,
   type MaterialLibrary,
   type OutlineTone,
@@ -72,17 +73,22 @@ interface BatchEntry {
 
 /**
  * Draws bricks with one instanced mesh per part and finish, plus one
- * instanced mesh of studs per finish (and one outline mesh per part when the
- * look calls for it): a few dozen draw calls however many bricks there are.
+ * instanced mesh of studs per finish, one per colour a library part fixes
+ * (a wheel's tyre), and one outline mesh per part when the look calls for
+ * it: a few dozen draw calls however many bricks there are.
  */
 export class BrickBatches {
   readonly group = new Group();
   private readonly bodies = new Map<string, BatchEntry>();
   private readonly studs = new Map<string, BatchEntry>();
+  private readonly layers = new Map<string, BatchEntry>();
   private readonly outlines = new Map<string, InstancedMesh>();
   private readonly colors = new Map<number, Color>();
+  private readonly fixedColors = new Map<string, Color>();
   private readonly highlights = new Map<number, Color>();
   private readonly scratch = new Matrix4();
+  /** What was drawn last, to draw again once library meshes arrive. */
+  private drawn: { readonly bricks: readonly Brick[]; readonly studs: readonly StudInstance[] } = { bricks: [], studs: [] };
 
   constructor(
     private readonly geometries: GeometryCache,
@@ -107,14 +113,17 @@ export class BrickBatches {
     if (look === this.look) return;
     this.look = look;
     const style = LOOKS[look];
-    for (const entry of [...this.bodies.values(), ...this.studs.values()]) this.styleMesh(entry.mesh, entry.finish, style);
+    for (const entry of [...this.bodies.values(), ...this.studs.values(), ...this.layers.values()]) this.styleMesh(entry.mesh, entry.finish, style);
     for (const outline of this.outlines.values()) {
       outline.visible = style.outline !== null;
       if (style.outline) outline.material = this.materials.outline(style.outline, this.outlineWidth);
     }
+    // outlines dropped meanwhile, say by a redraw while a picture was taken in another look, come back
+    if (style.outline) this.updateOutlines(this.drawn.bricks);
   }
 
   update(bricks: readonly Brick[], studs: readonly StudInstance[]): void {
+    this.drawn = { bricks, studs };
     const byKey = groupBy(bricks, (b) => `${b.partId}|${finishOf(b.colorId)}`);
     for (const [key, list] of byKey) {
       const [partId = '', finish = 'solid'] = key.split('|');
@@ -138,7 +147,28 @@ export class BrickBatches {
     }
     this.prune(this.studs, new Set(studsByFinish.keys()));
 
+    this.updateLayers(bricks);
     this.updateOutlines(bricks);
+  }
+
+  /** The colours library parts fix, each drawn over every brick of its part, whatever colour the brick is. */
+  private updateLayers(bricks: readonly Brick[]): void {
+    const keep = new Set<string>();
+    for (const [partId, list] of groupBy(bricks, (b) => b.partId)) {
+      this.geometries.layers(partId).forEach((layer, n) => {
+        const { hex, finish } = fixedLook(layer);
+        const key = `${partId}|${n}|${finish}`;
+        keep.add(key);
+        const mesh = this.ensure(this.layers, key, list.length, layer.geometry, finish);
+        const color = this.fixedColor(hex);
+        list.forEach((brick, i) => {
+          mesh.setMatrixAt(i, brickMatrix(brick, this.lookup, this.scratch));
+          mesh.setColorAt(i, color);
+        });
+        finishBatch(mesh, list.length);
+      });
+    }
+    this.prune(this.layers, keep);
   }
 
   private updateOutlines(bricks: readonly Brick[]): void {
@@ -185,6 +215,16 @@ export class BrickBatches {
     return color;
   }
 
+  private fixedColor(hex: string): Color {
+    if (LOOKS[this.look].plainColor) return WHITE;
+    let color = this.fixedColors.get(hex);
+    if (!color) {
+      color = new Color(hex);
+      this.fixedColors.set(hex, color);
+    }
+    return color;
+  }
+
   private styleMesh(mesh: InstancedMesh, finish: ColorFinish, style: LookStyle): void {
     mesh.material = style.material(this.materials, finish);
     mesh.castShadow = style.shadows && finish !== 'transparent';
@@ -221,10 +261,13 @@ export class BrickBatches {
     this.outlines.delete(partId);
   }
 
-  /** Recomputes culling bounds after part geometry changed, e.g. a library mesh replaced its placeholder. */
-  refreshBounds(): void {
-    for (const { mesh } of this.bodies.values()) mesh.computeBoundingSphere();
-    for (const mesh of this.outlines.values()) mesh.computeBoundingSphere();
+  /**
+   * Draws the last bricks again after library meshes replaced their
+   * placeholders: their bounds changed, and the colours they fix need
+   * batches of their own.
+   */
+  refreshParts(): void {
+    this.update(this.drawn.bricks, this.drawn.studs);
   }
 
   /** Removes every instance, keeping the batch usable. */

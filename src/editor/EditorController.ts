@@ -106,7 +106,7 @@ export class EditorController {
     if (this.meshRefresh !== null) return;
     this.meshRefresh = requestAnimationFrame(() => {
       this.meshRefresh = null;
-      for (const batches of [this.batches, this.selection, this.ghosts]) batches.refreshBounds();
+      for (const batches of [this.batches, this.selection, this.ghosts]) batches.refreshParts();
       this.viewport.requestRender();
     });
   }

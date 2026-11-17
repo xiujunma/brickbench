@@ -21,19 +21,43 @@ function replaceContents(geometry: BufferGeometry, positions: BufferAttribute, n
   geometry.computeBoundingSphere();
 }
 
-/** Puts a library mesh into an existing geometry; the arrays are shared, not copied. */
-export function fillGeometry(geometry: BufferGeometry, mesh: PartMesh): void {
+/** A run of a mesh's indices, such as one colour layer. */
+export interface IndexRun {
+  readonly start: number;
+  readonly count: number;
+}
+
+function indicesOf(mesh: PartMesh, run?: IndexRun): Uint16Array | Uint32Array {
+  return run ? mesh.indices.subarray(run.start, run.start + run.count) : mesh.indices;
+}
+
+/** Puts a library mesh, or one run of its triangles, into an existing geometry; the arrays are shared, not copied. */
+export function fillGeometry(geometry: BufferGeometry, mesh: PartMesh, run?: IndexRun): void {
   replaceContents(
     geometry,
     new BufferAttribute(mesh.positions, 3),
     new BufferAttribute(mesh.normals, 3),
-    new BufferAttribute(mesh.indices, 1),
+    new BufferAttribute(indicesOf(mesh, run), 1),
   );
 }
 
-export function geometryFromMesh(mesh: PartMesh): BufferGeometry {
+export function geometryFromMesh(mesh: PartMesh, run?: IndexRun): BufferGeometry {
   const geometry = new BufferGeometry();
-  fillGeometry(geometry, mesh);
+  fillGeometry(geometry, mesh, run);
+  return geometry;
+}
+
+/**
+ * Another run of a mesh's triangles over the same vertex buffers as `body`,
+ * which must already hold that mesh: the vertices go to the GPU once.
+ */
+export function runGeometry(body: BufferGeometry, mesh: PartMesh, run: IndexRun): BufferGeometry {
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', body.getAttribute('position'));
+  geometry.setAttribute('normal', body.getAttribute('normal'));
+  geometry.setIndex(new BufferAttribute(indicesOf(mesh, run), 1));
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
   return geometry;
 }
 

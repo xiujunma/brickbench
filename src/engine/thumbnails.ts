@@ -1,5 +1,6 @@
 import {
   DirectionalLight,
+  Group,
   HemisphereLight,
   Mesh,
   NeutralToneMapping,
@@ -22,6 +23,8 @@ export class ThumbnailRenderer {
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(28, 1, 0.01, 200);
   private readonly mesh = new Mesh();
+  /** The colours a library part fixes, drawn over its body. */
+  private readonly layers = new Group();
 
   constructor(
     private readonly geometries: GeometryCache,
@@ -43,7 +46,7 @@ export class ThumbnailRenderer {
     this.scene.environmentIntensity = 0.6;
     const key = new DirectionalLight('#fff4e8', 2.2);
     key.position.set(3, 6, 4);
-    this.scene.add(new HemisphereLight('#f5f1ea', '#6d6458', 0.7), key, this.mesh);
+    this.scene.add(new HemisphereLight('#f5f1ea', '#6d6458', 0.7), key, this.mesh, this.layers);
   }
 
   /**
@@ -55,6 +58,8 @@ export class ThumbnailRenderer {
     const geometry = this.geometries.part(partId);
     this.mesh.geometry = geometry;
     this.mesh.material = this.materials.solid(colorId);
+    this.layers.clear();
+    for (const layer of this.geometries.layers(partId)) this.layers.add(new Mesh(layer.geometry, this.materials.fixed(layer)));
     if (!geometry.boundingSphere) geometry.computeBoundingSphere();
     const sphere = geometry.boundingSphere ?? new Sphere(new Vector3(), 1);
     const radius = Math.max(sphere.radius, minRadius);

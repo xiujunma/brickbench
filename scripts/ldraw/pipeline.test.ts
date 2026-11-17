@@ -82,9 +82,45 @@ describe('converting a part', () => {
     expect(result.solids).toBeNull();
   });
 
-  it('skips parts drawn in several fixed colours and parts with no faces', () => {
-    expect(convertPart('twotone.dat', flattener)).toEqual({ ok: false, reason: 'multicolour' });
+  it('skips parts with no faces', () => {
     expect(convertPart('empty.dat', flattener)).toEqual({ ok: false, reason: 'empty' });
+  });
+
+  it("keeps the colours a part fixes, each in a layer after the brick's own", () => {
+    const result = convertPart('twotone.dat', flattener, new Map([[4, { hex: '#b40000', finish: 'solid' }]]));
+    if (!result.ok) throw new Error(result.reason);
+    const layers = result.mesh.layers ?? [];
+    expect(layers.map(({ code, hex, finish }) => ({ code, hex, finish }))).toEqual([
+      { code: 16, hex: '#ffffff', finish: 'solid' },
+      { code: 4, hex: '#b40000', finish: 'solid' },
+    ]);
+    // one run after the other, covering every index: the red layer is the one red triangle
+    expect(layers.map(({ start, count }) => [start, count])).toEqual([
+      [0, result.mesh.indices.length - 3],
+      [result.mesh.indices.length - 3, 3],
+    ]);
+  });
+
+  it("orders the colours a part fixes by code, after the brick's own", () => {
+    const three = new Flattener(memorySource({ 'three.dat': `3 4 0 0 0 10 0 0 0 0 10\n${BRICK}\n3 0 0 0 0 0 0 10 10 0 0`, 'stud.dat': STUD }));
+    const result = convertPart('three.dat', three);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.mesh.layers?.map((layer) => layer.code)).toEqual([16, 0, 4]);
+  });
+
+  it('drops a colour whose triangles all collapse', () => {
+    // a red speck smaller than the welding distance: nothing is left in red, so the brick's colour is all there is
+    const flat = new Flattener(memorySource({ 'flat.dat': `${BRICK}\n3 4 0 0 0 0.001 0 0 0 0 0.001`, 'stud.dat': STUD }));
+    const result = convertPart('flat.dat', flat);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.mesh.layers).toBeUndefined();
+  });
+
+  it("lets a part drawn all in one fixed colour take the brick's colour", () => {
+    const red = new Flattener(memorySource({ 'red.dat': BRICK.replaceAll(' 16 ', ' 4 '), 'stud.dat': STUD }));
+    const result = convertPart('red.dat', red);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.mesh.layers).toBeUndefined();
   });
 });
 
