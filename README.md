@@ -330,6 +330,10 @@ e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 - Editing instruction steps by hand, sub-assemblies and per-step camera angles (steps are planned automatically)
 - Accounts, sharing and a gallery
 
+## Licence
+
+BrickBench is released under the [MIT Licence](LICENSE). That covers its own code. The LDraw parts library that `bun run ldraw` builds, and the desktop app ships, keeps its own licence (CC BY 4.0, older parts CC BY 2.0; see below), as do the packages BrickBench uses.
+
 ## Credits
 
 Part numbers, colour codes and colour values follow the [LDraw](https://www.ldraw.org) standard. The library parts are converted from the LDraw.org Parts Library, made by its contributors and licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (older contributions also [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)); `bun run ldraw` writes the full credits to `public/ldraw/CREDITS.txt`, and the app links to them. LDraw™ is a trademark of the Estate of James Jessiman.

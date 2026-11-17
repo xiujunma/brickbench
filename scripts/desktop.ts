@@ -30,10 +30,10 @@ async function buildDesktop(): Promise<void> {
   mkdirSync(APP_DIR, { recursive: true });
   await bundle('electron/main.ts', 'main.cjs');
   await bundle('electron/preload.ts', 'preload.cjs');
-  const own = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { readonly version: string; readonly description: string };
+  const own = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { readonly version: string; readonly description: string; readonly license: string };
   // a name of its own: electron-builder looks the app's dependencies up by name, and must not take
   // the web project's (bundled already) for them
-  const app = { name: 'brickbench-desktop', productName: 'BrickBench', version: own.version, description: own.description, author: 'BrickBench', main: 'main.cjs' };
+  const app = { name: 'brickbench-desktop', productName: 'BrickBench', version: own.version, description: own.description, license: own.license, author: 'BrickBench', main: 'main.cjs' };
   writeFileSync(join(APP_DIR, 'package.json'), `${JSON.stringify(app, null, 2)}\n`);
 }
 
