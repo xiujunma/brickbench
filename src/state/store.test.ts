@@ -283,3 +283,22 @@ describe('changes made elsewhere', () => {
     expect(state().history).toBe(history);
   });
 });
+
+describe('documents', () => {
+  it('closes the report on an opened file when another model loads or a new one starts', () => {
+    const { state } = setup();
+    state().openDialog('import-report');
+    state().loadDocument({ name: 'next', settings: DEFAULT_SCENE, model: modelFromBricks([makeBrick()]) });
+    expect(state().dialog).toBeNull();
+    state().openDialog('import-report');
+    state().newModel();
+    expect(state().dialog).toBeNull();
+  });
+
+  it('leaves other dialogs open', () => {
+    const { state } = setup();
+    state().openDialog('help');
+    state().loadDocument({ name: 'next', settings: DEFAULT_SCENE, model: modelFromBricks([]) });
+    expect(state().dialog).toBe('help');
+  });
+});

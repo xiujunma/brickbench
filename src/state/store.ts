@@ -11,12 +11,17 @@ import { DEFAULT_PART_ID } from '../core/parts/catalog';
 import type { PartLookup } from '../core/parts/types';
 import { materialize, payloadFromBricks, payloadFromPart, rotatePayload, type Payload } from '../core/placement/payload';
 import { bricksFit, selectedBricks } from './selectors';
-import type { EditorData, EditorState, SelectMode, ToastTone } from './types';
+import type { DialogId, EditorData, EditorState, SelectMode, ToastTone } from './types';
 
 export const DEFAULT_NAME = 'Untitled model';
 const MAX_NAME_LENGTH = 120;
 const MAX_TOASTS = 4;
 const EMPTY_SELECTION: ReadonlySet<string> = new Set();
+
+/** The report on an opened file is about the model it opened: another model closes it. */
+function closeImportReport(dialog: DialogId | null): DialogId | null {
+  return dialog === 'import-report' ? null : dialog;
+}
 
 export interface StoreDeps {
   readonly lookup: PartLookup;
@@ -247,23 +252,25 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
       commitModel: (next) => commit(next),
       squashHistorySince: (snapshot) => set((s) => ({ history: squashSince(s.history, snapshot) })),
       newModel: () =>
-        set({
+        set((s) => ({
           history: createHistory(emptyModel()),
           name: DEFAULT_NAME,
           settings: DEFAULT_SCENE,
           selection: EMPTY_SELECTION,
           pastePayload: null,
           lastSavedAt: null,
-        }),
+          dialog: closeImportReport(s.dialog),
+        })),
 
       loadDocument: (doc) =>
-        set({
+        set((s) => ({
           history: createHistory(doc.model),
           name: doc.name.trim() || DEFAULT_NAME,
           settings: doc.settings,
           selection: EMPTY_SELECTION,
           pastePayload: null,
-        }),
+          dialog: closeImportReport(s.dialog),
+        })),
 
       setName: (name) => {
         const clean = name.replace(/\s+/g, ' ').trim().slice(0, MAX_NAME_LENGTH);

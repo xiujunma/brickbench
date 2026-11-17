@@ -84,22 +84,34 @@ function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
-type BrickRecord = z.infer<typeof brickSchema>;
+/** A brick as a file stores it, before it is checked against the parts and the grid. */
+export type BrickRecord = z.infer<typeof brickSchema>;
 
-interface Collected {
+/** Why a stored brick stayed out of the model. */
+export type RejectReason = 'unknown' | 'outside' | 'overlapping';
+
+export interface RejectedRecord {
+  readonly record: BrickRecord;
+  readonly reason: RejectReason;
+}
+
+export interface CollectedBricks {
   readonly bricks: Brick[];
   readonly warnings: string[];
   readonly unknownParts: string[];
   readonly skipped: number;
+  /** The records left out, in file order, and why. */
+  readonly rejected: readonly RejectedRecord[];
 }
 
 /**
  * Turns validated records into bricks, dropping what the editor could not
  * handle: unknown parts, bricks off the grid and bricks overlapping others.
  */
-function collectBricks(records: readonly BrickRecord[], lookup: PartLookup, nextId: IdFactory): Result<Collected> {
+export function collectBricks(records: readonly BrickRecord[], lookup: PartLookup, nextId: IdFactory): Result<CollectedBricks> {
   const unknownParts = new Set<string>();
   const skipped = { unknown: 0, outside: 0, overlapping: 0 };
+  const rejected: RejectedRecord[] = [];
   let recolored = 0;
   const occupancy = createOccupancy(lookup);
   const bricks: Brick[] = [];
@@ -108,6 +120,7 @@ function collectBricks(records: readonly BrickRecord[], lookup: PartLookup, next
     if (!lookup(record.part)) {
       unknownParts.add(record.part);
       skipped.unknown += 1;
+      rejected.push({ record, reason: 'unknown' });
       continue;
     }
     const knownColor = getColor(record.color) !== undefined;
@@ -122,10 +135,12 @@ function collectBricks(records: readonly BrickRecord[], lookup: PartLookup, next
     };
     if (isOutOfBounds(candidate, lookup)) {
       skipped.outside += 1;
+      rejected.push({ record, reason: 'outside' });
       continue;
     }
     if (!occupancy.tryAdd(candidate)) {
       skipped.overlapping += 1;
+      rejected.push({ record, reason: 'overlapping' });
       continue;
     }
     if (occupancy.cells > MAX_CELLS) {
@@ -145,7 +160,7 @@ function collectBricks(records: readonly BrickRecord[], lookup: PartLookup, next
   }
   if (recolored > 0) warnings.push(`Recoloured ${plural(recolored, 'brick')} that used unknown colours.`);
   const skippedCount = skipped.unknown + skipped.outside + skipped.overlapping;
-  return { ok: true, value: { bricks, warnings, unknownParts: [...unknownParts], skipped: skippedCount } };
+  return { ok: true, value: { bricks, warnings, unknownParts: [...unknownParts], skipped: skippedCount, rejected } };
 }
 
 /** Parses and validates a model file. Anything the editor cannot use is dropped or replaced, with warnings. */

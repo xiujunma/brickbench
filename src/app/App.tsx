@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Toasts } from '../ui/components/Toasts';
 import { HelpDialog } from '../ui/dialogs/HelpDialog';
+import { ImportReportDialog } from '../ui/dialogs/ImportReportDialog';
 import { InstructionsDialog } from '../ui/dialogs/InstructionsDialog';
 import { MyPartsDialog } from '../ui/dialogs/MyPartsDialog';
 import { PartsListDialog } from '../ui/dialogs/PartsListDialog';
@@ -13,12 +14,14 @@ import { StatusBar } from '../ui/panels/StatusBar';
 import { TopBar, type Drawer } from '../ui/panels/TopBar';
 import { AGENT_TOGGLE_ID } from '../ui/focusTargets';
 import { useAppShortcuts } from '../ui/useAppShortcuts';
+import { useFileDrop } from '../ui/useFileDrop';
 
 export function App() {
   const [drawer, setDrawer] = useState<Drawer>(null);
   // the agent chat takes the inspector's place while it is open
   const [agentOpen, setAgentOpen] = useState(false);
   useAppShortcuts();
+  useFileDrop();
 
   return (
     <div className="app" data-drawer={drawer ?? undefined} data-agent={agentOpen ? 'open' : undefined}>
@@ -50,6 +53,7 @@ export function App() {
       <InstructionsDialog />
       <MyPartsDialog />
       <TimelapseDialog />
+      <ImportReportDialog />
     </div>
   );
 }

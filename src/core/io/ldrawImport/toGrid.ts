@@ -1,0 +1,112 @@
+/**
+ * Puts LDraw placements back on BrickBench's grid: the exact inverse of
+ * the LDraw export (see ../ldraw.ts). LDraw places parts anywhere, turned
+ * any way; BrickBench builds upright parts, turned in quarter turns, on
+ * whole studs and plates.
+ */
+import { LDU_PER_UNIT, PLATE_HEIGHT, cleanZero, rotatePoint, rotatedSize, type Rotation } from '../../grid';
+import type { PartDef } from '../../parts/types';
+import type { M3, V3 } from './read';
+
+/** LDraw units in a plate's height. */
+const LDU_PER_PLATE = PLATE_HEIGHT * LDU_PER_UNIT;
+/** How far a matrix entry may stray from 0 or ±1: editors write rounded numbers (Studio: 1.000015). */
+const MATRIX_TOLERANCE = 1e-3;
+/** How far off the grid a part may sit and still be on it, in LDU (about 0.2 mm): rounding, not design. */
+export const GRID_TOLERANCE_LDU = 0.5;
+/** The lattice offset is found to half an LDU. */
+const STEPS_PER_LDU = 2;
+
+/** The LDraw matrix of `r` quarter turns about the vertical, as the exporter writes it. */
+export function turnMatrix(r: Rotation): M3 {
+  const angle = (r * Math.PI) / 2;
+  const c = cleanZero(Math.round(Math.cos(angle)));
+  const s = cleanZero(Math.round(Math.sin(angle)));
+  return [c, 0, cleanZero(-s), 0, 1, 0, s, 0, c];
+}
+
+const TURNS: readonly (readonly [Rotation, M3])[] = ([0, 1, 2, 3] as const).map((r) => [r, turnMatrix(r)]);
+
+/** The quarter turn a matrix makes, or null when the part is tipped over, on its side, mirrored or at an angle. */
+export function quarterTurnOf(matrix: M3): Rotation | null {
+  for (const [r, turn] of TURNS) {
+    if (turn.every((value, i) => Math.abs(value - matrix[i]!) <= MATRIX_TOLERANCE)) return r;
+  }
+  return null;
+}
+
+/** Where a brick's footprint corner (x, z, in studs) and bottom (y, in plates) land, before snapping to whole cells. */
+export interface GridSpot {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+/**
+ * Where the brick for an LDraw placement of `part`, turned `r`, would sit.
+ * LDraw's frame is ours turned half a turn about X: (x, y, z) → (x, -y, -z),
+ * at 20 LDU to the stud. Null for parts without an LDraw origin.
+ */
+export function gridSpotOf(part: PartDef, position: V3, r: Rotation): GridSpot | null {
+  const origin = part.ldraw?.origin;
+  if (!origin) return null;
+  const [ox, oy, oz] = origin;
+  const [rx, rz] = rotatePoint(ox, oz, r);
+  const size = rotatedSize(part.w, part.d, r);
+  const x = position[0] / LDU_PER_UNIT;
+  const y = -position[1] / LDU_PER_UNIT;
+  const z = -position[2] / LDU_PER_UNIT;
+  return { x: x - rx - size.w / 2, y: (y - oy) / PLATE_HEIGHT, z: z - rz - size.d / 2 };
+}
+
+/** How far the grid a model was built on sits from whole cells, along each axis, in cells. */
+export interface Lattice {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+/** The fraction of a cell most values sit at: where the grid they share starts. */
+function commonOffset(values: readonly number[], lduPerCell: number): number {
+  const steps = lduPerCell * STEPS_PER_LDU;
+  const counts = new Map<number, number>();
+  for (const value of values) {
+    const step = Math.round((value - Math.floor(value)) * steps) % steps;
+    counts.set(step, (counts.get(step) ?? 0) + 1);
+  }
+  let best = 0;
+  let most = 0;
+  for (const [step, count] of counts) {
+    if (count > most || (count === most && step < best)) {
+      best = step;
+      most = count;
+    }
+  }
+  return best / steps;
+}
+
+/**
+ * The grid most of a model's parts share. Editors place models anywhere,
+ * so it need not start at LDraw's origin; parts off it are off the grid.
+ */
+export function latticeOf(spots: readonly GridSpot[]): Lattice {
+  return {
+    x: commonOffset(spots.map((s) => s.x), LDU_PER_UNIT),
+    y: commonOffset(spots.map((s) => s.y), LDU_PER_PLATE),
+    z: commonOffset(spots.map((s) => s.z), LDU_PER_UNIT),
+  };
+}
+
+function snapAxis(value: number, offset: number, lduPerCell: number): number | null {
+  const shifted = value - offset;
+  const cell = Math.round(shifted);
+  return Math.abs(shifted - cell) * lduPerCell <= GRID_TOLERANCE_LDU ? cell : null;
+}
+
+/** The whole cell a spot sits on, counted along the lattice, or null when it sits between cells (half a stud over, say). */
+export function snapToLattice(spot: GridSpot, lattice: Lattice): GridSpot | null {
+  const x = snapAxis(spot.x, lattice.x, LDU_PER_UNIT);
+  const y = snapAxis(spot.y, lattice.y, LDU_PER_PLATE);
+  const z = snapAxis(spot.z, lattice.z, LDU_PER_UNIT);
+  return x === null || y === null || z === null ? null : { x, y, z };
+}

@@ -335,3 +335,68 @@
   margin-top: 8px;
   font-size: var(--text-xs);
 }
+
+/* What came in: the report on an LDraw or Studio file just opened */
+.import-note {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-m);
+  background: var(--accent-soft);
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.import-heading {
+  margin: 18px 0 8px;
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.import-groups {
+  display: grid;
+  gap: 6px;
+}
+
+.import-group {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  font-size: var(--text-sm);
+}
+
+.import-group summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--ink);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.import-group summary .count {
+  margin-left: auto;
+  color: var(--ink-3);
+  font: 600 var(--text-xs) / 1 var(--font-mono);
+}
+
+.import-group p {
+  margin: 6px 0 0;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.import-group .parts-table {
+  margin-top: 8px;
+  font-size: var(--text-xs);
+}
+
+.import-fine {
+  margin: 14px 0 0;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}

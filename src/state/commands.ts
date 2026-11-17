@@ -1,11 +1,13 @@
 import { allotStock, ownedCounts } from '../core/inventory/stock';
 import { toLDraw, slugify } from '../core/io/ldraw';
 import { parseDocument, serializeDocument, type ParsedDocument, type Result } from '../core/io/modelFile';
+import { OPEN_ACCEPT, openableKind } from '../core/io/openable';
 import { buildPartsList, partsListCsv } from '../core/io/partsList';
 import { createIdFactory } from '../core/model/ids';
 import { getPart } from '../core/parts/catalog';
 import { getEngine } from '../editor/engineRegistry';
 import { cottageSample } from '../samples/cottage';
+import { confirmReplace } from './confirmReplace';
 import { editorStore } from './editorStore';
 import { downloadBlob, downloadText, pickFile } from './files';
 import { inventory } from './inventory';
@@ -16,6 +18,8 @@ import { discardBackup, readBackup } from './sessionBackup';
 /** Largest model file we will read. */
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MODEL_EXTENSION = '.brickbench.json';
+/** Bytes enough to tell a file's kind when its name does not. */
+const SNIFF_BYTES = 64;
 const importIds = createIdFactory('f');
 
 function state() {
@@ -38,10 +42,6 @@ async function parseModelText(text: string): Promise<Result<ParsedDocument>> {
   return parseDocument(text, getPart, importIds);
 }
 
-function confirmReplace(prompt: string): boolean {
-  return state().history.present.bricks.size === 0 || window.confirm(`${prompt} The current model will be replaced (save it first if you want to keep it).`);
-}
-
 function showDocument(parsed: ParsedDocument, message: string): void {
   const { loadDocument, toast } = state();
   loadDocument(parsed.doc);
@@ -50,15 +50,27 @@ function showDocument(parsed: ParsedDocument, message: string): void {
   for (const warning of parsed.warnings) toast(warning, 'info');
 }
 
+/** File › Open: a BrickBench model, an LDraw model (.ldr, .mpd) or a BrickLink Studio file (.io). */
 export async function openModelFile(): Promise<void> {
-  const file = await pickFile(`${MODEL_EXTENSION},.json,application/json`);
-  if (!file) return;
+  const file = await pickFile(OPEN_ACCEPT);
+  if (file) await openGivenFile(file);
+}
+
+/** Opens a model file: one picked, dropped on the window, or handed over by the desktop app. */
+export async function openGivenFile(file: File): Promise<void> {
   const { toast } = state();
-  if (file.size > MAX_FILE_BYTES) {
-    toast('That file is too large to be a BrickBench model.', 'error');
-    return;
-  }
   try {
+    const kind = openableKind(file.name, new Uint8Array(await file.slice(0, SNIFF_BYTES).arrayBuffer()));
+    if (kind !== 'brickbench') {
+      // the importer and zip.js load only when an LDraw or Studio file is opened
+      const { openLDrawModel } = await import('./ldrawOpen');
+      await openLDrawModel(file, kind, { editor: editorStore, library: partLibrary, confirm: confirmReplace });
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      toast('That file is too large to be a BrickBench model.', 'error');
+      return;
+    }
     const result = await parseModelText(await file.text());
     if (!result.ok) {
       toast(result.error, 'error');

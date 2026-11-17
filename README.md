@@ -1,6 +1,6 @@
 # BrickBench
 
-A 3D brick-building workshop that runs in the browser. Pick parts and colours, snap them together on a baseplate, then save your model or export it to LDraw, glTF or an image.
+A 3D brick-building workshop that runs in the browser. Pick parts and colours, snap them together on a baseplate, then save your model or export it to LDraw, glTF or an image. Models made in BrickLink Studio, LeoCAD and other LDraw editors open too.
 
 ![The sample cottage in BrickBench](docs/screenshot.png)
 
@@ -20,6 +20,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 - **Tools:** Build, Select & move (click, Shift-click, box select, drag to move), Paint and Erase, plus an eyedropper (Alt-click) and rotate, nudge, copy, paste and duplicate.
 - **Unlimited undo** (up to 200 steps) and **autosave** in the browser.
 - **Files:** save and open `.brickbench.json`, or load the sample cottage.
+- **Open models from elsewhere:** LDraw files (`.ldr`, `.mpd`) and BrickLink Studio files (`.io`) open as BrickBench models, built in the model's own order, with a report on any parts that couldn't come in. Use File › Open, or drop a file on the window. See [Opening LDraw and Studio files](#opening-ldraw-and-studio-files).
 - **Building instructions:** a printable PDF booklet with a cover, the parts list, then one page per step showing the parts to add and the model so far, with the new parts outlined.
 - **Time-lapse video:** a video of your model being built, each brick dropping into place while the camera circles, ready to share. See [Time-lapse video](#time-lapse-video).
 - **Exports:** LDraw (`.ldr`, opens in Studio, LeoCAD and LDView), glTF (`.glb`, at real-world scale for Blender), PNG, a time-lapse video (MP4 or WebM), and a parts list (CSV).
@@ -79,6 +80,30 @@ Choose **File › Time-lapse video…** to film your model going together, brick
 - **Brick count:** "312 / 1,504 bricks" in a corner as the bricks arrive, unless you turn it off.
 
 The video is made in your browser and saved to your downloads: an MP4 (H.264), or a WebM where the browser can't make MP4. Frames are drawn offscreen in the editor's light and encoded with WebCodecs and [Mediabunny](https://mediabunny.dev) (MPL-2.0), which loads only when you make a video. On a computer with a graphics card, a 10-second 1080p video of a model of a few thousand bricks takes a few seconds; bigger models take longer, and software graphics much longer.
+
+## Opening LDraw and Studio files
+
+**File › Open…** also opens models made elsewhere: LDraw files (`.ldr`, `.mpd`) from LeoCAD, MLCad or the [LDraw model repository](https://library.ldraw.org/omr) of official sets, and BrickLink Studio files (`.io`), old and new. Submodels are built where the model puts them, in their colours. Parts come in in the model's own order, so a time-lapse of an opened model follows its building steps.
+
+BrickBench builds upright parts, turned in quarter turns, on whole studs and plates. What doesn't fit stays out, and a report says what and why:
+
+- **Not in BrickBench:** parts the library doesn't have.
+- **On their side or at an angle:** parts tipped over, upside down or turned at an angle, as in sideways building.
+- **Between studs:** parts on jumper plates, hinges and Technic pins.
+- **Overlapping:** parts that would overlap others once on the grid, such as a tyre on its wheel or glass in its frame.
+- **Drawing shapes** (strings and wires a model draws itself) and **submodels kept in other files**.
+
+To bring in as much as it can, it also:
+
+- **finds the grid the model was built on**, wherever the editor put it, and moves a submodel built a little off the rest (a train body resting just above its bogies) by up to half a stud or plate, as one piece, to line up;
+- **turns submodels square** that a model stands at an angle for show, such as a car parked at 30°;
+- builds **printed and stickered parts plain**, and **colours** BrickBench doesn't have (Light Grey, Brown) in the nearest it does.
+
+The model stands in the middle of the scene on a baseplate big enough to hold it, or on none if it brings its own.
+
+How much of a model comes in depends on how it is built. In a sample of official sets from the LDraw model repository, houses, trains and vehicles came in at 53 to 77% of their parts; models built mostly sideways, such as a Star Destroyer, at under 20%.
+
+Studio files are ZIP archives: BrickBench reads the LDraw model inside with [zip.js](https://gildas-lormeau.github.io/zip.js/) (BSD-3-Clause), which loads only when you open one.
 
 ## Building with the parts you own
 
@@ -166,6 +191,8 @@ The first time you run the browser tests, install a browser with `bunx playwrigh
 
 `bun scripts/colourNumbers.ts <colours.json> <LDConfig.ldr>` rewrites the table that matches Rebrickable's and BrickLink's colour numbers to LDraw's, from Rebrickable's colour list (as its API gives it) and LDraw's colour table. Run it when the catalogues add colours.
 
+`bun scripts/ldrawColours.ts .ldraw-cache/ldraw/LDConfig.ldr` rewrites the table of every LDraw colour (name, value and finish) that opened models in colours outside the palette are matched by. Run it when LDraw adds colours.
+
 ### Checking LDraw mappings
 
 Each part records its LDraw part number and where the LDraw origin sits on it, which keeps exports correctly placed and turned. A test compares every part against the real LDraw library:
@@ -230,7 +257,8 @@ src/
   core/       pure logic, no three.js: units and rotation, colours, part catalogue
               and part finder (search, nicknames, filters),
               immutable model operations, spatial index, picking and placement,
-              undo history, file format, LDraw and parts-list export, and
+              undo history, file format, LDraw and Studio import, LDraw and
+              parts-list export, and
               instruction steps, page layout and camera framing
   engine/     three.js: procedural part geometry, library mesh loading, instanced
               batches, selection and preview layers, ground, viewport, thumbnails,
@@ -286,6 +314,8 @@ e2e/          Playwright tests
 
 Part numbers, colour codes and colour values follow the [LDraw](https://www.ldraw.org) standard. The library parts are converted from the LDraw.org Parts Library, made by its contributors and licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (older contributions also [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)); `bun run ldraw` writes the full credits to `public/ldraw/CREDITS.txt`, and the app links to them. LDraw™ is a trademark of the Estate of James Jessiman.
 
-Rebrickable's and BrickLink's colour numbers are matched to LDraw's with [Rebrickable](https://rebrickable.com)'s colour cross-references (`src/core/inventory/colourNumbers.ts`, written by `scripts/colourNumbers.ts`).
+Rebrickable's and BrickLink's colour numbers are matched to LDraw's with [Rebrickable](https://rebrickable.com)'s colour cross-references (`src/core/inventory/colourNumbers.ts`, written by `scripts/colourNumbers.ts`). Opened models' colours are matched with LDraw's colour table, LDConfig.ldr (`src/core/io/ldrawImport/colourTable.ts`, written by `scripts/ldrawColours.ts`).
+
+Studio files are read with [zip.js](https://gildas-lormeau.github.io/zip.js/) (BSD-3-Clause). BrickLink Studio is BrickLink's; BrickBench reads the LDraw model it saves, as the [LDraw wiki](https://wiki.ldraw.org/wiki/Studio) describes.
 
 LEGO® is a trademark of the LEGO Group, which does not sponsor, authorise or endorse this project.
