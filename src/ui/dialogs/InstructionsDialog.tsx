@@ -14,7 +14,7 @@ import {
   type InstructionProgress,
 } from '../../instructions/createInstructions';
 import { editorStore, useEditor } from '../../state/editorStore';
-import { downloadBlob } from '../../state/files';
+import { saveBlob } from '../../state/files';
 import { partLibrary } from '../../state/library';
 import { bricksOf, distinctPieces } from '../../state/selectors';
 import { Choice } from '../components/Choice';
@@ -82,8 +82,7 @@ export function InstructionsDialog() {
         direction: getEngine()?.viewDirection() ?? DEFAULT_VIEW_DIRECTION,
       };
       const pdf = await createInstructionsPdf(source, options, getPart, setProgress, controller.signal, partLibrary.meshes);
-      downloadBlob(pdf, `${slugify(state.name)}-instructions.pdf`);
-      state.toast('Building instructions saved to your downloads.', 'success');
+      saveBlob(pdf, `${slugify(state.name)}-instructions.pdf`, 'Building instructions saved to your downloads.', state.toast);
       close('instructions');
     } catch (error: unknown) {
       if (isAbortError(error)) state.toast('Stopped making the instructions.');

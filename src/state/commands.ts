@@ -9,7 +9,7 @@ import { getEngine } from '../editor/engineRegistry';
 import { cottageSample } from '../samples/cottage';
 import { confirmReplace } from './confirmReplace';
 import { editorStore } from './editorStore';
-import { downloadBlob, downloadText, pickFile } from './files';
+import { pickFile, saveBlob, saveText } from './files';
 import { inventory } from './inventory';
 import { partLibrary, usesLibraryParts } from './library';
 import { bricksOf } from './selectors';
@@ -32,8 +32,7 @@ function errorMessage(error: unknown): string {
 
 export function saveModelFile(): void {
   const { name, history, settings, toast } = state();
-  downloadText(serializeDocument({ name, model: history.present, settings }), `${slugify(name)}${MODEL_EXTENSION}`, 'application/json');
-  toast('Model saved to your downloads.', 'success');
+  saveText(serializeDocument({ name, model: history.present, settings }), `${slugify(name)}${MODEL_EXTENSION}`, 'application/json', 'Model saved to your downloads.', toast);
 }
 
 /** Parses a model, loading the LDraw library first if it uses library parts (or they would be dropped). */
@@ -125,8 +124,8 @@ export function openSample(): void {
 export function exportLDrawFile(): void {
   const { name, history, toast } = state();
   const { text, skipped } = toLDraw(name, history.present, getPart);
-  downloadText(text, `${slugify(name)}.ldr`, 'text/plain');
-  toast(skipped > 0 ? `Exported LDraw file (${skipped} bricks had no LDraw part).` : 'Exported LDraw file.', 'success');
+  saveText(text, `${slugify(name)}.ldr`, 'text/plain', 'Exported LDraw file.', toast);
+  if (skipped > 0) toast(`${skipped === 1 ? '1 brick has' : `${skipped} bricks have`} no LDraw part, so the LDraw file leaves ${skipped === 1 ? 'it' : 'them'} out.`, 'info');
 }
 
 export function exportPartsCsv(): void {
@@ -135,8 +134,7 @@ export function exportPartsCsv(): void {
   const { lists } = inventory.store.getState();
   // with the user's sets added, the list says how many of each they have and still need
   const csv = partsListCsv(lists.length > 0 ? allotStock(rows, ownedCounts(lists), getPart) : rows);
-  downloadText(csv, `${slugify(name)}-parts.csv`, 'text/csv');
-  toast('Parts list downloaded.', 'success');
+  saveText(csv, `${slugify(name)}-parts.csv`, 'text/csv', 'Parts list downloaded.', toast);
 }
 
 export async function exportGlbFile(): Promise<void> {
@@ -147,8 +145,7 @@ export async function exportGlbFile(): Promise<void> {
     return;
   }
   try {
-    downloadBlob(await engine.exportGlb(name), `${slugify(name)}.glb`);
-    toast('Exported glTF model.', 'success');
+    saveBlob(await engine.exportGlb(name), `${slugify(name)}.glb`, 'Exported glTF model.', toast);
   } catch (error: unknown) {
     toast(`glTF export failed: ${errorMessage(error)}`, 'error');
   }
@@ -162,8 +159,7 @@ export async function exportImage(): Promise<void> {
     return;
   }
   try {
-    downloadBlob(await engine.capturePng(), `${slugify(name)}.png`);
-    toast('Image saved.', 'success');
+    saveBlob(await engine.capturePng(), `${slugify(name)}.png`, 'Image saved.', toast);
   } catch (error: unknown) {
     toast(`Could not capture the view: ${errorMessage(error)}`, 'error');
   }

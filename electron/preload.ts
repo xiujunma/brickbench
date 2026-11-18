@@ -17,6 +17,7 @@ function listen(channel: string, listener: (value: unknown) => void): () => void
 const api: DesktopApi = {
   onMenuCommand: (listener) => listen(CHANNELS.menu, listener),
   onOpenFile: (listener) => listen(CHANNELS.openFile, listener),
+  onSaved: (listener) => listen(CHANNELS.saved, listener),
   ready: () => ipcRenderer.send(CHANNELS.ready),
 };
 

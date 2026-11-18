@@ -3,6 +3,7 @@ import { DEFAULT_VIEW_DIRECTION } from '../../core/instructions/camera';
 import type { StepOrder } from '../../core/instructions/steps';
 import { slugify } from '../../core/io/ldraw';
 import { getPart } from '../../core/parts/catalog';
+import { desktopApi } from '../../desktop/protocol';
 import {
   DEFAULT_TIMELAPSE_OPTIONS,
   VIDEO_LENGTHS,
@@ -14,7 +15,7 @@ import {
 import { getEngine } from '../../editor/engineRegistry';
 import { isAbortError, nextTask } from '../../instructions/createInstructions';
 import { editorStore, useEditor } from '../../state/editorStore';
-import { downloadBlob } from '../../state/files';
+import { saveBlob } from '../../state/files';
 import { partLibrary } from '../../state/library';
 import { bricksOf } from '../../state/selectors';
 import { createTimelapse, type TimelapseProgress } from '../../timelapse/createTimelapse';
@@ -47,6 +48,9 @@ function summaryOf(options: TimelapseOptions, bricks: number): string {
 }
 
 /** A video of the model being built, brick by brick, made in the browser. */
+/** Where the video is made and goes: the desktop app asks where to save it. */
+const MADE_WHERE = desktopApi() ? 'It is made on your computer and saved where you choose.' : 'It is made in your browser and saved to your downloads.';
+
 export function TimelapseDialog() {
   const isOpen = useEditor((s) => s.dialog === 'timelapse');
   const close = useEditor((s) => s.closeDialog);
@@ -77,8 +81,7 @@ export function TimelapseDialog() {
         direction: getEngine()?.viewDirection() ?? DEFAULT_VIEW_DIRECTION,
       };
       const video = await createTimelapse(source, options, getPart, setProgress, controller.signal, partLibrary.meshes);
-      downloadBlob(video.blob, `${slugify(state.name)}-timelapse.${video.extension}`);
-      state.toast('Time-lapse video saved to your downloads.', 'success');
+      saveBlob(video.blob, `${slugify(state.name)}-timelapse.${video.extension}`, 'Time-lapse video saved to your downloads.', state.toast);
       close('timelapse');
     } catch (error: unknown) {
       if (isAbortError(error)) state.toast('Stopped making the video.');
@@ -122,8 +125,8 @@ export function TimelapseDialog() {
       ) : (
         <div className="instructions-form" aria-busy={busy}>
           <p className="lede">
-            A video of your model being built: each brick drops into place while the camera circles, and the finished model shows at the end. It is
-            made in your browser and saved to your downloads.
+            A video of your model being built: each brick drops into place while the camera circles, and the finished model shows at the end.{' '}
+            {MADE_WHERE}
           </p>
           <fieldset className="field-group" disabled={busy}>
             <Choice legend="Order" choices={ORDERS} value={options.order} onChange={(order) => update({ order })} />

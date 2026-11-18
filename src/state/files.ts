@@ -1,5 +1,10 @@
+import { desktopApi } from '../desktop/protocol';
+import type { ToastTone } from './types';
+
+type Toast = (message: string, tone: ToastTone) => void;
+
 /** Hands a file to the browser's download flow. */
-export function downloadBlob(blob: Blob, filename: string): void {
+function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -11,8 +16,19 @@ export function downloadBlob(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-export function downloadText(text: string, filename: string, type: string): void {
-  downloadBlob(new Blob([text], { type }), filename);
+/**
+ * Saves a file, and says so. A browser puts it in the downloads at once, so
+ * `message` shows now. The desktop app asks where to save it, and says where
+ * it went once its Save dialog is done (see src/app/desktop.ts), so there
+ * `message` would be wrong and stays unsaid.
+ */
+export function saveBlob(blob: Blob, filename: string, message: string, toast: Toast): void {
+  downloadBlob(blob, filename);
+  if (desktopApi() === null) toast(message, 'success');
+}
+
+export function saveText(text: string, filename: string, type: string, message: string, toast: Toast): void {
+  saveBlob(new Blob([text], { type }), filename, message, toast);
 }
 
 /** Opens the system file picker; resolves null when the user cancels. */

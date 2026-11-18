@@ -132,7 +132,7 @@ BrickBench also runs as a desktop app, built with [Electron](https://www.electro
 
 - **Open models from your desktop:** choose BrickBench in a file's **Open With** menu for LDraw (`.ldr`, `.mpd`) and Studio (`.io`) files (it offers to open them without taking them over from other apps), drop a file on the window or on the Dock icon, or use **File › Open…**.
 - **A native menu** with File, Edit and View. The keys work as in the browser: ⌘Z undoes in the scene, and undoes your typing in a text box.
-- **Saving** asks where to save, as other desktop apps do.
+- **Saving** asks where to save, as other desktop apps do, then says where the file went (and nothing if you cancel).
 - **Your work stays in the app:** autosave, favourites and your parts lists are kept in the app's own storage, apart from your browser's.
 - **The agent chat** works too, once the agent bridge runs (`bun run agent`, as for the browser).
 

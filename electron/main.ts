@@ -6,10 +6,10 @@
  */
 import { BrowserWindow, Menu, app, dialog, ipcMain, net, protocol, session, shell, type WebContents } from 'electron';
 import { readFile, stat } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { OPENABLE_EXTENSIONS } from '../src/core/io/openable';
-import { APP_ORIGIN, APP_SCHEME, CHANNELS, MAX_OPEN_BYTES, type MenuCommand, type OpenFilePayload } from '../src/desktop/protocol';
+import { APP_ORIGIN, APP_SCHEME, CHANNELS, MAX_OPEN_BYTES, type MenuCommand, type OpenFilePayload, type SavedPayload } from '../src/desktop/protocol';
 import { filesToOpen } from './launchFiles';
 import { menuTemplate } from './menu';
 import { resolveAppFile } from './webRoot';
@@ -104,6 +104,22 @@ function createWindow(): void {
   void created.loadURL(START_URL);
 }
 
+/**
+ * Saves (the page's downloads) ask where to go, with Electron's own Save
+ * dialog; once it is done, the page hears where each file went, or that it
+ * was cancelled or failed, and says so.
+ */
+function reportSaves(): void {
+  session.defaultSession.on('will-download', (_event, item, contents) => {
+    item.once('done', (_done, state) => {
+      if (contents.isDestroyed()) return;
+      const path = item.getSavePath();
+      const payload: SavedPayload = { name: path ? basename(path) : item.getFilename(), folder: path && state === 'completed' ? basename(dirname(path)) : '', state };
+      contents.send(CHANNELS.saved, payload);
+    });
+  });
+}
+
 /** Pages stay on BrickBench: links to the web open in the browser, and nothing else opens or navigates. */
 function guard(contents: WebContents): void {
   contents.on('will-navigate', (event, url) => {
@@ -151,6 +167,7 @@ if (!app.requestSingleInstanceLock()) {
     protocol.handle(APP_SCHEME, serveAppFile);
     // BrickBench needs no camera, microphone, location or notifications
     session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => callback(permission === 'fullscreen'));
+    reportSaves();
     app.setAboutPanelOptions({
       applicationName: 'BrickBench',
       applicationVersion: app.getVersion(),

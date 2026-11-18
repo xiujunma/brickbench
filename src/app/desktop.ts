@@ -1,4 +1,4 @@
-import { connectDesktop, type DesktopApi, type MenuCommand } from '../desktop/protocol';
+import { connectDesktop, desktopApi, savedNotice, type MenuCommand, type SavedPayload } from '../desktop/protocol';
 import { getEngine } from '../editor/engineRegistry';
 import { isTypingTarget } from '../editor/keyboard';
 import { exportGlbFile, exportImage, exportLDrawFile, newModel, openGivenFile, openSample, saveModelFile } from '../state/commands';
@@ -45,9 +45,15 @@ function run(command: MenuCommand): void {
   void ACTIONS[command]();
 }
 
-/** In the desktop app, takes commands from its menu and the files it is asked to open; in a browser, does nothing. */
+/** Says where a saved file went, as the desktop app's Save dialog decided; nothing when it was cancelled. */
+function announceSaved(saved: SavedPayload): void {
+  const notice = savedNotice(saved);
+  if (notice) editorStore.getState().toast(notice.message, notice.tone);
+}
+
+/** In the desktop app, takes commands from its menu, the files it is asked to open and where saves went; in a browser, does nothing. */
 export function startDesktop(): void {
-  const api = (window as { readonly brickbench?: DesktopApi }).brickbench;
+  const api = desktopApi();
   if (!api) return;
-  connectDesktop(api, { run, openFile: (file) => void openGivenFile(file) });
+  connectDesktop(api, { run, openFile: (file) => void openGivenFile(file), saved: announceSaved });
 }
