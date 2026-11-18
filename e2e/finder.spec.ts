@@ -58,6 +58,19 @@ test.describe('finding parts', () => {
     await expect(page.locator('.find-note')).toContainText('As a part pattern: A “[” needs its “]” (at character 4).');
   });
 
+  test('explains part patterns beside the search box, with examples to try', async ({ page }) => {
+    await freshEditor(page);
+    await page.getByRole('button', { name: 'How to write part patterns' }).click();
+    const help = page.getByRole('dialog', { name: 'Part patterns' });
+    await expect(help).toBeVisible();
+    await help.getByRole('button', { name: /^S45\[oo\/\.\.\]/ }).click();
+    await expect(help).toBeHidden();
+    await expect(page.locator('#part-search')).toHaveValue('S45[oo/..]');
+    await expect(page.locator('#part-search')).toBeFocused();
+    await expect(page.locator('.find-note')).toContainText('by part pattern');
+    await expect(page.locator('.find-hint')).toContainText('Slope 45° 2 × 2');
+  });
+
   test('moves through results with the arrow keys', async ({ page }) => {
     await freshEditor(page);
     await page.keyboard.press('/');

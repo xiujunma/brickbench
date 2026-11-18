@@ -2,6 +2,7 @@ import type { KeyboardEvent, Ref } from 'react';
 import { partLibrary } from '../../../state/library';
 import { Icon } from '../../components/Icon';
 import { focusBuildArea, PART_SEARCH_ID } from '../../focusTargets';
+import { PatternHelp } from './PatternHelp';
 
 /** What Safari reports for keys an input method is still working with. */
 const IME_PROCESS_KEY_CODE = 229;
@@ -44,23 +45,32 @@ export function FinderSearch({ query, inputRef, onQuery, onMove, onEnter, onEsca
     }
   };
 
+  // a pattern chosen from the help searches at once, with the keyboard back in the box
+  const tryPattern = (pattern: string): void => {
+    onQuery(pattern);
+    document.getElementById(PART_SEARCH_ID)?.focus();
+  };
+
   return (
-    <label className="search">
-      <Icon name="search" size={16} />
-      <span className="visually-hidden">Find a part</span>
-      <input
-        ref={inputRef}
-        id={PART_SEARCH_ID}
-        type="search"
-        placeholder="Find a part: 2x4 plate, cheese, 3001…"
-        value={query}
-        autoComplete="off"
-        spellCheck={false}
-        onFocus={() => partLibrary.request()}
-        onChange={(event) => onQuery(event.target.value)}
-        onKeyDown={handleKeyDown}
-      />
+    <div className="search">
+      <label className="search-field">
+        <Icon name="search" size={16} />
+        <span className="visually-hidden">Find a part</span>
+        <input
+          ref={inputRef}
+          id={PART_SEARCH_ID}
+          type="search"
+          placeholder="2x4 plate, cheese, P2x4…"
+          value={query}
+          autoComplete="off"
+          spellCheck={false}
+          onFocus={() => partLibrary.request()}
+          onChange={(event) => onQuery(event.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+      </label>
+      <PatternHelp onTry={tryPattern} />
       <kbd>/</kbd>
-    </label>
+    </div>
   );
 }

@@ -129,7 +129,7 @@ Your lists stay in this browser, like favourites, and are shared by its tabs.
 
 ## Part patterns
 
-Type a part pattern in the search box to say exactly which parts you mean. A capital letter gives the kind, then a size, a top face and a height can follow:
+Type a part pattern in the search box to say exactly which parts you mean; the **?** beside the box lists the syntax, with examples to try. A capital letter gives the kind, then a size, a top face and a height can follow:
 
 | Pattern | Finds |
 | --- | --- |

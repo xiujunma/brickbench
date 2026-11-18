@@ -36,6 +36,16 @@
   box-shadow: var(--focus-ring);
 }
 
+.search-field {
+  display: flex;
+  flex: 1;
+  align-self: stretch;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: text;
+}
+
 .search input {
   flex: 1;
   min-width: 0;
@@ -47,6 +57,117 @@
 
 .search input::placeholder {
   color: var(--ink-3);
+}
+
+.pattern-help-trigger {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--ink-3);
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+
+.pattern-help-trigger:hover,
+.pattern-help-trigger:focus-visible,
+.pattern-help-trigger:has(+ .pattern-help:popover-open) {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.pattern-help {
+  position: fixed;
+  inset: auto;
+  max-height: min(72vh, 600px);
+  margin: 0;
+  padding: 14px 16px 16px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-float);
+  color: var(--ink);
+  font-size: var(--text-sm);
+}
+
+.pattern-help h2 {
+  margin: 0 0 4px;
+  font-size: var(--text-md);
+}
+
+.pattern-help p {
+  margin: 0 0 10px;
+  color: var(--ink-2);
+}
+
+.pattern-help code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.pattern-help-examples {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.pattern-help-examples button {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--ink-2);
+  text-align: left;
+}
+
+.pattern-help-examples button:hover,
+.pattern-help-examples button:focus-visible {
+  background: var(--accent-soft);
+  color: var(--ink);
+  box-shadow: none;
+}
+
+.pattern-help-examples code {
+  color: var(--ink);
+  font-weight: 560;
+}
+
+.pattern-help-syntax {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.pattern-help-syntax dt {
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  line-height: 1.9;
+  text-transform: uppercase;
+}
+
+.pattern-help-syntax dd {
+  margin: 0;
+  color: var(--ink-2);
+  line-height: 1.5;
 }
 
 .chips {
