@@ -1,5 +1,5 @@
 import type { FinderResult } from '../../../core/parts/finder/finder';
-import type { PatternError } from '../../../core/parts/pattern';
+import { TOO_COSTLY_MESSAGE, type PatternError } from '../../../core/parts/pattern';
 import { useLibrary } from '../../../state/library';
 import { LibraryCredit } from './LibraryCredit';
 import { LibraryNotice } from './LibraryNotice';
@@ -35,6 +35,7 @@ function Summary({ result, query, patternError, colourName, highlighted, onClear
             As a part pattern: {patternError.message} (at character {patternError.at + 1}).
           </span>
         )}
+        {result.tooCostly && <span className="find-hint">{TOO_COSTLY_MESSAGE}.</span>}
         {libraryLoading && <> · the LDraw library is still loading</>}
         {next && (
           <span className="find-hint">

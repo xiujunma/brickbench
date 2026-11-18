@@ -87,8 +87,9 @@ Each part it finds has all it gives.
 | `*` | any part, of any kind or none | any |
 
 A term with no kind letter, such as `2x4`, also matches any part. Kinds are
-capital letters, and a capital starting a word (`Brick`) is a word, not a
-kind.
+capital letters. A capital followed by a letter or a hyphen starts a word,
+not a kind, so `Brick`, `BAR` and `C-clip` are words (a cone without a clip
+is `C -clip`); the one exception is `Si`, an inverted slope.
 
 `S` may take an angle and `i`: `S45` is a 45° slope, `S45i` an inverted 45°
 slope, `Si` any inverted slope. Without `i`, a slope may be inverted or not;
@@ -136,8 +137,8 @@ quarter turns (not mirrored): `P[oooo]{2}` and `P[oo]{4}` both find the
 2 × 4 plate. The `#` cells of library parts match `o`, `.` and `#`, so
 `[oo]` finds library parts of that shape whatever their studs.
 
-A count cannot apply to a group that holds one, as in `(o*)*`. That keeps
-every match quick, whatever the pattern.
+A count cannot apply to a group that holds one, as in `(o*)*`, and no count
+may follow another, as in `o**`.
 
 ### Height
 
@@ -167,7 +168,8 @@ A **colour** is a palette name with hyphens for spaces (`:dark-bluish-grey`),
 a builder's name for one (`:grey`, `:clear`, `:gold`; `gray` as well), or an
 LDraw code (`:4`). Parts here come in every colour, so a colour leaves the
 parts found as they are; in the search box it picks the colour to build in,
-as words do: `P2x4 :red` is `red 2x4 plate`.
+as words do: `P2x4 :red` is `red 2x4 plate`, and `:red` alone, like `red`,
+only picks the colour.
 
 A **part number** may hold `*` for any run of characters and `?` for any one:
 `=30*`, `=3040?`. Case does not matter, and `.dat` may follow.
@@ -207,6 +209,7 @@ A pattern that does not read says what is wrong and where:
 | `P2x4 [oo` | A “[” needs its “]” |
 | `[(o*)*]` | A group with a count inside cannot be counted again: write (oo)* or o*, not (o*)* |
 | `[o**]` | A count cannot follow another count: write o*, not o** |
+| `C-clip` | Words of a name go in quotes: "c-clip" |
 | `[oo/(o/.)]` | A row ends only outside ( ): close the group before the “/” |
 | `[]` | Each row, and each choice in it, needs at least one cell |
 | `B1x2x5^15` | Give the height once: a third size in bricks (B1x2x5) or ^ and plates (B1x2^15) |
@@ -260,8 +263,8 @@ Library parts, whose studs are not known:
 
 The search box reads a query as a pattern when it has something only
 patterns have (one of `[ ] ^ = @ ! " | ( ) { } * + :`, a word starting with
-`-`, or a kind letter alone or before a size, as in `P2x4`) and reads as
-one. A size alone, such as `2x4`, stays words, which rank the plain parts
+`-`, or a kind letter not followed by a letter or a hyphen, as in `B`,
+`P2x4` and `Si`) and reads as one. `BAR` and `C-clip` stay words. A size alone, such as `2x4`, stays words, which rank the plain parts
 first. A query that looks like a pattern but does not read as one is
 searched as words, and if that finds nothing, the search box says what is
 wrong with the pattern.
@@ -272,7 +275,8 @@ library copy only when the pattern finds it and not the built-in part:
 
 The agent's `find_parts` reads patterns in its query the same way, and gives
 each part it finds its canonical pattern, so the agent knows where the part
-has studs.
+has studs. Its query may be as long as a pattern, so any part's pattern can
+be sent back.
 
 ## Grammar
 
@@ -311,7 +315,13 @@ words      = '"' { any character but '"' } '"' ;  (* “ and ” quote too *)
 ## Limits
 
 A pattern has at most 500 characters and nests `(` and `!` at most 32 deep.
-Sizes and counts go up to 256, heights to 1023 plates. Matching follows every
-position a top face can reach at once, without backtracking, and counts never
-nest, so a pattern takes time in proportion to its length times the part's
-grid at most.
+Sizes and counts go up to 256, heights to 1023 plates.
+
+Matching follows every position a top face can reach at once, without
+backtracking, and counts never nest. A count can still repeat its work from
+every position a `*` before it reached, so one search looks at no more than
+6 million grid positions. The heaviest likely patterns, such as
+`[(#|_)*]{1,256}` over the whole library, look at about 2 million. A search
+that would need more stops and says:
+
+> This pattern asks too much of a search: use smaller counts, or fewer *, + and | before them.

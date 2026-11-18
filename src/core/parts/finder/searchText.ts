@@ -1,4 +1,4 @@
-import { patternColour, readQuery, type PatternError } from '../pattern';
+import { patternColour, readQuery, type PartPattern, type PatternError } from '../pattern';
 import { colourInQuery } from './colourWords';
 
 export interface SearchText {
@@ -10,6 +10,10 @@ export interface SearchText {
   readonly patternError: PatternError | null;
 }
 
+function onlyColours({ root }: PartPattern): boolean {
+  return root.type === 'colour' || (root.type === 'and' && root.nodes.every((node) => node.type === 'colour'));
+}
+
 /**
  * What a search box query asks for. Words lose the colour they name ("red
  * 2x4 brick" builds in red); a part pattern keeps its text, and its colour
@@ -17,6 +21,8 @@ export interface SearchText {
  */
 export function readSearchText(query: string): SearchText {
   const reading = readQuery(query);
-  if (reading.kind === 'pattern') return { colorId: patternColour(reading.pattern), rest: query.trim(), patternError: null };
-  return { ...colourInQuery(query), patternError: reading.kind === 'broken' ? reading.error : null };
+  if (reading.kind !== 'pattern') return { ...colourInQuery(query), patternError: reading.kind === 'broken' ? reading.error : null };
+  const colorId = patternColour(reading.pattern);
+  // a colour alone (":red") only picks the colour, as "red" does
+  return { colorId, rest: onlyColours(reading.pattern) ? '' : query.trim(), patternError: null };
 }

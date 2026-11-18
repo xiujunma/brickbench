@@ -9,11 +9,11 @@
  *                                             does not record)
  *
  * Patterns are matched without backtracking, by following the set of
- * positions they can reach. Counts never nest (a counted group holds no
- * counts), so matching takes at most about the pattern's size times the
- * grid's, whoever wrote the pattern.
+ * positions they can reach, and counts never nest (a counted group holds
+ * no counts). A count can still repeat its work over every position a *
+ * before it reached, so searches give matching a WorkBudget to draw on.
  */
-import { PatternSyntaxError } from './errors';
+import { PatternSyntaxError, type WorkBudget } from './errors';
 
 /** Grid symbols each pattern cell accepts: a cell of unknown top is either. */
 const ACCEPTS: Readonly<Record<string, string>> = { o: 'o#', '.': '.#', '#': 'o.#', _: '_' };
@@ -96,7 +96,11 @@ class RowReader {
       this.i += 1;
       options.push(this.sequence(inGroup));
     }
-    return options.length === 1 ? (options[0] as CellPattern) : { type: 'alt', options };
+    if (options.length === 1) return options[0] as CellPattern;
+    // a choice of single cells is one cell taking any of theirs: (o|.) is [o.]
+    const cells = options.flatMap((option) => (option.type === 'cell' ? [option.accepts] : []));
+    if (cells.length === options.length) return { type: 'cell', accepts: [...new Set(cells.join(''))].join('') };
+    return { type: 'alt', options };
   }
 
   private sequence(inGroup: boolean): CellPattern {
@@ -188,29 +192,39 @@ function union(lists: readonly Positions[]): Positions {
   return [...new Set(lists.flat())];
 }
 
-/** The positions `pattern` can reach in `grid` from those in `from`. */
-function advance(pattern: CellPattern, grid: string, from: Positions): Positions {
+/** Where a search is matching: the grid, and the work it may still do. */
+interface Matching {
+  readonly grid: string;
+  readonly budget: WorkBudget | undefined;
+}
+
+/** The positions `pattern` can reach in the grid from those in `from`. */
+function advance(pattern: CellPattern, at: Matching, from: Positions): Positions {
+  const { grid } = at;
   switch (pattern.type) {
     case 'cell':
+      at.budget?.spend(from.length + 1);
       return from.filter((p) => p < grid.length && pattern.accepts.includes(grid[p] as string)).map((p) => p + 1);
     case 'rowBreak':
+      at.budget?.spend(from.length + 1);
       return from.filter((p) => grid[p] === ROW_BREAK).map((p) => p + 1);
     case 'seq':
-      return pattern.items.reduce((reached, item) => (reached.length === 0 ? reached : advance(item, grid, reached)), from);
+      return pattern.items.reduce((reached, item) => (reached.length === 0 ? reached : advance(item, at, reached)), from);
     case 'alt':
-      return union(pattern.options.map((option) => advance(option, grid, from)));
+      return union(pattern.options.map((option) => advance(option, at, from)));
     case 'repeat':
-      return advanceRepeat(pattern, grid, from);
+      return advanceRepeat(pattern, at, from);
   }
 }
 
-function advanceRepeat(pattern: Extract<CellPattern, { type: 'repeat' }>, grid: string, from: Positions): Positions {
+function advanceRepeat(pattern: Extract<CellPattern, { type: 'repeat' }>, at: Matching, from: Positions): Positions {
   let current = from;
-  for (let n = 0; n < pattern.min && current.length > 0; n++) current = advance(pattern.item, grid, current);
+  // the counted rounds go on from every position reached, which is where the work a budget bounds can grow
+  for (let n = 0; n < pattern.min && current.length > 0; n++) current = advance(pattern.item, at, current);
   const reached = new Set(current);
   // each round goes on only from positions not reached before, so this stops within the grid's length
   for (let n = pattern.min; n < pattern.max && current.length > 0; n++) {
-    current = advance(pattern.item, grid, current).filter((p) => !reached.has(p));
+    current = advance(pattern.item, at, current).filter((p) => !reached.has(p));
     for (const p of current) reached.add(p);
   }
   return [...reached];
@@ -222,9 +236,12 @@ function rowCount(grid: string): number {
   return rows;
 }
 
-/** Whether a whole grid ("oo/o_") matches the face. */
-export function matchesTopFace(face: TopFace, grid: string): boolean {
+/**
+ * Whether a whole grid ("oo/o_") matches the face. With a budget, the work
+ * is drawn from it, and PatternTooCostlyError ends a match that runs out.
+ */
+export function matchesTopFace(face: TopFace, grid: string, budget?: WorkBudget): boolean {
   const rows = rowCount(grid);
   if (rows < face.rows.min || rows > face.rows.max) return false;
-  return advance(face.cells, grid, [0]).includes(grid.length);
+  return advance(face.cells, { grid, budget }, [0]).includes(grid.length);
 }

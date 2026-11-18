@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { PatternSyntaxError } from './errors';
+import { PatternSyntaxError, PatternTooCostlyError, TOO_COSTLY_MESSAGE, WorkBudget } from './errors';
 import { MAX_REPEAT, matchesTopFace, parseTopFace, readRange, type Range } from './topFace';
 
 const ONCE: Range = { min: 1, max: 1 };
@@ -70,6 +70,22 @@ describe('top faces', () => {
     const grid = Array.from({ length: 48 }, () => row).join('/');
     expect(matchesTopFace(face('(#|o|.)*', { min: 1, max: MAX_REPEAT }), grid)).toBe(true);
     expect(matchesTopFace(face('(#|o|.)*_', { min: 1, max: MAX_REPEAT }), grid)).toBe(false);
+  });
+
+  it('merge a choice of single cells into one cell', () => {
+    expect(face('(o|.)').cells).toEqual({ type: 'cell', accepts: 'o#.' });
+    expect(face('(o|..)').cells.type).toBe('alt');
+  });
+
+  it('draw their work from a budget, and stop when it runs out', () => {
+    const grid = Array.from({ length: 16 }, () => 'o.'.repeat(8)).join('/');
+    const costly = face('(o|.)*(o.|.o){8}', { min: 1, max: MAX_REPEAT });
+    const budget = new WorkBudget(1_000_000);
+    expect(matchesTopFace(costly, grid, budget)).toBe(true);
+    expect(budget.spent).toBeGreaterThan(1000);
+    expect(budget.limit).toBe(1_000_000);
+    expect(() => matchesTopFace(costly, grid, new WorkBudget(1000))).toThrow(PatternTooCostlyError);
+    expect(() => matchesTopFace(costly, grid, new WorkBudget(1000))).toThrow(TOO_COSTLY_MESSAGE);
   });
 
   it('read counts and refuse ones that cannot be', () => {

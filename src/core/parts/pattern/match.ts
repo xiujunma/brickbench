@@ -1,11 +1,14 @@
 import { containsWord } from '../finder/text';
 import type { Dim, Footprint, Height, PartPattern, PartTerm, PatternNode } from './ast';
+import type { WorkBudget } from './errors';
 import type { Subject } from './subject';
 import { matchesTopFace } from './topFace';
 
 export interface MatchContext {
   /** The parts the user owns: what @owned keeps to. Without it, @owned matches nothing. */
   readonly owned?: ReadonlySet<string> | undefined;
+  /** The work matching may do, shared by every part a search tries; unlimited without one. */
+  readonly budget?: WorkBudget | undefined;
 }
 
 export function dimHas(dim: Dim, value: number): boolean {
@@ -46,20 +49,20 @@ export function globMatches(glob: string, text: string): boolean {
   return states.has(glob.length);
 }
 
-function matchesPart(term: PartTerm, subject: Subject): boolean {
+function matchesPart(term: PartTerm, subject: Subject, budget: WorkBudget | undefined): boolean {
   if (term.kind !== null && subject.kind !== term.kind) return false;
   if (term.angle !== null && subject.angle !== term.angle) return false;
   if (term.inverted && !subject.inverted) return false;
   if (term.footprint && !fits(term.footprint, subject.sizes)) return false;
   if (term.height && !tallEnough(term.height, subject.plates)) return false;
   const face = term.face;
-  return face === null || subject.grids.some((grid) => matchesTopFace(face, grid));
+  return face === null || subject.grids.some((grid) => matchesTopFace(face, grid, budget));
 }
 
 function matchesNode(node: PatternNode, subject: Subject, context: MatchContext): boolean {
   switch (node.type) {
     case 'part':
-      return matchesPart(node.term, subject);
+      return matchesPart(node.term, subject, context.budget);
     case 'feature':
       return subject.features.has(node.name) === node.wanted;
     case 'colour':

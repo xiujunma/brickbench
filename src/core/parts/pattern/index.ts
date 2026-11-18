@@ -2,7 +2,7 @@
 export type { Dim, Footprint, Height, Kind, PartPattern, PartTerm, PatternNode, Source } from './ast';
 export { DEFAULT_PLATES, KIND_NAMES } from './ast';
 export { describeGrid, describeSubject, type DescribeOptions } from './describe';
-export type { PatternError } from './errors';
+export { PatternTooCostlyError, TOO_COSTLY_MESSAGE, WorkBudget, type PatternError } from './errors';
 export { matchesPattern, type MatchContext } from './match';
 export { MAX_PATTERN_LENGTH, parsePattern, type ParseResult } from './parse';
 export { patternColour, readQuery, type QueryReading } from './query';

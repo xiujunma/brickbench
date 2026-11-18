@@ -3,6 +3,7 @@ import { createIdFactory } from '../core/model/ids';
 import { allBricks } from '../core/model/model';
 import { getPart, PARTS } from '../core/parts/catalog';
 import { createFinder } from '../core/parts/finder/finder';
+import { TOO_COSTLY_MESSAGE } from '../core/parts/pattern';
 import { createEditorStore } from '../state/store';
 import type { OwnedList } from '../core/inventory/stock';
 import { runTool, type AgentHost, type LookRequest } from './execute';
@@ -108,6 +109,20 @@ describe('running agent tools', () => {
     expect(await ids('R[o]^1')).toEqual(['round-plate-1x1']);
     const broken = await runTool(host, 'find_parts', { query: 'P2x4 [oo' });
     expect(broken).toMatchObject({ ok: true, data: { parts: [], note: expect.stringContaining('A “[” needs its “]” (at character 6)') } });
+    // words that only look like patterns stay words
+    expect(await ids('BAR')).toEqual([]);
+    expect(await runTool(host, 'find_parts', { query: 'BRICK 2x4', limit: 1 })).toMatchObject({ ok: true, data: { parts: [{ part: 'brick-2x4' }] } });
+  });
+
+  it('takes back any part’s own pattern, however long', async () => {
+    const { host } = setup();
+    const long = `*[${'#_'.repeat(60)}]^3`;
+    expect(await runTool(host, 'find_parts', { query: long })).toMatchObject({ ok: true, data: { parts: [], total: 0 } });
+  });
+
+  it('says when a pattern asks too much of a search', async () => {
+    const { host } = setup({ finder: () => createFinder(PARTS, [], 100) });
+    expect(await runTool(host, 'find_parts', { query: '[(o|.)*(oo|.o){2}]{1,16}' })).toEqual({ ok: false, error: `${TOO_COSTLY_MESSAGE}.` });
   });
 
   it('still builds with the basic parts when the library cannot load', async () => {

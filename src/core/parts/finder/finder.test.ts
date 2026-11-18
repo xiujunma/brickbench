@@ -251,6 +251,12 @@ describe('finding parts by part pattern', () => {
     expect(ids('brick 1x1 (headlight)')).toEqual(['ldraw:4070']);
   });
 
+  it('stops a pattern that asks more of a search than it may do', () => {
+    const thrifty = createFinder(PARTS, LIBRARY, 100);
+    expect(thrifty.find('[(o|.)*(oo|.o){2}]{1,16}')).toEqual({ items: [], fuzzy: false, pattern: true, tooCostly: true });
+    expect(thrifty.find('P2x4').items).toHaveLength(1);
+  });
+
   it('gives any part it knows its canonical pattern', () => {
     expect(finder.patternOf('plate-2x4')).toBe('P[oooo]{2}=3020');
     expect(finder.patternOf('ldraw:61252')).toBe('P[##]=61252');

@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 import { GRID_LIMIT, MAX_LAYER } from '../core/grid';
+import { MAX_PATTERN_LENGTH } from '../core/parts/pattern';
 
 /** Most bricks one call may place, move, paint or name. */
 export const MAX_BATCH = 2000;
@@ -45,7 +46,8 @@ export const TOOL_INPUTS = {
     limit: int.min(0).max(MAX_LIST_LIMIT).default(DEFAULT_LIST_LIMIT),
   },
   find_parts: {
-    query: z.string().trim().min(1).max(120),
+    // as long as a part pattern may be, so a part's own pattern can always be sent back
+    query: z.string().trim().min(1).max(MAX_PATTERN_LENGTH),
     limit: int.min(1).max(50).default(12),
     owned_only: z.boolean().default(false),
   },

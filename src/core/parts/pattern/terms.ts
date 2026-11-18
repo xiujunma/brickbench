@@ -66,7 +66,8 @@ export function readName(cursor: Cursor): PatternNode {
 
 /** Why the text here is not a term, with what was probably meant. */
 export function strayMessage(cursor: Cursor): string {
-  const c = cursor.peek() ?? '';
+  // the whole character, not half of an emoji's surrogate pair
+  const c = String.fromCodePoint(cursor.text.codePointAt(cursor.i) ?? 0);
   const word = /^[A-Za-z][A-Za-z-]*/.exec(cursor.rest())?.[0];
   if (word === undefined) {
     if (c === ']' || c === '}') return `This “${c}” closes nothing`;

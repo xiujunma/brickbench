@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'bun:test';
 import { codeSpans, markdownTables, type MarkdownTable } from '../../../testing/markdownTables';
 import { getPart, PARTS } from '../catalog';
-import { describeSubject, matchesPattern, parsePattern, subjectOf } from '.';
+import { describeSubject, matchesPattern, parsePattern, subjectOf, TOO_COSTLY_MESSAGE } from '.';
 
 const DOC = new URL('../../../../docs/part-patterns.md', import.meta.url).pathname;
 const TABLES = markdownTables(DOC);
@@ -55,6 +55,9 @@ const PROSE = [
   'B^15',
   'B1x1x5',
   '@library =3001',
+  'Si',
+  'C -clip',
+  '[(#|_)*]{1,256}',
 ];
 
 describe('docs/part-patterns.md', () => {
@@ -72,6 +75,10 @@ describe('docs/part-patterns.md', () => {
   it.each(PROSE)('%s, from the prose, is on the page and reads', (pattern) => {
     expect(readFileSync(DOC, 'utf8')).toContain(`\`${pattern}\``);
     expect(parsePattern(pattern).ok).toBe(true);
+  });
+
+  it('quotes the message a search too costly to finish gives', () => {
+    expect(readFileSync(DOC, 'utf8')).toContain(`> ${TOO_COSTLY_MESSAGE}.`);
   });
 
   it('means what it says of a kind’s height in a term of its own', () => {

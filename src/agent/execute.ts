@@ -13,7 +13,7 @@ import { allBricks } from '../core/model/model';
 import type { Brick, Model } from '../core/model/types';
 import { colourInQuery } from '../core/parts/finder/colourWords';
 import type { Finder } from '../core/parts/finder/finder';
-import { readQuery } from '../core/parts/pattern';
+import { readQuery, TOO_COSTLY_MESSAGE } from '../core/parts/pattern';
 import type { PartLookup } from '../core/parts/types';
 import type { EditorState } from '../state/types';
 import { BuildError, clearModel, describeModel, moveBricks, paintBricks, placeBricks, removeBricks, type Change } from './build';
@@ -94,6 +94,7 @@ async function findParts(host: AgentHost, input: ToolInput<'find_parts'>): Promi
   const lists = listsOf(host);
   const owned = lists.length > 0 ? ownedPartIds(lists) : undefined;
   const found = searchParts(host.finder(), input.query, input.limit, { only: input.owned_only ? owned : undefined, ownedParts: owned });
+  if (found.tooCostly) return { ok: false, error: `${TOO_COSTLY_MESSAGE}.` };
   const notes = [library ? null : LIBRARY_NOTE, input.owned_only && lists.length === 0 ? NO_LISTS_NOTE : null, patternNote(input.query)]
     .filter(Boolean)
     .join(' ');

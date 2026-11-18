@@ -16,12 +16,15 @@ const SIZE_SEPARATOR = /^[x×]/;
 /** A choice of sizes starting a size, as in (1|2)x4: anything else in ( ) is a group. */
 const SIZE_CHOICE = /^\(\d+(?:\|\d+)*\)[x×]/;
 
+/** A kind letter alone, or before what follows it in a part term: not the start of a word. */
+export const KIND_ALONE = /^(?:Si|[BPTSRCA])(?![A-Za-z-])/;
+
 /** Whether a part term starts here: a kind, *, a size, a top face or a height. */
 export function startsPartTerm(cursor: Cursor): boolean {
   const c = cursor.peek();
   if (c === undefined) return false;
-  // a kind letter starting a word is a word ("Brick"), except S with i for inverted
-  if (isKind(c)) return !/^[A-Z][a-z]/.test(cursor.rest()) || /^Si(?![a-z])/.test(cursor.rest());
+  // a kind letter followed by a letter or a hyphen is a word ("Brick", "BAR", "C-clip"), but Si is an inverted slope
+  if (isKind(c)) return KIND_ALONE.test(cursor.rest());
   if (c === '(') return SIZE_CHOICE.test(cursor.rest());
   return /[*\d{[^]/.test(c);
 }

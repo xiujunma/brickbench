@@ -129,6 +129,18 @@ describe('other terms', () => {
     expect(refusal('P]').message).toBe('This “]” closes nothing');
     expect(refusal('P }').message).toBe('This “}” closes nothing');
     expect(refusal('P %')).toEqual({ message: '“%” has no meaning here', at: 2 });
+    expect(refusal('P 🧱').message).toBe('“🧱” has no meaning here');
+  });
+});
+
+describe('kind letters', () => {
+  it('start a word when a letter or a hyphen follows them, except Si', () => {
+    expect(refusal('BAR')).toEqual({ message: 'Features take + or -: +bar', at: 0 });
+    expect(refusal('C-clip')).toEqual({ message: 'Words of a name go in quotes: "c-clip"', at: 0 });
+    expect(refusal('P2x4 TRAP').at).toBe(5);
+    expect(term('Si')).toMatchObject({ kind: 'S', inverted: true });
+    expect(root('C -clip')).toMatchObject({ type: 'and', nodes: [{ type: 'feature', wanted: false }, { type: 'part' }] });
+    expect(root('P+clip')).toMatchObject({ type: 'and', nodes: [{ type: 'feature', wanted: true }, { type: 'part' }] });
   });
 });
 

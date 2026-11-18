@@ -48,8 +48,9 @@ export function searchParts(
   query: string,
   limit: number,
   filters: FinderFilters = {},
-): { readonly parts: FoundPart[]; readonly total: number } {
-  const { items } = finder.find(query, filters);
+): { readonly parts: FoundPart[]; readonly total: number; readonly tooCostly?: true } {
+  const { items, tooCostly } = finder.find(query, filters);
+  if (tooCostly) return { parts: [], total: 0, tooCostly };
   const parts = items.slice(0, limit).map((item): FoundPart => {
     const pattern = finder.patternOf(item.partId);
     const found = { part: item.partId, name: item.name, w: item.w, d: item.d, h: item.h, source: item.source };

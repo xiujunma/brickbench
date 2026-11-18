@@ -2,7 +2,7 @@ import type { LDrawIndexEntry } from '../../ldraw/format';
 import { readQuery, type PartPattern } from '../pattern';
 import type { PartDef } from '../types';
 import { builtInItem, indexItem, libraryItem, type FinderItem, type Indexed, type PartSource } from './indexing';
-import { createPatternIndex } from './patternSearch';
+import { createPatternIndex, MAX_SEARCH_WORK } from './patternSearch';
 import { parseQuery, type ParsedQuery } from './query';
 import { browseRank, matches, rank, sortRanked, withCorrections } from './ranking';
 import type { Feature, HeightClass } from './tags';
@@ -29,6 +29,8 @@ export interface FinderResult {
   readonly fuzzy: boolean;
   /** The query was a part pattern (docs/part-patterns.md), not words. */
   readonly pattern?: boolean;
+  /** The pattern asked more work of the search than it may do, so nothing was found. */
+  readonly tooCostly?: boolean;
 }
 
 export interface FootprintCount {
@@ -92,9 +94,10 @@ function countFootprints(entries: readonly Indexed[], minimum: number): Footprin
 /**
  * One search over the built-in parts and the LDraw library: everyday words,
  * sizes written any way, nicknames, filters for size, height and features,
- * and close spellings when the words match nothing at all.
+ * close spellings when the words match nothing at all, and part patterns.
+ * `searchWork` bounds what one pattern search may do (see MAX_SEARCH_WORK).
  */
-export function createFinder(builtIns: readonly PartDef[], library: readonly LDrawIndexEntry[]): Finder {
+export function createFinder(builtIns: readonly PartDef[], library: readonly LDrawIndexEntry[], searchWork = MAX_SEARCH_WORK): Finder {
   const builtInNumbers = new Set(builtIns.map((p) => p.ldraw?.file.replace(/\.dat$/, '')).filter(Boolean));
   const entries: Indexed[] = [
     ...builtIns.map((part, i) => indexItem(builtInItem(part), part.keywords, i, false)),
@@ -103,12 +106,13 @@ export function createFinder(builtIns: readonly PartDef[], library: readonly LDr
   // every word any part's text has, to correct typos against
   const vocabulary = [...new Set(entries.flatMap((entry) => entry.haystack.split(' ')))].filter((word) => /^[a-z]{4,}$/.test(word));
   const byId = new Map(entries.map((entry) => [entry.item.partId, entry.item]));
-  const patterns = createPatternIndex(entries, builtIns, library);
+  const patterns = createPatternIndex(entries, builtIns, library, searchWork);
 
   const findPattern = (pattern: PartPattern, filters: FinderFilters): FinderResult => {
     // copies come back only when the pattern finds the copy and not the built-in part
-    const found = patterns.find(pattern, (entry) => passes(entry, filters, true), filters.ownedParts);
-    return { items: sortRanked(found.map((entry) => ({ entry, rank: browseRank(entry, filters.category) }))), fuzzy: false, pattern: true };
+    const result = patterns.find(pattern, (entry) => passes(entry, filters, true), filters.ownedParts);
+    if ('tooCostly' in result) return { items: [], fuzzy: false, pattern: true, tooCostly: true };
+    return { items: sortRanked(result.found.map((entry) => ({ entry, rank: browseRank(entry, filters.category) }))), fuzzy: false, pattern: true };
   };
 
   const find = (query: string, filters: FinderFilters = {}): FinderResult => {
