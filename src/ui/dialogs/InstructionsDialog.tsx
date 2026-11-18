@@ -83,7 +83,7 @@ export function InstructionsDialog() {
       };
       const pdf = await createInstructionsPdf(source, options, getPart, setProgress, controller.signal, partLibrary.meshes);
       downloadBlob(pdf, `${slugify(state.name)}-instructions.pdf`);
-      state.toast('Building instructions saved to your downloads.', 'success');
+      state.toast('Building instructions saved.', 'success');
       close('instructions');
     } catch (error: unknown) {
       if (isAbortError(error)) state.toast('Stopped making the instructions.');

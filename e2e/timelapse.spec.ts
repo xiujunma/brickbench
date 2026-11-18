@@ -35,7 +35,7 @@ test.describe('time-lapse video', () => {
     const bytes = await readFile(await download.path());
     expect(videoKind(bytes)).toBe(download.suggestedFilename().endsWith('.mp4') ? 'mp4' : 'webm');
     expect(bytes.length).toBeGreaterThan(10_000);
-    await expect(page.getByText('Time-lapse video saved to your downloads.')).toBeVisible();
+    await expect(page.getByText('Time-lapse video saved.')).toBeVisible();
     await expect(dialog).toBeHidden();
   });
 

@@ -78,7 +78,7 @@ export function TimelapseDialog() {
       };
       const video = await createTimelapse(source, options, getPart, setProgress, controller.signal, partLibrary.meshes);
       downloadBlob(video.blob, `${slugify(state.name)}-timelapse.${video.extension}`);
-      state.toast('Time-lapse video saved to your downloads.', 'success');
+      state.toast('Time-lapse video saved.', 'success');
       close('timelapse');
     } catch (error: unknown) {
       if (isAbortError(error)) state.toast('Stopped making the video.');
@@ -123,7 +123,7 @@ export function TimelapseDialog() {
         <div className="instructions-form" aria-busy={busy}>
           <p className="lede">
             A video of your model being built: each brick drops into place while the camera circles, and the finished model shows at the end. It is
-            made in your browser and saved to your downloads.
+            made on your device and saved as a file.
           </p>
           <fieldset className="field-group" disabled={busy}>
             <Choice legend="Order" choices={ORDERS} value={options.order} onChange={(order) => update({ order })} />

@@ -217,7 +217,7 @@ test.describe('building instructions', () => {
     await page.getByRole('button', { name: 'Make PDF' }).dblclick();
     await page.keyboard.press('?');
     await downloadPromise;
-    await expect(page.getByText('Building instructions saved to your downloads.')).toBeVisible();
+    await expect(page.getByText('Building instructions saved.')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Mouse & keyboard' })).toBeHidden();
   });
 
