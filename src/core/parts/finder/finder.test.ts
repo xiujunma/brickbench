@@ -223,3 +223,38 @@ describe('filtering parts', () => {
     expect(finder.footprints().length).toBeGreaterThan(footprints.length);
   });
 });
+
+describe('finding parts by part pattern', () => {
+  it('reads a pattern for words, and says it did', () => {
+    expect(finder.find('P2x4')).toMatchObject({ fuzzy: false, pattern: true });
+    expect(ids('P2x4')).toEqual(['plate-2x4']);
+    expect(finder.find('plate 2x4').pattern).toBeUndefined();
+    expect(ids('S45[oo/..]')).toEqual(['slope45-2x2']);
+    expect(ids('B1x(1|2)')).toEqual(['brick-1x1', 'brick-1x2', 'ldraw:4070']);
+  });
+
+  it('shows a library copy only when the pattern finds it and not the built-in part', () => {
+    expect(ids('=3001')).toEqual(['brick-2x4']);
+    expect(ids('@library =3001')).toEqual(['ldraw:3001']);
+    expect(ids('+cheese')).toEqual(['slope30-1x1', 'slope30-1x2', 'ldraw:7827']);
+  });
+
+  it('keeps to the filters, and to the owned parts for @owned', () => {
+    expect(ids('P', { source: 'library' })).toEqual(['ldraw:3794b', 'ldraw:61252', 'ldraw:60470']);
+    expect(ids('P1x1 +clip', { height: 'plate' })).toEqual(['ldraw:61252']);
+    expect(ids('@owned')).toEqual([]);
+    expect(ids('@owned B', { ownedParts: new Set(['brick-2x4', 'plate-2x4']) })).toEqual(['brick-2x4']);
+  });
+
+  it('searches as words a query that looks like a pattern but does not read', () => {
+    expect(finder.find('brick 1x1 (headlight)').pattern).toBeUndefined();
+    expect(ids('brick 1x1 (headlight)')).toEqual(['ldraw:4070']);
+  });
+
+  it('gives any part it knows its canonical pattern', () => {
+    expect(finder.patternOf('plate-2x4')).toBe('P[oooo]{2}=3020');
+    expect(finder.patternOf('ldraw:61252')).toBe('P[##]=61252');
+    expect(finder.patternOf('ldraw:3001')).toBe('B[####]{2}=3001');
+    expect(finder.patternOf('nothing')).toBeUndefined();
+  });
+});

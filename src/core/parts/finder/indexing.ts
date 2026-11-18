@@ -46,7 +46,7 @@ function mainName(name: string): string {
  * clip takes a second cell). A size bigger than the part itself is something
  * else, such as a wheel rim's millimetres, so the cells it takes win then.
  */
-function nominalFootprint(name: string, w: number, d: number): string {
+export function nominalFootprint(name: string, w: number, d: number): string {
   const size = /(?:^|\s)(\d+)x(\d+)(?![\d.])/.exec(mainName(name));
   const [a, b] = [Number(size?.[1]), Number(size?.[2])];
   const fits = size !== null && Math.min(a, b) <= Math.min(w, d) + 1 && Math.max(a, b) <= Math.max(w, d) + 1;
@@ -58,7 +58,7 @@ function nominalFootprint(name: string, w: number, d: number): string {
  * brick, or the height the name gives ("Brick 1 × 2 × 2" is six). Trusted
  * only near the real height, so a "Tile 2 × 2 Roadsign Base" stays tall.
  */
-function nominalPlates(name: string, plates: number): number {
+export function nominalPlates(name: string, plates: number): number {
   const match = /^(plate|tile|brick) \d+x\d+(?:x(\d+(?:\.\d+)?))?(?![\d.])/.exec(name);
   if (!match) return plates;
   const bricks = match[2] !== undefined ? Number(match[2]) : match[1] === 'brick' ? 1 : 1 / 3;

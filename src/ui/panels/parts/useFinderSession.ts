@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useReducer, type Dispatch } from 'react';
-import { colourInQuery } from '../../../core/parts/finder/colourWords';
 import type { Finder, FinderItem, FinderResult } from '../../../core/parts/finder/finder';
+import { readSearchText } from '../../../core/parts/finder/searchText';
+import type { PatternError } from '../../../core/parts/pattern';
 import {
   FRESH_SESSION,
   finderSession,
@@ -12,8 +13,10 @@ import {
 export interface FinderSession extends FinderSessionState {
   /** The words the results show, without a colour: a moment behind while typing runs ahead. */
   readonly shownQuery: string;
-  /** A palette colour named in the query ("red 2x4 brick"): tiles show it and picks build in it. */
+  /** A palette colour named in the query ("red 2x4 brick", "P2x4 :red"): tiles show it and picks build in it. */
   readonly colorId: number | null;
+  /** Why the shown query, which looks like a part pattern, does not read as one. */
+  readonly patternError: PatternError | null;
   /** Results to show, or null when not searching. */
   readonly result: FinderResult | null;
   readonly dispatch: Dispatch<FinderSessionAction>;
@@ -36,9 +39,13 @@ export function useFinderSession(finder: Finder, owned: ReadonlySet<string> | nu
   useEffect(() => {
     if (!owned && state.filters.owned) dispatch({ type: 'filters', filters: { ...state.filters, owned: undefined } });
   }, [owned, state.filters]);
-  const finderFilters = useMemo(() => (filters.owned && owned ? { ...filters, only: owned } : filters), [filters, owned]);
-  const live = useMemo(() => colourInQuery(query), [query]);
-  const shown = colourInQuery(useDeferredValue(query));
+  const finderFilters = useMemo(() => {
+    // @owned in a part pattern keeps to the owned parts whether or not the Owned filter is on
+    const withOwned = owned ? { ...filters, ownedParts: owned } : filters;
+    return filters.owned && owned ? { ...withOwned, only: owned } : withOwned;
+  }, [filters, owned]);
+  const live = useMemo(() => readSearchText(query), [query]);
+  const shown = readSearchText(useDeferredValue(query));
   const result = useMemo(
     () => (isSearching(shown.rest, filters) ? finder.find(shown.rest, finderFilters) : null),
     [finder, shown.rest, filters, finderFilters],
@@ -55,6 +62,7 @@ export function useFinderSession(finder: Finder, owned: ReadonlySet<string> | nu
     filters,
     shownQuery: shown.rest,
     colorId: live.colorId,
+    patternError: shown.patternError,
     result,
     dispatch,
     move: (step) => dispatch({ type: 'move', step, count: liveItems().length }),

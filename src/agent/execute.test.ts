@@ -57,7 +57,7 @@ describe('running agent tools', () => {
     expect(await runTool(host, 'get_model', {})).toMatchObject({ ok: true, data: { name: 'Untitled model', brick_count: 2 } });
     expect(await runTool(host, 'find_parts', { query: 'two by four brick', limit: 1 })).toEqual({
       ok: true,
-      data: { parts: [{ part: 'brick-2x4', name: 'Brick 2 × 4', w: 4, d: 2, h: 3, source: 'basic' }], total: expect.any(Number) },
+      data: { parts: [{ part: 'brick-2x4', name: 'Brick 2 × 4', w: 4, d: 2, h: 3, source: 'basic', pattern: 'B[oooo]{2}=3001' }], total: expect.any(Number) },
     });
     expect(await runTool(host, 'paint_bricks', { ids, color: 'Yellow' })).toEqual({ ok: true, data: { painted: 2, not_found: [] } });
     expect(await runTool(host, 'move_bricks', { ids, dx: 5 })).toEqual({ ok: true, data: { moved: 2, not_found: [] } });
@@ -92,6 +92,22 @@ describe('running agent tools', () => {
     expect(outcome).toMatchObject({ ok: true, data: { placed: 0, rejected: [{ index: 0, reason: expect.stringContaining('unknown part') }] } });
     await runTool(host, 'find_parts', { query: 'hinge' });
     expect(libraryLoads()).toBe(2);
+  });
+
+  it('finds parts by part pattern, and says when a pattern does not read', async () => {
+    const { host } = setup();
+    expect(await runTool(host, 'find_parts', { query: 'S45[oo/..]' })).toEqual({
+      ok: true,
+      data: { parts: [{ part: 'slope45-2x2', name: 'Slope 45° 2 × 2', w: 2, d: 2, h: 3, source: 'basic', pattern: 'S45[oo/..]^3=3039' }], total: 1 },
+    });
+    const ids = async (query: string): Promise<string[]> => {
+      const outcome = await runTool(host, 'find_parts', { query, limit: 50 });
+      return outcome.ok ? (outcome.data as { parts: { part: string }[] }).parts.map((p) => p.part) : [];
+    };
+    expect(await ids('B1x(1|2)')).toEqual(['brick-1x1', 'brick-1x2']);
+    expect(await ids('R[o]^1')).toEqual(['round-plate-1x1']);
+    const broken = await runTool(host, 'find_parts', { query: 'P2x4 [oo' });
+    expect(broken).toMatchObject({ ok: true, data: { parts: [], note: expect.stringContaining('A “[” needs its “]” (at character 6)') } });
   });
 
   it('still builds with the basic parts when the library cannot load', async () => {
@@ -191,8 +207,13 @@ describe("building with the user's own parts", () => {
     const { host } = setup({ ownedLists: () => MY_SETS });
     expect(await runTool(host, 'find_parts', { query: 'brick', limit: 2, owned_only: true })).toEqual({
       ok: true,
-      data: { parts: [{ part: 'brick-2x4', name: 'Brick 2 × 4', w: 4, d: 2, h: 3, source: 'basic', owned: [{ color: 4, color_name: 'Red', left: 2 }] }], total: 1 },
+      data: {
+        parts: [{ part: 'brick-2x4', name: 'Brick 2 × 4', w: 4, d: 2, h: 3, source: 'basic', pattern: 'B[oooo]{2}=3001', owned: [{ color: 4, color_name: 'Red', left: 2 }] }],
+        total: 1,
+      },
     });
+    // @owned keeps a part pattern to the user's parts, owned_only or not
+    expect(await runTool(host, 'find_parts', { query: '@owned B' })).toMatchObject({ ok: true, data: { parts: [{ part: 'brick-2x4' }], total: 1 } });
     const any = await runTool(host, 'find_parts', { query: 'brick 1x2', limit: 1 });
     expect(any).toMatchObject({ ok: true, data: { parts: [{ part: 'brick-1x2', owned: [] }] } });
   });

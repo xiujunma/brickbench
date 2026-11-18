@@ -45,6 +45,9 @@ export const HEIGHTS: readonly { readonly id: HeightClass; readonly label: strin
   { id: 'taller', label: 'Taller', test: (h) => h > 6 },
 ];
 
+/** The nicknames a part can have, such as "cheese" and "jumper". */
+export const NICKNAME_TAGS: readonly string[] = NICKNAMES.map((n) => n.tag);
+
 export function nicknamesOf(name: string): string[] {
   return NICKNAMES.filter((n) => n.pattern.test(name)).map((n) => n.tag);
 }

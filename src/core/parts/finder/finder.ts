@@ -1,6 +1,8 @@
 import type { LDrawIndexEntry } from '../../ldraw/format';
+import { readQuery, type PartPattern } from '../pattern';
 import type { PartDef } from '../types';
 import { builtInItem, indexItem, libraryItem, type FinderItem, type Indexed, type PartSource } from './indexing';
+import { createPatternIndex } from './patternSearch';
 import { parseQuery, type ParsedQuery } from './query';
 import { browseRank, matches, rank, sortRanked, withCorrections } from './ranking';
 import type { Feature, HeightClass } from './tags';
@@ -17,12 +19,16 @@ export interface FinderFilters {
   readonly feature?: Feature | undefined;
   /** Only these parts, such as the ones the user owns. */
   readonly only?: ReadonlySet<string> | undefined;
+  /** The parts the user owns: what @owned in a part pattern keeps to. */
+  readonly ownedParts?: ReadonlySet<string> | undefined;
 }
 
 export interface FinderResult {
   readonly items: readonly FinderItem[];
   /** Nothing matched as typed, so these are close spellings. */
   readonly fuzzy: boolean;
+  /** The query was a part pattern (docs/part-patterns.md), not words. */
+  readonly pattern?: boolean;
 }
 
 export interface FootprintCount {
@@ -35,19 +41,26 @@ export interface Finder {
   readonly count: number;
   /** The finder's view of one part, built-in or library, if it knows it. */
   get(partId: string): FinderItem | undefined;
+  /** Searches by words, or by a part pattern such as P2x4 or S45[oo/..] when the query is one. */
   find(query: string, filters?: FinderFilters): FinderResult;
+  /** A part's canonical pattern, such as P[oooo]{2}=3020, if the finder knows the part. */
+  patternOf(partId: string): string | undefined;
   /** Footprints that at least `minimum` parts have, smallest first. */
   footprints(minimum?: number): readonly FootprintCount[];
 }
 
-/** Source and category: where the user is looking, before any facet narrows it. */
-function inScope(entry: Indexed, filters: FinderFilters): boolean {
-  if (filters.source ? entry.item.source !== filters.source : entry.duplicate) return false;
+/**
+ * Source and category: where the user is looking, before any facet narrows
+ * it. Without a source, library copies of built-in parts are left out
+ * unless `withCopies`.
+ */
+function inScope(entry: Indexed, filters: FinderFilters, withCopies = false): boolean {
+  if (filters.source ? entry.item.source !== filters.source : entry.duplicate && !withCopies) return false;
   return filters.category === undefined || entry.item.category === filters.category;
 }
 
-function passes(entry: Indexed, filters: FinderFilters): boolean {
-  if (!inScope(entry, filters)) return false;
+function passes(entry: Indexed, filters: FinderFilters, withCopies = false): boolean {
+  if (!inScope(entry, filters, withCopies)) return false;
   if (filters.only && !filters.only.has(entry.item.partId)) return false;
   if (filters.footprint !== undefined && entry.footprint !== filters.footprint) return false;
   if (filters.height !== undefined && entry.height !== filters.height) return false;
@@ -90,8 +103,17 @@ export function createFinder(builtIns: readonly PartDef[], library: readonly LDr
   // every word any part's text has, to correct typos against
   const vocabulary = [...new Set(entries.flatMap((entry) => entry.haystack.split(' ')))].filter((word) => /^[a-z]{4,}$/.test(word));
   const byId = new Map(entries.map((entry) => [entry.item.partId, entry.item]));
+  const patterns = createPatternIndex(entries, builtIns, library);
+
+  const findPattern = (pattern: PartPattern, filters: FinderFilters): FinderResult => {
+    // copies come back only when the pattern finds the copy and not the built-in part
+    const found = patterns.find(pattern, (entry) => passes(entry, filters, true), filters.ownedParts);
+    return { items: sortRanked(found.map((entry) => ({ entry, rank: browseRank(entry, filters.category) }))), fuzzy: false, pattern: true };
+  };
 
   const find = (query: string, filters: FinderFilters = {}): FinderResult => {
+    const reading = readQuery(query);
+    if (reading.kind === 'pattern') return findPattern(reading.pattern, filters);
     const parsed = parseQuery(query);
     const candidates = entries.filter((entry) => passes(entry, filters));
     if (parsed.terms.length === 0) {
@@ -110,6 +132,7 @@ export function createFinder(builtIns: readonly PartDef[], library: readonly LDr
     count: entries.filter((e) => !e.duplicate).length,
     get: (partId) => byId.get(partId),
     find,
+    patternOf: (partId) => patterns.describe(partId),
     footprints: (minimum = 1) => countFootprints(entries, minimum),
   };
 }

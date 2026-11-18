@@ -43,6 +43,21 @@ test.describe('finding parts', () => {
     await expect(page.getByRole('region', { name: 'Colour' }).locator('strong')).toHaveText('Yellow');
   });
 
+  test('finds parts by part pattern, and says why a pattern does not read', async ({ page }) => {
+    await freshEditor(page);
+    await page.keyboard.press('/');
+    await page.keyboard.type('S45[oo/..] :red');
+    await expect(page.locator('.find-note')).toContainText('by part pattern');
+    await expect(page.locator('.find-hint')).toContainText('Slope 45° 2 × 2 in Red');
+    await page.keyboard.press('Enter');
+    await expect(buildingWith(page)).toContainText('Slope 45° 2 × 2');
+    await expect(page.getByRole('region', { name: 'Colour' }).locator('strong')).toHaveText('Red');
+
+    await page.keyboard.press('/');
+    await page.keyboard.type('S45[oo/..');
+    await expect(page.locator('.find-note')).toContainText('As a part pattern: A “[” needs its “]” (at character 4).');
+  });
+
   test('moves through results with the arrow keys', async ({ page }) => {
     await freshEditor(page);
     await page.keyboard.press('/');

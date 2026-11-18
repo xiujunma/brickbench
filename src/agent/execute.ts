@@ -13,6 +13,7 @@ import { allBricks } from '../core/model/model';
 import type { Brick, Model } from '../core/model/types';
 import { colourInQuery } from '../core/parts/finder/colourWords';
 import type { Finder } from '../core/parts/finder/finder';
+import { readQuery } from '../core/parts/pattern';
 import type { PartLookup } from '../core/parts/types';
 import type { EditorState } from '../state/types';
 import { BuildError, clearModel, describeModel, moveBricks, paintBricks, placeBricks, removeBricks, type Change } from './build';
@@ -81,12 +82,21 @@ async function lookAt(host: AgentHost, input: ToolInput<'look'>): Promise<ToolOu
 
 const listsOf = (host: AgentHost): readonly OwnedList[] => host.ownedLists?.() ?? [];
 
+/** Why a query that looks like a part pattern was searched as words instead. */
+function patternNote(query: string): string | null {
+  const reading = readQuery(query);
+  if (reading.kind !== 'broken') return null;
+  return `As a part pattern the query does not read, so it was searched as words: ${reading.error.message} (at character ${reading.error.at + 1}).`;
+}
+
 async function findParts(host: AgentHost, input: ToolInput<'find_parts'>): Promise<ToolOutcome> {
   const library = await withLibrary(host);
   const lists = listsOf(host);
-  const only = input.owned_only && lists.length > 0 ? ownedPartIds(lists) : undefined;
-  const found = searchParts(host.finder(), input.query, input.limit, { only });
-  const notes = [library ? null : LIBRARY_NOTE, input.owned_only && lists.length === 0 ? NO_LISTS_NOTE : null].filter(Boolean).join(' ');
+  const owned = lists.length > 0 ? ownedPartIds(lists) : undefined;
+  const found = searchParts(host.finder(), input.query, input.limit, { only: input.owned_only ? owned : undefined, ownedParts: owned });
+  const notes = [library ? null : LIBRARY_NOTE, input.owned_only && lists.length === 0 ? NO_LISTS_NOTE : null, patternNote(input.query)]
+    .filter(Boolean)
+    .join(' ');
   // with the user's sets known, each part says which of its colours they own and how many are left
   const counts = lists.length > 0 ? tally(lists, allBricks(modelOf(host)), host.lookup) : null;
   const parts = counts ? found.parts.map((p) => ({ ...p, owned: ownedColours(p.part, counts, host.lookup) })) : found.parts;

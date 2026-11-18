@@ -36,14 +36,24 @@ export function paletteList(): { readonly id: number; readonly name: string; rea
   return COLORS.map((c) => ({ id: c.id, name: c.name, finish: c.finish }));
 }
 
-/** Parts matching a search, best first, with their sizes. */
+/** A part found by find_parts: its sizes, and its canonical part pattern (P[oooo]{2}=3020), whose [ ] is its top face. */
+export interface FoundPart extends PartInfo {
+  readonly source: string;
+  readonly pattern?: string;
+}
+
+/** Parts matching a search by words or by part pattern, best first, with their sizes and patterns. */
 export function searchParts(
   finder: Finder,
   query: string,
   limit: number,
   filters: FinderFilters = {},
-): { readonly parts: (PartInfo & { readonly source: string })[]; readonly total: number } {
+): { readonly parts: FoundPart[]; readonly total: number } {
   const { items } = finder.find(query, filters);
-  const parts = items.slice(0, limit).map((item) => ({ part: item.partId, name: item.name, w: item.w, d: item.d, h: item.h, source: item.source }));
+  const parts = items.slice(0, limit).map((item): FoundPart => {
+    const pattern = finder.patternOf(item.partId);
+    const found = { part: item.partId, name: item.name, w: item.w, d: item.d, h: item.h, source: item.source };
+    return pattern === undefined ? found : { ...found, pattern };
+  });
   return { parts, total: items.length };
 }

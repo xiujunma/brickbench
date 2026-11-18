@@ -93,6 +93,7 @@ export function PartsPanel({ onPicked }: Props) {
           {...tile}
           result={result}
           query={session.shownQuery}
+          patternError={session.patternError}
           colourName={colourName}
           highlighted={highlighted}
           limit={session.limit}

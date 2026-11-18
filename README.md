@@ -11,6 +11,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 - **Finding the right part:**
   - **One search covers every part.** Type sizes any way ("2x4", "2 by 4", "two by four"), hobby nicknames ("cheese", "jumper", "macaroni", "SNOT"), US spellings ("tire", "windshield") or a part number, including BrickLink's. Sizes work either way round ("4x2" finds 2 × 4). Name a colour too ("red 2x4 brick") and the part is built in it. If you mistype, close spellings show instead.
   - **Size, height and shape filters** narrow thousands of parts to a handful: say 1 × 2, 1 plate, with a clip.
+  - **Part patterns** describe parts the way regular expressions describe text, stud by stud: `S45[oo/..]` is a 45° slope with its studs at the back, `B1x(1|2)` a 1 × 1 or 1 × 2 brick. See [Part patterns](#part-patterns).
   - **Mine** keeps your starred favourites, recent picks and the parts already in your model. Favourites and picks stay in this browser, shared by its tabs.
   - **Keyboard first:** press `/`, type, use ↑ ↓ and press Enter to build with the part.
 - **Build with the parts you own:** add the parts lists of your sets from Rebrickable or BrickLink, and BrickBench counts how many of each part you have left as you build. The parts list shows what's missing, and an agent can build from your parts too. See [Building with the parts you own](#building-with-the-parts-you-own).
@@ -126,6 +127,26 @@ Set how many copies of a set you have, and BrickBench counts with all of them:
 
 Your lists stay in this browser, like favourites, and are shared by its tabs.
 
+## Part patterns
+
+Type a part pattern in the search box to say exactly which parts you mean. A capital letter gives the kind, then a size, a top face and a height can follow:
+
+| Pattern | Finds |
+| --- | --- |
+| `P2x4` | 2 × 4 plates |
+| `B1x(1\|2)` | 1 × 1 and 1 × 2 bricks |
+| `B1x2x5` | 1 × 2 bricks five bricks tall |
+| `S45 2x2` | 2 × 2 slopes at 45° |
+| `S45[oo/..]` | 45° slopes with two studs at the back and the slope at the front |
+| `T[..]{2}` | tiles with two rows of two smooth cells |
+| `[o_/oo]` | anything shaped like a corner plate, with studs on top |
+| `P1x2 +clip` | 1 × 2 plates with a clip |
+| `@owned S :red` | slopes from your sets, to build in red |
+
+In the brackets, rows go from the back of the part to the front: `o` is a stud, `.` a cell without one, `_` a cell the part leaves out and `#` any cell, with `*`, `+`, `?`, `{2,4}`, `( | )` and `[ ]` as in regular expressions. Terms side by side must all hold, `|` gives a choice and `!` a "not". Library parts have `#` for their cells, since the library doesn't say where their studs are.
+
+Agents get each part's own pattern from `find_parts`, such as `S45[oo/..]^3=3039`, so they know where a part has its studs. [docs/part-patterns.md](docs/part-patterns.md) defines the language in full; its tests check every example there.
+
 ## Desktop app
 
 BrickBench also runs as a desktop app, built with [Electron](https://www.electronjs.org): the same app, with the parts library inside it, so it works offline.
@@ -169,7 +190,7 @@ then ask Claude Code to build something in BrickBench. Any MCP client can use th
 | Tool | What it does |
 |---|---|
 | `get_model` | The model's name, size, parts and colours, and its bricks with their ids, optionally only those in a region |
-| `find_parts` | Searches parts like the search box does, and returns part ids with their sizes; with your sets added, also the colours you own and how many are left, or only your parts |
+| `find_parts` | Searches parts like the search box does, by words or [part pattern](#part-patterns), and returns part ids with their sizes and patterns; with your sets added, also the colours you own and how many are left, or only your parts |
 | `list_colors` | The colours, with names and LDraw codes |
 | `list_owned_parts` | The parts of your sets, each part and colour with how many you own, the model uses and are left |
 | `place_bricks` | Places up to 2,000 parts at once; refuses any that would overlap or leave the build area, with the reason, and points out bricks with nothing holding them up and parts the model now uses more of than you own |
@@ -273,7 +294,7 @@ TypeScript, [three.js](https://threejs.org) for rendering, React for the panels,
 ```
 src/
   core/       pure logic, no three.js: units and rotation, colours, part catalogue
-              and part finder (search, nicknames, filters),
+              and part finder (search, nicknames, filters, part patterns),
               immutable model operations, spatial index, picking and placement,
               undo history, file format, LDraw and Studio import, LDraw and
               parts-list export, and
