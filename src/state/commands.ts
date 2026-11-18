@@ -33,7 +33,7 @@ function errorMessage(error: unknown): string {
 export function saveModelFile(): void {
   const { name, history, settings, toast } = state();
   downloadText(serializeDocument({ name, model: history.present, settings }), `${slugify(name)}${MODEL_EXTENSION}`, 'application/json');
-  toast('Model saved to your downloads.', 'success');
+  toast('Model saved.', 'success');
 }
 
 /** Parses a model, loading the LDraw library first if it uses library parts (or they would be dropped). */
@@ -136,7 +136,7 @@ export function exportPartsCsv(): void {
   // with the user's sets added, the list says how many of each they have and still need
   const csv = partsListCsv(lists.length > 0 ? allotStock(rows, ownedCounts(lists), getPart) : rows);
   downloadText(csv, `${slugify(name)}-parts.csv`, 'text/csv');
-  toast('Parts list downloaded.', 'success');
+  toast('Parts list saved.', 'success');
 }
 
 export async function exportGlbFile(): Promise<void> {
