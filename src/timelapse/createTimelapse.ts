@@ -91,7 +91,7 @@ export async function createTimelapse(
     signal,
   );
   if (!codec) throw new Error('This browser cannot make videos. Try a recent Chrome, Edge or Safari.');
-  if (options.counter) await captionFont();
+  if (options.counter) await untilAborted(captionFont(), signal);
 
   const format = codec === 'avc' ? new media.Mp4OutputFormat({ fastStart: 'in-memory' }) : new media.WebMOutputFormat();
   const output = new media.Output({ format, target: new media.BufferTarget() });
@@ -110,21 +110,23 @@ export async function createTimelapse(
 
     const video = new media.CanvasSource(renderer.canvas, { codec, quality: media.QUALITY_HIGH });
     output.addVideoTrack(video, { frameRate: timeline.frameRate });
-    await output.start();
+    await untilAborted(output.start(), signal);
     const breathe = breather();
     const last = timeline.frames - 1;
     for (let frame = 0; frame <= last; frame++) {
       const bricks = bricksAt(frame, ordered, timeline);
       const caption = options.counter ? counterText(bricks.shown, ordered.length) : null;
       renderer.render(bricks, () => studsAt(studs, bricks.landed.length), cameraAt(orbit, frame / last), caption);
-      // waiting here keeps memory flat: the encoder takes frames as fast as it can encode them
-      await video.add(frame / timeline.frameRate, 1 / timeline.frameRate);
+      // waiting here keeps memory flat: the encoder takes frames as fast as it can encode them. A slow
+      // encoder (software, on a busy machine) can hold a frame for seconds, so Stop doesn't wait for it:
+      // the output is cancelled below, encoder and all
+      await untilAborted(video.add(frame / timeline.frameRate, 1 / timeline.frameRate), signal);
       progress(frame + 1, `Filming frame ${frame + 1} of ${timeline.frames}…`);
       await breathe();
       throwIfAborted(signal);
     }
     progress(timeline.frames, 'Saving the video…');
-    await output.finalize();
+    await untilAborted(output.finalize(), signal);
     // Stop pressed while the last frames were encoded still means stop
     throwIfAborted(signal);
     const buffer = output.target.buffer;

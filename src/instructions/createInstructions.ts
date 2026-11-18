@@ -114,7 +114,7 @@ function partArt(key: string, lookup: PartLookup, thumbnails: ThumbnailRenderer)
 export function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
   if (!signal) return work;
   return new Promise((resolve, reject) => {
-    const stop = (): void => reject(new DOMException('Making the instructions was stopped.', 'AbortError'));
+    const stop = (): void => reject(new DOMException('Stopped.', 'AbortError'));
     if (signal.aborted) {
       stop();
       return;
