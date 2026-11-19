@@ -24,7 +24,8 @@ jobs:
         include:
           # nothing in the app is compiled per architecture, so Apple silicon builds both Macs' apps
           - name: macOS (Apple silicon and Intel)
-            os: macos-14
+            # the newest image: GitHub retires the older ones (macos-14 is gone)
+            os: macos-latest
             flags: --mac --arm64 --x64
             files: release/*.dmg
           - name: Windows
