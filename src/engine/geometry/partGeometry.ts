@@ -2,10 +2,11 @@ import type { BufferGeometry } from 'three';
 import { PLATE_HEIGHT, STUD_HEIGHT, STUD_RADIUS } from '../../core/grid';
 import { archCurve } from '../../core/parts/arch';
 import type { PartDef } from '../../core/parts/types';
-import { loft, type LoftAxes } from './loft';
+import { insetContour, loft, type LoftAxes } from './loft';
 import { MeshBuilder, type V3 } from './meshBuilder';
-import { buildPath, roundedRect, type Corner } from './path';
+import { buildPath, roundedRect, type Corner, type PathPoint } from './path';
 import { revolve } from './revolve';
+import { addBoxUnderside, addColumnUnderside, addLatheCavity, addSlopeUnderside, addTube, cavityOf, floorReach, TOP, tubeSpots, WALL, type P2 } from './underside';
 
 /** Inset on every side so neighbouring bricks show a hairline seam (0.1 mm). */
 export const BRICK_GAP = 0.0125;
@@ -50,10 +51,16 @@ export function buildStudGeometry(detail: StudDetail = STUD_DETAIL): BufferGeome
   return builder.build();
 }
 
-function addBox(builder: MeshBuilder, part: PartDef, height: number): void {
-  const outline = buildPath(roundedRect(part.w / 2 - BRICK_GAP, part.d / 2 - BRICK_GAP, BEVEL), BEVEL_SEGMENTS, true);
-  loft(builder, outline, ALONG_Y, { from: 0, to: height, bevel: BEVEL, bevelSegments: BEVEL_SEGMENTS });
+/** A box part; hollow underneath, with tubes, unless it only stands in for a library part's mesh. */
+function addBox(builder: MeshBuilder, part: PartDef, height: number, hollow: boolean): void {
+  const half: readonly [number, number] = [part.w / 2 - BRICK_GAP, part.d / 2 - BRICK_GAP];
+  const outline = buildPath(roundedRect(half[0], half[1], BEVEL), BEVEL_SEGMENTS, true);
+  loft(builder, outline, ALONG_Y, { from: 0, to: height, bevel: BEVEL, bevelSegments: BEVEL_SEGMENTS, openFrom: hollow });
+  if (hollow) addBoxUnderside(builder, part.w, part.d, half, height, insetContour(outline, BEVEL));
 }
+
+/** The flat stretch of a cross-section's floor, between its rounded corners. */
+const onFloor = (a: PathPoint, b: PathPoint): boolean => Math.abs(a.v) < 1e-9 && Math.abs(b.v) < 1e-9 && a.nv < -0.999 && b.nv < -0.999;
 
 /** Side profile of a slope in (z, y), counter-clockwise; stud rows at -Z. */
 function slopeCorners(part: PartDef, height: number, run: number, inverted: boolean): Corner[] {
@@ -82,10 +89,18 @@ function slopeCorners(part: PartDef, height: number, run: number, inverted: bool
   ];
 }
 
+/** A slope, hollow underneath: the cavity follows its profile, opening where its underside is flat on the floor. */
 function addSlope(builder: MeshBuilder, part: PartDef, height: number, run: number, inverted: boolean): void {
-  const outline = buildPath(slopeCorners(part, height, run, inverted), BEVEL_SEGMENTS, true);
+  const corners = slopeCorners(part, height, run, inverted);
+  const outline = buildPath(corners, BEVEL_SEGMENTS, true);
   const half = part.w / 2 - BRICK_GAP;
-  loft(builder, outline, ALONG_X, { from: -half, to: half, bevel: BEVEL, bevelSegments: BEVEL_SEGMENTS });
+  const cavity = cavityOf(corners.map((c) => [c.u, c.v] as const), height);
+  loft(builder, outline, ALONG_X, { from: -half, to: half, bevel: BEVEL, bevelSegments: BEVEL_SEGMENTS, openEdge: cavity ? onFloor : undefined });
+  if (!cavity) return;
+  // the floor the loft leaves open, between its rounded corners and inside the bevels at the ends
+  const floor = outline.filter((p, i) => onFloor(p, outline[(i + 1) % outline.length]!) || onFloor(outline[(i - 1 + outline.length) % outline.length]!, p));
+  const z = floor.map((p) => p.u);
+  addSlopeUnderside(builder, part.w, part.d, cavity, half - WALL, { half: half - BEVEL, z0: Math.min(...z), z1: Math.max(...z) });
 }
 
 /** Front profile of an arch in (x, y), counter-clockwise around the solid. */
@@ -115,30 +130,71 @@ function archCorners(part: PartDef, height: number, span: number, rise: number):
   ];
 }
 
+/** An arch, each leg hollow underneath like a 1 × 1 brick: the solid over a leg runs the arch's full height. */
 function addArch(builder: MeshBuilder, part: PartDef, height: number, span: number, rise: number): void {
   const outline = buildPath(archCorners(part, height, span, rise), BEVEL_SEGMENTS, true);
   const half = part.d / 2 - BRICK_GAP;
-  loft(builder, outline, ALONG_Z, { from: -half, to: half, bevel: BEVEL, bevelSegments: BEVEL_SEGMENTS });
+  loft(builder, outline, ALONG_Z, { from: -half, to: half, bevel: BEVEL, bevelSegments: BEVEL_SEGMENTS, openEdge: onFloor });
+  const outer = part.w / 2 - BRICK_GAP;
+  const legs: readonly (readonly [number, number])[] = [
+    [-outer, -span / 2],
+    [span / 2, outer],
+  ];
+  for (const [left, right] of legs) {
+    // the floor the loft leaves open: the leg's own, between its rounded corners and inside the bevels at the ends
+    const floor = outline.filter((p, i) => p.u >= left && p.u <= right && (onFloor(p, outline[(i + 1) % outline.length]!) || onFloor(outline[(i - 1 + outline.length) % outline.length]!, p)));
+    const x = floor.map((p) => p.u);
+    addColumnUnderside(
+      builder,
+      { x0: Math.min(...x), x1: Math.max(...x), z0: -(half - BEVEL), z1: half - BEVEL },
+      { x0: left + WALL, x1: right - WALL, z0: -(half - WALL), z1: half - WALL },
+      height - TOP,
+    );
+  }
 }
 
+const CONE_SKIRT = 0.16;
+
+/** A cone, hollow inside along its slope, as the real one is. */
+function addCone(builder: MeshBuilder, radius: number, height: number, segments: number): void {
+  const section: P2[] = [
+    [0, 0],
+    [radius, 0],
+    [radius, CONE_SKIRT],
+    [STUD_RADIUS + 0.03, height],
+    [0, height],
+  ];
+  const cavity = cavityOf(section, height, (p, q) => (Math.abs(p[1]) < 1e-9 && Math.abs(q[1]) < 1e-9) || (p[0] === 0 && q[0] === 0));
+  const corners: Corner[] = [
+    { u: cavity ? floorReach(cavity) : 0, v: 0 },
+    { u: radius, v: 0, radius: BEVEL },
+    { u: radius, v: CONE_SKIRT, radius: BEVEL },
+    { u: STUD_RADIUS + 0.03, v: height, radius: BEVEL },
+    { u: 0, v: height },
+  ];
+  revolve(builder, buildPath(corners, BEVEL_SEGMENTS, false), segments);
+  if (cavity) addLatheCavity(builder, cavity, segments);
+}
+
+/** A round part, hollow underneath; a 2 × 2 has a tube in the middle. */
 function addRound(builder: MeshBuilder, part: PartDef, height: number, profile: 'cylinder' | 'cone'): void {
   const radius = Math.min(part.w, part.d) / 2 - BRICK_GAP;
-  const corners: Corner[] =
-    profile === 'cone'
-      ? [
-          { u: 0, v: 0 },
-          { u: radius, v: 0, radius: BEVEL },
-          { u: radius, v: 0.16, radius: BEVEL },
-          { u: STUD_RADIUS + 0.03, v: height, radius: BEVEL },
-          { u: 0, v: height },
-        ]
-      : [
-          { u: 0, v: 0 },
-          { u: radius, v: 0, radius: BEVEL },
-          { u: radius, v: height, radius: BEVEL },
-          { u: 0, v: height },
-        ];
-  revolve(builder, buildPath(corners, BEVEL_SEGMENTS, false), Math.max(24, Math.round(radius * 40)));
+  const segments = Math.max(24, Math.round(radius * 40));
+  if (profile === 'cone') {
+    addCone(builder, radius, height, segments);
+    return;
+  }
+  const ceiling = height - TOP;
+  const corners: Corner[] = [
+    { u: 0, v: ceiling },
+    { u: radius - WALL, v: ceiling, mode: 'sharp' },
+    { u: radius - WALL, v: 0, mode: 'sharp' },
+    { u: radius, v: 0, radius: BEVEL },
+    { u: radius, v: height, radius: BEVEL },
+    { u: 0, v: height },
+  ];
+  revolve(builder, buildPath(corners, BEVEL_SEGMENTS, false), segments);
+  for (const [x, z] of tubeSpots(part.w, part.d).tubes) addTube(builder, x, z, ceiling);
 }
 
 function addBody(builder: MeshBuilder, part: PartDef): void {
@@ -146,7 +202,7 @@ function addBody(builder: MeshBuilder, part: PartDef): void {
   const shape = part.shape;
   switch (shape.kind) {
     case 'box':
-      addBox(builder, part, height);
+      addBox(builder, part, height, true);
       return;
     case 'slope':
       addSlope(builder, part, height, shape.run, shape.inverted);
@@ -159,7 +215,7 @@ function addBody(builder: MeshBuilder, part: PartDef): void {
       return;
     case 'mesh':
       // library parts bring their own mesh; this box stands in while it loads
-      addBox(builder, part, height);
+      addBox(builder, part, height, false);
       return;
   }
 }

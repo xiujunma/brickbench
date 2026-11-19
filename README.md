@@ -6,7 +6,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 
 ## Features
 
-- **87 basic parts in six families:** bricks (including tall 1×1×3 to 1×2×5), plates up to 16×16, tiles, slopes (45°, 33°, 65°, inverted, cheese), round parts and cones, and arches, all generated in code.
+- **87 basic parts in six families:** bricks (including tall 1×1×3 to 1×2×5), plates up to 16×16, tiles, slopes (45°, 33°, 65°, inverted, cheese), round parts and cones, and arches, all generated in code, and hollow underneath with tubes and pins as real bricks are.
 - **The LDraw community parts library:** over 7,000 more parts, from Technic beams and hinges to wheels with their tyres, windows, doors and minifigure accessories, converted from the [LDraw](https://www.ldraw.org) library when the app is built. Parts made in several colours keep the colours they fix, so a wheel's tyre stays black whatever colour you build the wheel in. Each takes up only the space its shape fills, so a corner plate leaves its corner free and an arch its opening, and each mesh loads the first time you use it.
 - **Finding the right part:**
   - **One search covers every part.** Type sizes any way ("2x4", "2 by 4", "two by four"), hobby nicknames ("cheese", "jumper", "macaroni", "SNOT"), US spellings ("tire", "windshield") or a part number, including BrickLink's. Sizes work either way round ("4x2" finds 2 × 4). Name a colour too ("red 2x4 brick") and the part is built in it. If you mistype, close spellings show instead.
@@ -359,10 +359,9 @@ e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 
 - Connections beyond the stud grid: library parts snap to whole studs and plates, so hinges don't swing, Technic pins don't plug into holes, minifigures don't assemble and half-stud offsets (jumper plates) aren't possible
 - Printed library parts (printed tiles, minifigure faces and torsos)
-- Hollow undersides and tubes on the basic parts (library parts have them)
 - Ambient occlusion and a photoreal render mode
 - Editing instruction steps by hand, sub-assemblies and per-step camera angles (steps are planned automatically)
-- Accounts, sharing and a gallery
+- Accounts and a gallery (models are shared by file or by link for now)
 
 ## Privacy
 

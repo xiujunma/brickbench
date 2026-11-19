@@ -15,6 +15,13 @@ export interface LoftOptions {
   /** Radius of the rounded edge around both end caps. */
   readonly bevel: number;
   readonly bevelSegments: number;
+  /** Leave the cap at `from` open, as under a hollow part. Default false. */
+  readonly openFrom?: boolean;
+  /**
+   * Outline edges to leave open between the bevels: the stretch where the
+   * outline is not pulled in, so the opening is flat (a slope's underside).
+   */
+  readonly openEdge?: (a: PathPoint, b: PathPoint) => boolean;
 }
 
 const DEDUPE = 1e-7;
@@ -56,7 +63,8 @@ function rings(options: LoftOptions): Ring[] {
   return out;
 }
 
-function cap(builder: MeshBuilder, outline: readonly PathPoint[], axes: LoftAxes, w: number, inset: number, sign: number): void {
+/** The outline pulled in by `inset` along its normals, without repeated points: an end cap's edge. */
+export function insetContour(outline: readonly PathPoint[], inset: number): Vector2[] {
   const contour: Vector2[] = [];
   for (const p of outline) {
     const next = new Vector2(p.u - p.nu * inset, p.v - p.nv * inset);
@@ -64,6 +72,11 @@ function cap(builder: MeshBuilder, outline: readonly PathPoint[], axes: LoftAxes
     if (!last || last.distanceTo(next) > DEDUPE) contour.push(next);
   }
   while (contour.length > 1 && contour[0]!.distanceTo(contour[contour.length - 1]!) <= DEDUPE) contour.pop();
+  return contour;
+}
+
+function cap(builder: MeshBuilder, outline: readonly PathPoint[], axes: LoftAxes, w: number, inset: number, sign: number): void {
+  const contour = insetContour(outline, inset);
   if (contour.length < 3) return;
 
   const normal: V3 = [axes.w[0] * sign, axes.w[1] * sign, axes.w[2] * sign];
@@ -99,16 +112,19 @@ export function loft(builder: MeshBuilder, outline: readonly PathPoint[], axes: 
     }
   }
 
+  // the stretch between the bevels, where the outline is not pulled in
+  const middle = ringList.length / 2 - 1;
   for (let r = 0; r < ringList.length - 1; r++) {
     const a0 = ringStarts[r]!;
     const b0 = ringStarts[r + 1]!;
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
+      if (r === middle && options.openEdge?.(outline[i]!, outline[j]!)) continue;
       builder.quad(a0 + i, a0 + j, b0 + j, b0 + i);
     }
   }
 
   const fullInset = options.bevel > 0 && options.bevelSegments > 0 ? options.bevel : 0;
-  cap(builder, outline, axes, options.from, fullInset, -1);
+  if (!options.openFrom) cap(builder, outline, axes, options.from, fullInset, -1);
   cap(builder, outline, axes, options.to, fullInset, 1);
 }
