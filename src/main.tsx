@@ -21,6 +21,7 @@ import { partLibrary } from './state/library';
 import { retryWhenOnline, watchLibraryFailures } from './state/libraryNotices';
 import { startPartPicks } from './state/partPicks';
 import { startAutosave } from './state/persistence';
+import { startShareLinks } from './state/shareLinks';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('BrickBench needs a #root element to mount into.');
@@ -46,6 +47,8 @@ async function boot(): Promise<void> {
   );
   // in the desktop app: its menu, and files opened from the desktop (those waiting come now)
   startDesktop();
+  // a model in a share link opens once the editor is up, over the session just restored if the user agrees
+  startShareLinks(window);
 }
 
 void boot();

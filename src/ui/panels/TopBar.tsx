@@ -11,6 +11,7 @@ import {
   recoverEarlierSession,
   saveModelFile,
 } from '../../state/commands';
+import { copyShareLink, shareBase } from '../../state/shareLinks';
 import { useEditor } from '../../state/editorStore';
 import { useBackupAvailable } from '../../state/sessionBackup';
 import { BrandMark, Icon } from '../components/Icon';
@@ -22,6 +23,8 @@ import { useAgentLink } from './agent/useAgent';
 export type Drawer = 'parts' | 'colors' | null;
 
 const BASEPLATE_COLORS = [2, 10, 378, 19, 71, 72, 15, 1, 0];
+/** Share links need a web address; the desktop app has none to give. */
+const SHAREABLE = shareBase() !== null;
 
 function FileMenu() {
   const openDialog = useEditor((s) => s.openDialog);
@@ -38,6 +41,7 @@ function FileMenu() {
             <MenuItem icon="plus" label="New model" onSelect={run(newModel)} />
             <MenuItem icon="folder" label="Open…" shortcut={shortcut('O')} onSelect={run(openModelFile)} />
             <MenuItem icon="save" label="Save to file" shortcut={shortcut('S')} onSelect={run(saveModelFile)} />
+            {SHAREABLE && <MenuItem icon="copy" label="Copy share link" onSelect={run(copyShareLink)} />}
             <MenuItem icon="brick" label="Open sample cottage" onSelect={run(openSample)} />
             <MenuItem icon="grid" label="Your parts…" onSelect={run(() => openDialog('my-parts'))} />
             {canRecover && <MenuItem icon="rotate" label="Recover earlier session" onSelect={run(recoverEarlierSession)} />}

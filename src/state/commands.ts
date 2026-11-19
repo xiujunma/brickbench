@@ -36,12 +36,13 @@ export function saveModelFile(): void {
 }
 
 /** Parses a model, loading the LDraw library first if it uses library parts (or they would be dropped). */
-async function parseModelText(text: string): Promise<Result<ParsedDocument>> {
+export async function parseModelText(text: string): Promise<Result<ParsedDocument>> {
   if (usesLibraryParts(text)) await partLibrary.load();
   return parseDocument(text, getPart, importIds);
 }
 
-function showDocument(parsed: ParsedDocument, message: string): void {
+/** Puts an opened model in the editor, framed, saying so and passing on any warnings. */
+export function showDocument(parsed: ParsedDocument, message: string): void {
   const { loadDocument, toast } = state();
   loadDocument(parsed.doc);
   getEngine()?.frameAll();

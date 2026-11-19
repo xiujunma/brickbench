@@ -143,6 +143,31 @@ test.describe('files', () => {
     await expect(counts(page)).toHaveText('1 brick');
   });
 
+  test('shares a model by link, which opens a copy in another browser', async ({ page, browser }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await freshEditor(page);
+    const centre = await viewportCentre(page);
+    await page.mouse.click(centre.x, centre.y);
+    await expect(counts(page)).toHaveText('1 brick');
+    await page.getByRole('button', { name: 'File' }).click();
+    await page.getByRole('menuitem', { name: 'Copy share link' }).click();
+    await expect(page.getByText('Link copied.')).toBeVisible();
+    const link = await page.evaluate(() => navigator.clipboard.readText());
+    expect(link).toMatch(/\/#model=1\.[A-Za-z0-9_-]+$/);
+
+    // another browser, with nothing of its own to replace: the model opens straight away, and the link leaves the address
+    const elsewhere = await browser.newContext();
+    try {
+      const other = await elsewhere.newPage();
+      await freshEditor(other, link);
+      await expect(counts(other)).toHaveText('1 brick');
+      await expect(other.getByText(/^Opened the shared model/)).toBeVisible();
+      expect(new URL(other.url()).hash).toBe('');
+    } finally {
+      await elsewhere.close();
+    }
+  });
+
   test('asks before opening a file over the current model', async ({ page }) => {
     await freshEditor(page);
     const centre = await viewportCentre(page);

@@ -20,7 +20,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 - **Grid snapping that understands bricks.** Point at a top face to stack, at a side to build beside it (lined up with that brick's courses), or underneath to hang below. Parts never overlap: the preview turns red when there's no room, and drops land on top of whatever is in the way.
 - **Tools:** Build, Select & move (click, Shift-click, box select, drag to move), Paint and Erase, plus an eyedropper (Alt-click) and rotate, nudge, copy, paste and duplicate.
 - **Unlimited undo** (up to 200 steps) and **autosave** in the browser.
-- **Files:** save and open `.brickbench.json`, or load the sample cottage.
+- **Files:** save and open `.brickbench.json`, or load the sample cottage. **File › Copy share link** puts the whole model in a link: whoever opens it gets their own copy, with no server in between (links to big models get too long, and the file is the way to send those).
 - **Open models from elsewhere:** LDraw files (`.ldr`, `.mpd`) and BrickLink Studio files (`.io`) open as BrickBench models, built in the model's own order, with a report on any parts that couldn't come in. Use File › Open, or drop a file on the window. See [Opening LDraw and Studio files](#opening-ldraw-and-studio-files).
 - **A desktop app** for macOS, Windows and Linux, with the parts library inside, a native menu, and LDraw and Studio files opened from Finder or Explorer. See [Desktop app](#desktop-app).
 - **Building instructions:** a printable PDF booklet with a cover, the parts list, then one page per step showing the parts to add and the model so far, with the new parts outlined.
@@ -366,7 +366,7 @@ e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 
 ## Privacy
 
-BrickBench has no accounts and no server of its own. Your models, favourite and recent parts, and parts lists stay in your browser's storage (in the desktop app, on your computer). It downloads only its own files, such as the LDraw parts you use, from wherever it is hosted, with no tracking or adverts. If you connect an AI agent, what you ask it and the model it works on go to that agent: with Claude Code, to Anthropic under your own account. **About & privacy**, at the foot of the parts panel, says the same in the app, with the credits and trademark notices.
+BrickBench has no accounts and no server of its own. Your models, favourite and recent parts, and parts lists stay in your browser's storage (in the desktop app, on your computer). It downloads only its own files, such as the LDraw parts you use, from wherever it is hosted, with no tracking or adverts. If you connect an AI agent, what you ask it and the model it works on go to that agent: with Claude Code, to Anthropic under your own account. A share link carries the model after its `#`, which browsers never send to the site. **About & privacy**, at the foot of the parts panel, says the same in the app, with the credits and trademark notices.
 
 ## Licence
 
