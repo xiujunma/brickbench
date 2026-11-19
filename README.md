@@ -351,6 +351,10 @@ e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 - Editing instruction steps by hand, sub-assemblies and per-step camera angles (steps are planned automatically)
 - Accounts, sharing and a gallery
 
+## Privacy
+
+BrickBench has no accounts and no server of its own. Your models, favourite and recent parts, and parts lists stay in your browser's storage (in the desktop app, on your computer). It downloads only its own files, such as the LDraw parts you use, from wherever it is hosted, with no tracking or adverts. If you connect an AI agent, what you ask it and the model it works on go to that agent: with Claude Code, to Anthropic under your own account. **About & privacy**, at the foot of the parts panel, says the same in the app, with the credits and trademark notices.
+
 ## Licence
 
 BrickBench is released under the [MIT Licence](LICENSE). That covers its own code. The LDraw parts library that `bun run ldraw` builds, and the desktop app ships, keeps its own licence (CC BY 4.0, older parts CC BY 2.0; see below), as do the packages BrickBench uses.

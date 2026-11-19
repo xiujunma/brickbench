@@ -54,6 +54,7 @@ function usePicking(session: FinderSession, onPicked: (() => void) | undefined) 
 export function PartsPanel({ onPicked }: Props) {
   const finder = useFinder();
   const owned = useOwnedPartIds();
+  const openDialog = useEditor((s) => s.openDialog);
   const session = useFinderSession(finder, owned);
   const { result, highlighted, dispatch } = session;
   const searchRef = useRef<HTMLInputElement>(null);
@@ -107,6 +108,12 @@ export function PartsPanel({ onPicked }: Props) {
       ) : (
         <PartSources finder={finder} source={source} onSource={setSource} {...tile} />
       )}
+      <footer className="panel-footer">
+        <span>Not made or endorsed by the LEGO Group</span>
+        <button type="button" className="link-button" onClick={() => openDialog('about')}>
+          About & privacy
+        </button>
+      </footer>
     </aside>
   );
 }

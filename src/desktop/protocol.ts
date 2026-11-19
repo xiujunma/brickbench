@@ -38,6 +38,7 @@ export const MENU_COMMANDS = [
   'frame',
   'reset-view',
   'help',
+  'about',
 ] as const;
 
 export type MenuCommand = (typeof MENU_COMMANDS)[number];

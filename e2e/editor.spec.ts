@@ -264,6 +264,23 @@ test.describe('interface', () => {
     await expect(page.getByRole('heading', { name: 'Mouse & keyboard' })).toBeHidden();
   });
 
+  test('says what it keeps and whose trademarks are whose, from the parts panel and the help', async ({ page }) => {
+    await freshEditor(page);
+    const about = page.getByRole('dialog', { name: 'About BrickBench' });
+    await expect(page.locator('.panel-footer')).toContainText('Not made or endorsed by the LEGO Group');
+    await page.getByRole('button', { name: 'About & privacy' }).click();
+    await expect(about).toContainText('There are no accounts');
+    await expect(about).toContainText('LEGO® is a trademark of the LEGO Group, which does not sponsor, authorise or endorse BrickBench.');
+    await expect(about.getByRole('link', { name: 'Everyone who made them' })).toHaveAttribute('href', /ldraw\/CREDITS\.txt$/);
+    await page.keyboard.press('Escape');
+    await expect(about).toBeHidden();
+
+    await page.keyboard.press('?');
+    await page.getByRole('button', { name: 'About BrickBench, privacy and credits' }).click();
+    await expect(page.getByRole('heading', { name: 'Mouse & keyboard' })).toBeHidden();
+    await expect(about).toBeVisible();
+  });
+
   test('fits a phone screen without sideways scrolling', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await freshEditor(page);

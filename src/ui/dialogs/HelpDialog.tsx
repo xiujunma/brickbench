@@ -51,8 +51,14 @@ function HelpList({ rows }: { readonly rows: readonly Row[] }) {
 export function HelpDialog() {
   const isOpen = useEditor((s) => s.dialog === 'help');
   const close = useEditor((s) => s.closeDialog);
+  const openDialog = useEditor((s) => s.openDialog);
+  const about = (
+    <button type="button" className="link-button" onClick={() => openDialog('about')}>
+      About BrickBench, privacy and credits
+    </button>
+  );
   return (
-    <Dialog id="help" title="Mouse & keyboard" open={isOpen} onClose={() => close('help')}>
+    <Dialog id="help" title="Mouse & keyboard" open={isOpen} onClose={() => close('help')} footer={about}>
       <div className="help-grid">
         <section>
           <h3>Mouse</h3>

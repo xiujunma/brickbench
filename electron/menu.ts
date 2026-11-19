@@ -68,7 +68,11 @@ export function menuTemplate(actions: MenuActions): MenuItemConstructorOptions[]
   };
   const help: MenuItemConstructorOptions = {
     role: 'help',
-    submenu: [item('Mouse & Keyboard', 'help'), { label: 'LDraw Parts Library', click: () => actions.openExternal('https://library.ldraw.org') }],
+    submenu: [
+      item('Mouse & Keyboard', 'help'),
+      item('Privacy and Credits', 'about'),
+      { label: 'LDraw Parts Library', click: () => actions.openExternal('https://library.ldraw.org') },
+    ],
   };
   return [...(mac ? [{ role: 'appMenu' } as const] : []), file, edit, view, { role: 'windowMenu' }, help];
 }

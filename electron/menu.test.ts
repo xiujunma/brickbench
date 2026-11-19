@@ -28,9 +28,9 @@ describe('menuTemplate', () => {
   it('sends commands to the page and asks for files itself', () => {
     const { value, calls } = actions('darwin');
     const all = items(menuTemplate(value));
-    for (const id of ['new', 'save', 'export-ldraw', 'timelapse', 'undo', 'redo', 'frame', 'help', 'open']) click(all.find((item) => item.id === id));
+    for (const id of ['new', 'save', 'export-ldraw', 'timelapse', 'undo', 'redo', 'frame', 'help', 'about', 'open']) click(all.find((item) => item.id === id));
     click(all.find((item) => item.label === 'LDraw Parts Library'));
-    expect(calls).toEqual(['new', 'save', 'export-ldraw', 'timelapse', 'undo', 'redo', 'frame', 'help', 'open dialog', 'https://library.ldraw.org']);
+    expect(calls).toEqual(['new', 'save', 'export-ldraw', 'timelapse', 'undo', 'redo', 'frame', 'help', 'about', 'open dialog', 'https://library.ldraw.org']);
   });
 
   it('keeps the keys the page uses: ⌘S, ⌘O and ⌘Z, and no single letters', () => {

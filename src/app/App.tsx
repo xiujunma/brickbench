@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Toasts } from '../ui/components/Toasts';
+import { AboutDialog } from '../ui/dialogs/AboutDialog';
 import { HelpDialog } from '../ui/dialogs/HelpDialog';
 import { ImportReportDialog } from '../ui/dialogs/ImportReportDialog';
 import { InstructionsDialog } from '../ui/dialogs/InstructionsDialog';
@@ -49,6 +50,7 @@ export function App() {
       <StatusBar />
       <Toasts />
       <HelpDialog />
+      <AboutDialog />
       <PartsListDialog />
       <InstructionsDialog />
       <MyPartsDialog />

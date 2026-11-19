@@ -31,6 +31,7 @@ const ACTIONS: Readonly<Record<MenuCommand, () => unknown>> = {
   'parts-list': openDialog('parts-list'),
   'my-parts': openDialog('my-parts'),
   help: openDialog('help'),
+  about: openDialog('about'),
   undo: () => undoOrRedo('undo'),
   redo: () => undoOrRedo('redo'),
   frame: () => getEngine()?.frameAll(),
