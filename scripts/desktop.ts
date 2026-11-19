@@ -3,7 +3,7 @@
  *
  *   bun scripts/desktop.ts start [--skip-web]   build, then open the app
  *   bun scripts/desktop.ts build                build only (the desktop tests run the result)
- *   bun scripts/desktop.ts dist [--mac|--win|--linux] [--dir]   build everything, then make installers in release/
+ *   bun scripts/desktop.ts dist [--mac|--win|--linux] [--x64|--arm64|--universal] [--dir]   build everything, then make installers in release/
  *
  * The web app builds into dist/ as usual. The main process and preload
  * script (electron/) are bundled by Bun into .desktop/, the app folder
@@ -15,8 +15,8 @@ import { join } from 'node:path';
 
 const ROOT = join(import.meta.dir, '..');
 const APP_DIR = join(ROOT, '.desktop');
-/** electron-builder flags `dist` passes on: platforms, and --dir for an unpacked app only (quick to check). */
-const BUILDER_FLAGS = new Set(['--mac', '--win', '--linux', '--dir']);
+/** electron-builder flags `dist` passes on: platforms, architectures, and --dir for an unpacked app only (quick to check). */
+const BUILDER_FLAGS = new Set(['--mac', '--win', '--linux', '--x64', '--arm64', '--universal', '--dir']);
 
 async function bundle(entry: string, out: string): Promise<void> {
   const result = await Bun.build({ entrypoints: [join(ROOT, entry)], target: 'node', format: 'cjs', external: ['electron'] });
@@ -62,7 +62,7 @@ async function main([command, ...flags]: readonly string[]): Promise<number> {
     return 0;
   }
   if (command === 'dist') return dist(flags.filter((flag) => BUILDER_FLAGS.has(flag)));
-  console.error('Usage: bun scripts/desktop.ts start [--skip-web] | build | dist [--mac|--win|--linux] [--dir]');
+  console.error('Usage: bun scripts/desktop.ts start [--skip-web] | build | dist [--mac|--win|--linux] [--x64|--arm64|--universal] [--dir]');
   return 1;
 }
 

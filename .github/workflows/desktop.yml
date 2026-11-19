@@ -1,0 +1,83 @@
+name: Desktop app
+
+# Builds the desktop app's installers, each on its own system: by hand (Actions ›
+# Desktop app › Run workflow) or for a version tag. The installers are kept as
+# artifacts for two weeks; publishing releases waits for signed builds (#13).
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installers:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # nothing in the app is compiled per architecture, so Apple silicon builds both Macs' apps
+          - name: macOS (Apple silicon and Intel)
+            os: macos-14
+            flags: --mac --arm64 --x64
+            files: release/*.dmg
+          - name: Windows
+            os: windows-latest
+            flags: --win --x64
+            files: release/*.exe
+          - name: Linux
+            os: ubuntu-latest
+            flags: --linux --x64
+            files: release/*.AppImage
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+
+      # the parts library goes inside the app; each system keeps its own converted copy
+      - name: Restore the LDraw download
+        uses: actions/cache@v6
+        with:
+          path: .ldraw-cache/complete.zip
+          key: ldraw-download-v1
+          enableCrossOsArchive: true
+      - name: Download and unpack the LDraw library
+        run: bun run ldraw --fetch-only
+      - name: Restore the converted library
+        uses: actions/cache@v6
+        with:
+          path: public/ldraw
+          key: ldraw-library-v1-${{ runner.os }}-${{ hashFiles('.ldraw-cache/complete.zip', 'scripts/ldraw/**/*.ts', 'src/core/ldraw/format.ts') }}
+
+      - name: Build the installers
+        env:
+          FLAGS: ${{ matrix.flags }}
+        shell: bash
+        run: bun scripts/desktop.ts dist $FLAGS
+      - name: Desktop tests, on a virtual display
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum bun run e2e:desktop
+      - name: Keep the installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: BrickBench-${{ runner.os }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+          retention-days: 14
+      - name: Keep traces of failed desktop tests
+        if: failure() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-traces
+          path: test-results/
+          retention-days: 7
