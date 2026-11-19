@@ -3,8 +3,8 @@ import { CanvasTexture, SRGBColorSpace, type DirectionalLight } from 'three';
 import type { Vec3 } from '../core/grid';
 
 const MIN_SHADOW_EXTENT = 20;
-const BACKDROP_TOP = '#f6f3ee';
-const BACKDROP_BOTTOM = '#d9d3c8';
+export const BACKDROP_TOP = '#f6f3ee';
+export const BACKDROP_BOTTOM = '#d9d3c8';
 
 export interface Bounds3 {
   readonly min: Vec3;

@@ -26,6 +26,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 - **Building instructions:** a printable PDF booklet with a cover, the parts list, then one page per step showing the parts to add and the model so far, with the new parts outlined.
 - **Time-lapse video:** a video of your model being built, each brick dropping into place while the camera circles, ready to share. See [Time-lapse video](#time-lapse-video).
 - **Exports:** LDraw (`.ldr`, opens in Studio, LeoCAD and LDView), glTF (`.glb`, at real-world scale for Blender), PNG, a time-lapse video (MP4 or WebM), and a parts list (CSV).
+- **Light that looks real.** Ambient occlusion darkens the seams and corners where bricks meet, in the view, in images and in videos (**Scene › Ambient occlusion**; on unless the computer draws 3D without a graphics card). **File › Photo (.png)…** path traces a still of the view: light bounces between the bricks, shadows soften and transparent bricks turn to glass, in seconds to minutes depending on quality and size.
 - **Fast with big models.** Resting bricks are instanced, one draw call per part type, and studs hidden under other bricks are skipped. Rendering only happens when something changes.
 
 ## Getting started
@@ -359,7 +360,6 @@ e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 
 - Connections beyond the stud grid: library parts snap to whole studs and plates, so hinges don't swing, Technic pins don't plug into holes, minifigures don't assemble and half-stud offsets (jumper plates) aren't possible
 - Printed library parts (printed tiles, minifigure faces and torsos)
-- Ambient occlusion and a photoreal render mode
 - Editing instruction steps by hand, sub-assemblies and per-step camera angles (steps are planned automatically)
 - Accounts and a gallery (models are shared by file or by link for now)
 

@@ -14,6 +14,7 @@ import {
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { Vec3 } from '../core/grid';
 import type { Ray } from '../core/placement/ray';
+import { AmbientOcclusion } from './ambientOcclusion';
 import { isSoftwareRenderer, studioEnvironment } from './environment';
 import { backdropTexture, fitKeyLight, type Bounds3 } from './lighting';
 
@@ -41,6 +42,7 @@ export class Viewport {
   private frame = 0;
   private dirty = true;
   private disposed = false;
+  private occlusion: AmbientOcclusion | null = null;
 
   /** True when WebGL runs on the CPU; shadows and high pixel ratios are skipped there. */
   readonly softwareRendering: boolean;
@@ -111,13 +113,38 @@ export class Viewport {
     this.controls.update();
     if (!this.dirty) return;
     this.dirty = false;
-    this.renderer.render(this.scene, this.camera);
+    this.draw();
   };
+
+  private draw(): void {
+    if (this.occlusion) this.occlusion.render();
+    else this.renderer.render(this.scene, this.camera);
+  }
+
+  /** Whether ambient occlusion is on. */
+  get ambientOcclusion(): boolean {
+    return this.occlusion !== null;
+  }
+
+  /** Turns ambient occlusion on or off; null chooses: on, unless WebGL runs on the CPU. */
+  setAmbientOcclusion(wanted: boolean | null): void {
+    const on = wanted ?? !this.softwareRendering;
+    if (on === this.ambientOcclusion) return;
+    if (on) {
+      const { clientWidth, clientHeight } = this.container;
+      this.occlusion = new AmbientOcclusion(this.renderer, this.scene, this.camera, Math.max(clientWidth, 1), Math.max(clientHeight, 1));
+    } else {
+      this.occlusion?.dispose();
+      this.occlusion = null;
+    }
+    this.requestRender();
+  }
 
   private resize(): void {
     const { clientWidth, clientHeight } = this.container;
     if (clientWidth === 0 || clientHeight === 0) return;
     this.renderer.setSize(clientWidth, clientHeight, false);
+    this.occlusion?.setSize(clientWidth, clientHeight, this.renderer.getPixelRatio());
     this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();
     this.requestRender();
@@ -190,7 +217,7 @@ export class Viewport {
 
   /** Renders a frame immediately and returns it as a PNG. */
   async capturePng(): Promise<Blob> {
-    this.renderer.render(this.scene, this.camera);
+    this.draw();
     return new Promise((resolve, reject) => {
       this.renderer.domElement.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Could not capture the view'))), 'image/png');
     });
@@ -201,6 +228,7 @@ export class Viewport {
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
     this.controls.dispose();
+    this.occlusion?.dispose();
     this.scene.environment?.dispose();
     this.backdrop.dispose();
     this.renderer.dispose();

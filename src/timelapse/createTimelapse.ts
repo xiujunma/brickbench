@@ -33,6 +33,8 @@ export interface TimelapseSource {
   readonly name: string;
   readonly bricks: readonly Brick[];
   readonly settings: SceneSettings;
+  /** Ambient occlusion on or off, as the 3D view has it; null or left out lets the machine choose. */
+  readonly ambientOcclusion?: boolean | null;
   /** Where the camera starts: the editor's current view direction. */
   readonly direction: Vec3;
 }
@@ -98,7 +100,7 @@ export async function createTimelapse(
   let renderer: TimelapseRenderer | null = null;
   try {
     // made inside try, so a failure anywhere after still releases its WebGL context
-    renderer = new TimelapseRenderer(lookup, { width, height, settings: source.settings, meshes });
+    renderer = new TimelapseRenderer(lookup, { width, height, settings: source.settings, meshes, ambientOcclusion: source.ambientOcclusion ?? null });
     progress(0, 'Loading parts…');
     const failed = await untilAborted(renderer.preload(source.bricks.map((b) => b.partId)), signal);
     if (failed.length > 0) {

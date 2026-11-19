@@ -1,3 +1,4 @@
+import { castsNoOcclusion } from './occlusionMark';
 import {
   Color,
   DynamicDrawUsage,
@@ -182,6 +183,7 @@ export class BrickBatches {
         mesh = new InstancedMesh(this.geometries.outline(partId), material, capacityFor(list.length));
         mesh.instanceMatrix.setUsage(DynamicDrawUsage);
         mesh.renderOrder = OUTLINE_RENDER_ORDER;
+        castsNoOcclusion(mesh);
         this.outlines.set(partId, mesh);
         this.group.add(mesh);
       }

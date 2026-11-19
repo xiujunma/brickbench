@@ -12,6 +12,8 @@ import {
   saveModelFile,
 } from '../../state/commands';
 import { copyShareLink, shareBase } from '../../state/shareLinks';
+import { getEngine } from '../../editor/engineRegistry';
+import { useViewPreferences, viewPreferences } from '../../state/viewPreferences';
 import { useEditor } from '../../state/editorStore';
 import { useBackupAvailable } from '../../state/sessionBackup';
 import { BrandMark, Icon } from '../components/Icon';
@@ -50,6 +52,7 @@ function FileMenu() {
             <MenuItem icon="layers" label="LDraw model (.ldr)" onSelect={run(exportLDrawFile)} />
             <MenuItem icon="cube" label="3D model (.glb)" onSelect={run(exportGlbFile)} />
             <MenuItem icon="image" label="Image (.png)" onSelect={run(exportImage)} />
+            <MenuItem icon="sparkle" label="Photo (.png)…" onSelect={run(() => openDialog('photo'))} />
             <MenuItem icon="book" label="Building instructions (.pdf)…" onSelect={run(() => openDialog('instructions'))} />
             <MenuItem icon="rotate" label="Time-lapse video…" onSelect={run(() => openDialog('timelapse'))} />
             <MenuItem icon="list" label="Parts list…" onSelect={run(() => openDialog('parts-list'))} />
@@ -57,6 +60,20 @@ function FileMenu() {
         );
       }}
     </Menu>
+  );
+}
+
+/** Soft shadows where bricks meet: on, unless WebGL runs on the CPU, until chosen here. */
+function AmbientOcclusionItem() {
+  const chosen = useViewPreferences((s) => s.ambientOcclusion);
+  // what the view draws now: the choice, or the machine's when there is none
+  const on = chosen ?? getEngine()?.ambientOcclusion ?? false;
+  return (
+    <button type="button" role="menuitemcheckbox" aria-checked={on} className="menu-item" onClick={() => viewPreferences.setAmbientOcclusion(!on)}>
+      <Icon name="cube" size={18} />
+      Ambient occlusion
+      <span className="menu-state">{on ? 'On' : 'Off'}</span>
+    </button>
   );
 }
 
@@ -99,6 +116,8 @@ function SceneMenu() {
               );
             })}
           </div>
+          <div className="menu-sep" role="separator" />
+          <AmbientOcclusionItem />
         </>
       )}
     </Menu>

@@ -15,6 +15,7 @@ import { visibleStuds, type StudInstance } from '../core/model/studs';
 import type { Brick } from '../core/model/types';
 import type { PartLookup } from '../core/parts/types';
 import type { CameraPose, FrameBricks } from '../core/timelapse/timeline';
+import { AmbientOcclusion } from './ambientOcclusion';
 import { BrickBatches } from './brickBatches';
 import { isSoftwareRenderer, studioEnvironment } from './environment';
 import { GeometryCache } from './geometryCache';
@@ -35,6 +36,8 @@ export interface TimelapseRenderOptions {
   readonly settings: SceneSettings;
   /** Where library part meshes come from. */
   readonly meshes?: MeshSource | null;
+  /** Ambient occlusion on or off; null or left out lets the machine choose (on, unless WebGL runs on the CPU). */
+  readonly ambientOcclusion?: boolean | null;
 }
 
 /** The studs a set of bricks shows: those no opaque brick of the same set covers. */
@@ -65,6 +68,7 @@ export class TimelapseRenderer {
   private readonly ground: Ground;
   /** Landed bricks drawn now; -1 before the first frame. */
   private landedCount = -1;
+  private readonly occlusion: AmbientOcclusion | null = null;
 
   constructor(
     private readonly lookup: PartLookup,
@@ -98,6 +102,7 @@ export class TimelapseRenderer {
       this.landed = new BrickBatches(this.geometries, this.materials, lookup, 'resting');
       this.falling = new BrickBatches(this.geometries, this.materials, lookup, 'resting');
       this.ground = new Ground(this.geometries, this.materials);
+      if (options.ambientOcclusion ?? shadows) this.occlusion = new AmbientOcclusion(this.renderer, this.scene, this.camera, width, height);
       if (options.settings.baseplateSize > 0) this.ground.setBaseplate(options.settings.baseplateSize, options.settings.baseplateColor);
       this.scene.add(new HemisphereLight('#f5f1ea', '#6d6458', 0.55), this.key, this.key.target, this.ground.group, this.landed.group, this.falling.group);
 
@@ -146,7 +151,8 @@ export class TimelapseRenderer {
     }
     // falling bricks keep their own studs until they land
     this.falling.update(bricks.falling, studsOf(bricks.falling, this.lookup));
-    this.renderer.render(this.scene, this.camera);
+    if (this.occlusion) this.occlusion.render();
+    else this.renderer.render(this.scene, this.camera);
     this.frame.drawImage(this.renderer.domElement, 0, 0);
     if (caption) this.caption(caption);
   }
@@ -172,6 +178,7 @@ export class TimelapseRenderer {
   }
 
   dispose(): void {
+    this.occlusion?.dispose();
     this.landed.dispose();
     this.falling.dispose();
     this.ground.dispose();

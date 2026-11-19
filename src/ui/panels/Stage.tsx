@@ -4,6 +4,7 @@ import { EditorController } from '../../editor/EditorController';
 import { getEngine, setEngine } from '../../editor/engineRegistry';
 import { editorStore, useEditor } from '../../state/editorStore';
 import { partLibrary } from '../../state/library';
+import { viewPreferences } from '../../state/viewPreferences';
 import type { Tool } from '../../state/types';
 import { Icon, type IconName } from '../components/Icon';
 import { BUILD_AREA_ID } from '../focusTargets';
@@ -106,7 +107,7 @@ function ViewportHost() {
     if (!container) return;
     let controller: EditorController;
     try {
-      controller = new EditorController(container, editorStore, getPart, partLibrary.meshes);
+      controller = new EditorController(container, editorStore, getPart, partLibrary.meshes, viewPreferences.store);
     } catch (error: unknown) {
       setFailure(error instanceof Error ? error.message : 'Unknown error');
       return;

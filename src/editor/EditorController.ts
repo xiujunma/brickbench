@@ -15,9 +15,11 @@ import { Ground } from '../engine/ground';
 import { HoverBox } from '../engine/hoverBox';
 import { MaterialLibrary } from '../engine/materials';
 import type { MeshSource } from '../engine/meshStore';
+import { castsNoOcclusion } from '../engine/occlusionMark';
 import { Viewport, type Bounds3 } from '../engine/viewport';
 import { bricksFit, bricksOf, selectedBricks, spatialIndexFor, worldBounds } from '../state/selectors';
 import type { EditorState } from '../state/types';
+import type { ViewPreferences } from '../state/viewPreferences';
 import { attachPartDrop } from './dragAndDrop';
 import { attachKeyboard } from './keyboard';
 import { PointerInput } from './PointerInput';
@@ -66,6 +68,7 @@ export class EditorController {
     readonly store: StoreApi<EditorState>,
     readonly lookup: PartLookup,
     meshes: MeshSource | null = null,
+    view: StoreApi<ViewPreferences> | null = null,
   ) {
     this.viewport = new Viewport(container);
     let geometries: GeometryCache | null = null;
@@ -78,6 +81,14 @@ export class EditorController {
       this.ghosts = new BrickBatches(this.geometries, this.materials, lookup, 'ghost');
       this.ground = new Ground(this.geometries, this.materials);
       this.viewport.world.add(this.ground.group, this.batches.group, this.selection.group, this.ghosts.group, this.hoverBox.object);
+      // the preview and the hover box are not really there: they darken nothing
+      castsNoOcclusion(this.ghosts.group);
+      castsNoOcclusion(this.hoverBox.object);
+      if (view) {
+        const apply = (preferences: ViewPreferences): void => this.viewport.setAmbientOcclusion(preferences.ambientOcclusion);
+        apply(view.getState());
+        this.cleanups.push(view.subscribe(apply));
+      }
 
       this.syncGround();
       this.syncModel();
@@ -95,6 +106,11 @@ export class EditorController {
       this.viewport.dispose();
       throw error;
     }
+  }
+
+  /** Whether the 3D view draws ambient occlusion now. */
+  get ambientOcclusion(): boolean {
+    return this.viewport.ambientOcclusion;
   }
 
   private get state(): EditorState {
@@ -369,6 +385,14 @@ export class EditorController {
   /** Where the camera is looking, so exports can match the current view. */
   viewDirection(): Vec3 {
     return this.viewport.viewDirection();
+  }
+
+  /** Where the camera is and what it looks at, for a photo of the view as it is. */
+  viewCamera(): { readonly position: Vec3; readonly target: Vec3; readonly fov: number; readonly aspect: number } {
+    const { camera, controls } = this.viewport;
+    const { x, y, z } = camera.position;
+    const target = controls.target;
+    return { position: { x, y, z }, target: { x: target.x, y: target.y, z: target.z }, fov: camera.fov, aspect: camera.aspect };
   }
 
   /** Camera direction flattened onto the ground, for camera-relative nudges. */

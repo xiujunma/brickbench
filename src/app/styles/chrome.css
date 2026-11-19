@@ -178,8 +178,19 @@
   color: var(--ink-2);
 }
 
-.menu-item kbd {
+.menu-item kbd,
+.menu-item .menu-state {
   margin-left: auto;
+}
+
+.menu-item .menu-state {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.menu-item[aria-checked='true'] .menu-state {
+  color: var(--accent);
 }
 
 .menu-label {

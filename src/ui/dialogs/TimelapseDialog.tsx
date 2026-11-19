@@ -15,6 +15,7 @@ import {
 import { getEngine } from '../../editor/engineRegistry';
 import { isAbortError, nextTask } from '../../instructions/createInstructions';
 import { editorStore, useEditor } from '../../state/editorStore';
+import { viewPreferences } from '../../state/viewPreferences';
 import { saveBlob } from '../../state/files';
 import { partLibrary } from '../../state/library';
 import { bricksOf } from '../../state/selectors';
@@ -79,6 +80,7 @@ export function TimelapseDialog() {
         bricks: bricksOf(state.history.present),
         settings: state.settings,
         direction: getEngine()?.viewDirection() ?? DEFAULT_VIEW_DIRECTION,
+        ambientOcclusion: viewPreferences.store.getState().ambientOcclusion,
       };
       const video = await createTimelapse(source, options, getPart, setProgress, controller.signal, partLibrary.meshes);
       saveBlob(video.blob, `${slugify(state.name)}-timelapse.${video.extension}`, 'Time-lapse video saved to your downloads.', state.toast);

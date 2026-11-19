@@ -324,6 +324,45 @@ test.describe('interface', () => {
     expect(response?.headers()['x-frame-options']).toBe('DENY');
   });
 
+  test('turns ambient occlusion on from the Scene menu, draws PNGs with it, and remembers it', async ({ page }) => {
+    test.slow();
+    await freshEditor(page);
+    const occlusion = page.getByRole('menuitemcheckbox', { name: /Ambient occlusion/ });
+    await page.getByRole('button', { name: 'Scene' }).click();
+    // the browser tests draw WebGL on the CPU, where it starts off
+    await expect(occlusion).toHaveAttribute('aria-checked', 'false');
+    await occlusion.click();
+    await expect(occlusion).toHaveAttribute('aria-checked', 'true');
+    await page.keyboard.press('Escape');
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'File' }).click();
+    await page.getByRole('menuitem', { name: 'Image (.png)' }).click();
+    const png = await readFile(await (await downloadPromise).path());
+    expect([...png.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+
+    await reloadEditor(page);
+    await page.getByRole('button', { name: 'Scene' }).click();
+    await expect(occlusion).toHaveAttribute('aria-checked', 'true');
+  });
+
+  test('starts a photo of the view, and stops when asked', async ({ page }) => {
+    test.slow();
+    await freshEditor(page);
+    const centre = await viewportCentre(page);
+    await page.mouse.click(centre.x, centre.y);
+    await expect(counts(page)).toHaveText('1 brick');
+    await page.getByRole('button', { name: 'File' }).click();
+    await page.getByRole('menuitem', { name: 'Photo (.png)…' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Photo' });
+    // path tracing a whole photo on the CPU, as the tests draw, takes far too long: start, then stop
+    await dialog.getByRole('button', { name: 'Make photo' }).click();
+    await expect(dialog.getByRole('progressbar')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Stop' }).click();
+    await expect(page.getByText('Stopped making the photo.')).toBeVisible({ timeout: 180_000 });
+    await expect(dialog.getByRole('button', { name: 'Make photo' })).toBeVisible();
+  });
+
   test('fits a phone screen without sideways scrolling', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await freshEditor(page);

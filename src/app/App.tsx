@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Toasts } from '../ui/components/Toasts';
 import { AboutDialog } from '../ui/dialogs/AboutDialog';
 import { HelpDialog } from '../ui/dialogs/HelpDialog';
+import { PhotoDialog } from '../ui/dialogs/PhotoDialog';
 import { ImportReportDialog } from '../ui/dialogs/ImportReportDialog';
 import { InstructionsDialog } from '../ui/dialogs/InstructionsDialog';
 import { MyPartsDialog } from '../ui/dialogs/MyPartsDialog';
@@ -51,6 +52,7 @@ export function App() {
       <Toasts />
       <HelpDialog />
       <AboutDialog />
+      <PhotoDialog />
       <PartsListDialog />
       <InstructionsDialog />
       <MyPartsDialog />
