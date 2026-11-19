@@ -7,10 +7,11 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 ## Features
 
 - **87 basic parts in six families:** bricks (including tall 1×1×3 to 1×2×5), plates up to 16×16, tiles, slopes (45°, 33°, 65°, inverted, cheese), round parts and cones, and arches, all generated in code, and hollow underneath with tubes and pins as real bricks are.
-- **The LDraw community parts library:** over 7,000 more parts, from Technic beams and hinges to wheels with their tyres, windows, doors and minifigure accessories, converted from the [LDraw](https://www.ldraw.org) library when the app is built. Parts made in several colours keep the colours they fix, so a wheel's tyre stays black whatever colour you build the wheel in. Each takes up only the space its shape fills, so a corner plate leaves its corner free and an arch its opening, and each mesh loads the first time you use it.
+- **The LDraw community parts library:** over 17,000 more parts, from Technic beams and hinges to wheels with their tyres, windows, doors and minifigure accessories, and nearly 10,000 of them printed or stickered (tiles with displays and signs, minifigure faces and torsos), converted from the [LDraw](https://www.ldraw.org) library when the app is built. Parts made in several colours keep the colours they fix, so a wheel's tyre stays black whatever colour you build the wheel in. Each takes up only the space its shape fills, so a corner plate leaves its corner free and an arch its opening, and each mesh loads the first time you use it.
 - **Finding the right part:**
   - **One search covers every part.** Type sizes any way ("2x4", "2 by 4", "two by four"), hobby nicknames ("cheese", "jumper", "macaroni", "SNOT"), US spellings ("tire", "windshield") or a part number, including BrickLink's. Sizes work either way round ("4x2" finds 2 × 4). Name a colour too ("red 2x4 brick") and the part is built in it. If you mistype, close spellings show instead.
   - **Size, height and shape filters** narrow thousands of parts to a handful: say 1 × 2, 1 plate, with a clip.
+  - **Printed and stickered parts** come after the plain ones, so a search for "tile 2x2" starts with the tiles rather than their hundreds of prints. Search for what a print shows ("police", "map") or press **Printed** to see only the prints.
   - **Part patterns** describe parts the way regular expressions describe text, stud by stud: `S45[oo/..]` is a 45° slope with its studs at the back, `B1x(1|2)` a 1 × 1 or 1 × 2 brick. See [Part patterns](#part-patterns).
   - **Mine** keeps your starred favourites, recent picks and the parts already in your model. Favourites and picks stay in this browser, shared by its tabs.
   - **Keyboard first:** press `/`, type, use ↑ ↓ and press Enter to build with the part.
@@ -33,7 +34,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 
 ```bash
 bun install
-bun run ldraw      # once: downloads and converts the LDraw parts library (about 3 minutes)
+bun run ldraw      # once: downloads and converts the LDraw parts library (about 5 minutes)
 bun run dev        # http://localhost:5173
 ```
 
@@ -100,7 +101,8 @@ To bring in as much as it can, it also:
 
 - **finds the grid the model was built on**, wherever the editor put it, and moves a submodel built a little off the rest (a train body resting just above its bogies) by up to half a stud or plate, as one piece, to line up;
 - **turns submodels square** that a model stands at an angle for show, such as a car parked at 30°;
-- builds **printed and stickered parts plain**, and **colours** BrickBench doesn't have (Light Grey, Brown) in the nearest it does.
+- keeps **printed and stickered parts** with their prints, and builds the few the library lacks (stickers on their own, prints newer than the library) as their plain part;
+- builds **colours** BrickBench doesn't have (Light Grey, Brown) in the nearest it does.
 
 The model stands in the middle of the scene on a baseplate big enough to hold it, or on none if it brings its own.
 
@@ -124,7 +126,7 @@ Set how many copies of a set you have, and BrickBench counts with all of them:
 - **The parts list** gets Have and Missing columns, in the CSV as well, so you know what to buy. **Buy missing parts** there writes what you lack as a BrickLink wanted list (`.xml`, for Wanted › Upload) or a Rebrickable parts list (`.csv`), in each catalogue's own part numbers and colours. Without sets added, it lists every part the model uses.
 - **An agent** can see your parts: ask it to build something from your sets, and it is told whenever a change uses more of a part than you have.
 
-**How lists are matched.** BrickLink and Rebrickable mostly number parts as LDraw does. Where they differ, LDraw parts note the other numbers ("BrickLink 4073" on 6141), and the library build records the numbers LDraw moved or merged (3040 is now 3040b). Colours are matched with Rebrickable's table of colour numbers. Checked against Rebrickable's inventories of 3,145 sets from 2018 on, about 98% of their parts match. The rest are listed with each set, with the reason: mostly printed parts, which BrickBench doesn't have yet, and parts too new for the LDraw library. Minifigures and alternate parts in BrickLink inventories are left out, and you are told how many. A list added while the parts library could not load is matched again once it does, as are all lists when a rebuilt library has more parts.
+**How lists are matched.** BrickLink and Rebrickable mostly number parts as LDraw does. Where they differ, LDraw parts note the other numbers ("BrickLink 4073" on 6141), and the library build records the numbers LDraw moved or merged (3040 is now 3040b). Colours are matched with Rebrickable's table of colour numbers. Checked against Rebrickable's inventories of 3,145 sets from 2018 on, about 98% of their parts matched before printed parts came into the library, and most of the rest were prints. What is still left is listed with each set, with the reason: mostly sticker sheets, which BrickBench leaves out, and parts too new for the LDraw library. Minifigures and alternate parts in BrickLink inventories are left out, and you are told how many. A list added while the parts library could not load is matched again once it does, as are all lists when a rebuilt library has more parts.
 
 Your lists stay in this browser, like favourites, and are shared by its tabs.
 
@@ -284,7 +286,7 @@ To pick up a newer LDraw release in CI, bump `ldraw-download-v1` in the workflow
 
 ### Hosting
 
-BrickBench is a static site: `bun run build` writes it to `dist/`, about 190 MB in some 7,800 files, nearly all of them the parts library. It needs no server of its own, and the parts are stored compressed, which the app undoes itself, so any static host serves it as it is. The build also writes `third-party-licences.txt`, the licences of the packages bundled into it, which About links to.
+BrickBench is a static site: `bun run build` writes it to `dist/`, about 350 MB in some 17,600 files, nearly all of them the parts library. It needs no server of its own, and the parts are stored compressed, which the app undoes itself, so any static host serves it as it is. Mind a host's limit on files: Cloudflare Pages takes 20,000 per site on its free plan (100,000 on paid ones), which leaves room for some 2,400 more parts, and the deploy job warns once a build passes 19,000 files. The build also writes `third-party-licences.txt`, the licences of the packages bundled into it, which About links to.
 
 The workflow deploys to [Cloudflare Pages](https://pages.cloudflare.com) after both test jobs pass on `main`. To switch it on:
 
@@ -299,14 +301,14 @@ The workflow deploys to [Cloudflare Pages](https://pages.cloudflare.com) after b
 
 `bun run ldraw` turns the [LDraw parts library](https://library.ldraw.org) into files the app can load quickly, in `public/ldraw/` (not committed; `bun run build` makes it whenever it is missing, incomplete or partial):
 
-- `index.json` lists every part: its name, category, keywords, author, how it sits on the grid and, when it leaves some of its box empty, which cells it fills. It also lists the part numbers LDraw moved or merged, each with the part it now is (4073 is 6141), so parts lists that use the old numbers still match.
+- `index.json` lists every part: its name, category, keywords, author, how it sits on the grid and, when it leaves some of its box empty, which cells it fills. Printed and stickered parts say so, with the plain part each decorates when the library has it (3068b for 3068bp80). It also lists the part numbers LDraw moved or merged, each with the part it now is (4073 is 6141), so parts lists that use the old numbers still match.
 - `parts/<number>.bin` holds one mesh per part: gzip-compressed, 16-bit positions and 8-bit normals, with its triangles in runs by colour when the part fixes colours of its own. A 2 × 4 brick is under 5 kB.
 - `CREDITS.txt` names the author of every part and of every primitive it uses, and copies of the LDraw licence files sit alongside.
 - `build.json` says the build is complete and, for downloads, records the archive's SHA-256. `complete.zip` always holds the latest LDraw release; keep a copy and pass `--library` to pin one.
 
 A build is written to `public/ldraw.partial/` and swapped in only when it has finished, so an interrupted run leaves the previous library in place. The tool only ever deletes folders it built itself.
 
-The converter (`scripts/ldraw/`) follows each part's sub-files and primitives, honouring LDraw's back-face rules (winding, inverted and mirrored references, double-sided sections), drops edge lines, smooths curved surfaces, and moves the part so its body stands centred on its footprint with the top studs over cell centres. Parts drawn in several colours, such as wheels with their tyres, keep the colours they fix, read from LDraw's colour table (`LDConfig.ldr`), apart from the part's own. It leaves out printed and sticker parts, obsolete and alias files and third-party parts, and the two twisted strings whose meshes run past 200,000 vertices. That leaves about 7,700 parts and 175 MB of meshes in as many files.
+The converter (`scripts/ldraw/`) follows each part's sub-files and primitives, honouring LDraw's back-face rules (winding, inverted and mirrored references, double-sided sections), drops edge lines, smooths curved surfaces, and moves the part so its body stands centred on its footprint with the top studs over cell centres. Parts drawn in several colours, such as wheels with their tyres, keep the colours they fix, read from LDraw's colour table (`LDConfig.ldr`), apart from the part's own. It keeps printed and stickered parts, whose prints LDraw draws as coloured shapes, and leaves out stickers on their own (sheets to stick on parts, which BrickBench cannot do), obsolete and alias files and third-party parts, and the two twisted strings whose meshes run past 200,000 vertices. That leaves about 17,500 parts, some 9,800 of them printed or stickered, and 320 MB of meshes in as many files.
 
 ```bash
 bun run ldraw                                # download complete.zip into .ldraw-cache/ and convert everything
@@ -384,7 +386,6 @@ e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 ## Not done yet
 
 - Connections beyond the stud grid: library parts snap to whole studs and plates, so hinges don't swing, Technic pins don't plug into holes, minifigures don't assemble and half-stud offsets (jumper plates) aren't possible
-- Printed library parts (printed tiles, minifigure faces and torsos)
 - Editing instruction steps by hand, sub-assemblies and per-step camera angles (steps are planned automatically)
 - Accounts and a gallery (models are shared by file or by link for now)
 

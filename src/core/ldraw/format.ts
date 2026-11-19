@@ -54,16 +54,21 @@ export interface LDrawIndexEntry {
    * the whole box.
    */
   readonly solids?: readonly SolidBox[];
+  /** A printed or stickered part. */
+  readonly printed?: true;
+  /** For a printed part, the plain part it decorates, when the library has it: "3068b" for "3068bp01". */
+  readonly base?: string;
 }
 
 /**
  * The index format written now. Version 2 added solids, version 3 parts
- * drawn in several colours, version 4 the part numbers LDraw renamed.
+ * drawn in several colours, version 4 the part numbers LDraw renamed,
+ * version 5 printed and stickered parts.
  */
-export const LDRAW_INDEX_VERSION = 4;
+export const LDRAW_INDEX_VERSION = 5;
 
 /** Index formats the app reads: in a version 1 library every part fills its whole box. */
-export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4] as const;
+export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5] as const;
 
 export interface LDrawIndex {
   readonly version: (typeof READABLE_INDEX_VERSIONS)[number];

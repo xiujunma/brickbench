@@ -11,12 +11,14 @@ export interface PartFilters {
   readonly feature?: Feature | undefined;
   /** Only parts the user owns, from the parts lists of their sets. */
   readonly owned?: boolean | undefined;
+  /** Only parts with a print or stickers. */
+  readonly printed?: boolean | undefined;
 }
 
 export const NO_FILTERS: PartFilters = {};
 
 export function hasFilters(filters: PartFilters): boolean {
-  return Boolean(filters.footprint || filters.height || filters.feature || filters.owned);
+  return Boolean(filters.footprint || filters.height || filters.feature || filters.owned || filters.printed);
 }
 
 /** Searching means words typed or a filter set; otherwise the panel shows its browsing views. Punctuation alone is no words. */

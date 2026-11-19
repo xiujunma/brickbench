@@ -28,6 +28,8 @@ const entrySchema = z
     origin: z.tuple([z.number(), z.number(), z.number()]),
     snug: z.boolean(),
     solids: z.array(z.tuple([cell, cell, cell, cell, cell, cell])).min(1).max(MAX_SOLIDS).optional(),
+    printed: z.literal(true).optional(),
+    base: partNumber.optional(),
   })
   .refine((entry) => (entry.solids ?? []).every((box) => fitsPart(box, entry)), {
     message: 'a part fills cells outside its own box',
@@ -68,5 +70,6 @@ export function toPartDef(entry: LDrawIndexEntry): PartDef {
     shape: { kind: 'mesh' },
     ldraw: { file: `${entry.id}.dat`, origin: entry.origin },
     keywords: [entry.category.toLowerCase(), ...(entry.keywords ?? [])],
+    ...(entry.printed ? { printed: true } : {}),
   };
 }

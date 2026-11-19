@@ -4,13 +4,13 @@
  */
 import { getColor } from '../../colors';
 import { colourInQuery } from '../finder/colourWords';
-import { FEATURES, NICKNAME_TAGS } from '../finder/tags';
+import { FEATURES, NICKNAME_TAGS, PRINTED_TAG } from '../finder/tags';
 import { normalizeForSearch } from '../finder/text';
 import { isKind, type PatternNode } from './ast';
 import type { Cursor } from './cursor';
 
-/** What + and - take: the finder's features and the nicknames builders use. */
-export const FEATURE_WORDS: ReadonlySet<string> = new Set([...FEATURES.map((f) => f.id), ...NICKNAME_TAGS]);
+/** What + and - take: the finder's features, the nicknames builders use, and printed. */
+export const FEATURE_WORDS: ReadonlySet<string> = new Set([...FEATURES.map((f) => f.id), ...NICKNAME_TAGS, PRINTED_TAG]);
 
 /** A palette colour from a name ("red", "dark-bluish-grey", "gray") or an LDraw code ("4"). */
 export function colourNamed(word: string): number | null {

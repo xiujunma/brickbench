@@ -59,7 +59,8 @@ Every part, built in or from the LDraw library, has:
   a plate of the part's real height.
 - **features**, read from the name as the search box's feature filter reads
   them, and **nicknames** builders use. Built-in parts add the nicknames among
-  their keywords, such as "cheese".
+  their keywords, such as "cheese", and library parts with a print or
+  stickers are `printed`.
 - **a top face**: a grid with a cell for each stud position of the box the
   part fills, in rows from the back of the part to the front. Each cell is
   `o` for a stud, `.` for no stud (smooth or sloped), `_` for a cell the part
@@ -162,7 +163,8 @@ pins and axles), `round` (round or curved), `slope` (slopes and wedges),
 `hinge` (hinges, turntables, balls and sockets), `smooth` (smooth tops),
 `window-door`, and `wheel` (wheels, tyres and rims). **Nicknames** work the
 same way: `cheese`, `jumper`, `macaroni`, `snot`, `erling`, `dot` and
-`liftarm`.
+`liftarm`. So does `printed`, for parts with a print or stickers: `T2x2
++printed` finds printed 2 × 2 tiles, and `-printed` leaves prints out.
 
 A **colour** is a palette name with hyphens for spaces (`:dark-bluish-grey`),
 a builder's name for one (`:grey`, `:clear`, `:gold`; `gray` as well), or an
@@ -214,7 +216,7 @@ A pattern that does not read says what is wrong and where:
 | `[]` | Each row, and each choice in it, needs at least one cell |
 | `B1x2x5^15` | Give the height once: a third size in bricks (B1x2x5) or ^ and plates (B1x2^15) |
 | `S95` | A slope’s angle is from 1 to 90 degrees |
-| `+shiny` | “shiny” is not a feature: clip, bar, side-studs, holes, round, slope, hinge, smooth, window-door, wheel, cheese, jumper, macaroni, snot, erling, dot, liftarm |
+| `+shiny` | “shiny” is not a feature: clip, bar, side-studs, holes, round, slope, hinge, smooth, window-door, wheel, cheese, jumper, macaroni, snot, erling, dot, liftarm, printed |
 | `:sparkly` | No colour is called “sparkly” |
 | `@mine` | A source is @basic, @library or @owned |
 | `P \|` | Nothing to match here: each side of “\|”, and each ( ), needs a term |

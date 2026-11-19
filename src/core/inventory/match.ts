@@ -55,7 +55,10 @@ export function partNumberOf(part: Pick<PartDef, 'ldraw'> | undefined): PartNumb
 /**
  * Collects the part numbers of the built-in parts and the library. When
  * several parts note the same catalogue number, the one with that very
- * number wins, then the first by number, so a list always matches the same way.
+ * number wins, then a plain part over a printed one, then the first by
+ * number, so a list always matches the same way. A print noting the number
+ * of a part BrickBench has (90001p01 notes 90001, its plain part) does not
+ * take that number from it.
  */
 export function partNumbersOf(builtIns: readonly PartDef[], entries: readonly LDrawIndexEntry[], aliases: ReadonlyMap<string, string>): PartNumbers {
   const known = new Set<PartNumber>(entries.map((e) => e.id));
@@ -63,6 +66,7 @@ export function partNumbersOf(builtIns: readonly PartDef[], entries: readonly LD
     const number = partNumberOf(part);
     if (number) known.add(number);
   }
+  const printed = new Set(entries.filter((e) => e.printed).map((e) => e.id));
   const noted = { rebrickable: new Map<string, PartNumber>(), bricklink: new Map<string, PartNumber>() };
   for (const entry of [...entries].sort((a, b) => a.id.localeCompare(b.id))) {
     for (const keyword of entry.keywords ?? []) {
@@ -70,7 +74,9 @@ export function partNumbersOf(builtIns: readonly PartDef[], entries: readonly LD
       if (!match?.[1] || !match[2]) continue;
       const map = noted[match[1].toLowerCase() as Catalogue];
       const number = match[2].toLowerCase();
-      if (!map.has(number) || number === entry.id) map.set(number, entry.id);
+      if (entry.printed && known.has(number)) continue;
+      const before = map.get(number);
+      if (before === undefined || number === entry.id || (printed.has(before) && !entry.printed)) map.set(number, entry.id);
     }
   }
   return { known, noted, aliases };

@@ -797,9 +797,12 @@
   color: var(--danger);
 }
 
-/* with the Owned toggle, two rows of two so no filter gets squeezed */
-.filter-bar.has-owned {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+/* on/off filters (Owned, Printed), a row of their own under the three selects */
+.filter-toggles {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .filter-toggle {

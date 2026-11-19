@@ -2,12 +2,13 @@ import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } fr
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { encodePartMesh, LDRAW_INDEX_VERSION, MAX_ALIASES, type LDrawIndex, type LDrawIndexEntry } from '../../src/core/ldraw/format.ts';
+import { plainNumberOf } from '../../src/core/ldraw/prints.ts';
 import { readColourTable, type ColourTable } from './colours.ts';
 import { convertPart, type Conversion } from './convert.ts';
 import { creditsText, type Credit } from './credits.ts';
 import { Flattener } from './flatten.ts';
 import { directorySource, normalizeName, type LibrarySource } from './library.ts';
-import { aliasTarget, displayName, exclusionReason, readHeader, type PartHeader } from './select.ts';
+import { aliasTarget, displayName, exclusionReason, isPrintedPart, readHeader, type PartHeader } from './select.ts';
 
 /** Same rule as the app's index schema. */
 const PART_ID = /^[0-9a-z_-]{1,40}$/;
@@ -83,6 +84,7 @@ function toEntry(id: string, header: PartHeader, conversion: Extract<Conversion,
     origin: [round(fit.offset[0]), round(fit.offset[1]), round(fit.offset[2])],
     snug: fit.snug,
     ...(solids ? { solids } : {}),
+    ...(isPrintedPart(header) ? { printed: true as const } : {}),
   };
 }
 
@@ -161,13 +163,31 @@ export function keptAliases(aliases: ReadonlyMap<string, string>, kept: Readonly
   return resolved.sort(([a], [b]) => a.localeCompare(b)).slice(0, MAX_ALIASES);
 }
 
+/**
+ * Each printed part with the plain part it decorates, when that is kept too:
+ * under its own number, or the one it was renamed to (3068p01 → 3068b).
+ */
+export function withPlainParts(entries: readonly LDrawIndexEntry[], aliases: readonly (readonly [string, string])[]): LDrawIndexEntry[] {
+  const plain = new Set(entries.filter((e) => !e.printed).map((e) => e.id));
+  const renamed = new Map(aliases);
+  const known = (stem: string): string | null => {
+    if (plain.has(stem)) return stem;
+    const now = renamed.get(stem);
+    return now !== undefined && plain.has(now) ? now : null;
+  };
+  return entries.map((entry) => {
+    const base = entry.printed ? plainNumberOf(entry.id, known) : null;
+    return base === null ? entry : { ...entry, base };
+  });
+}
+
 /** Writes index.json, the credits and LDraw's licence files next to the meshes. */
 export function writeLibraryFiles(dir: string, root: string, library: ConvertedLibrary, generated: string): void {
   const aliases = keptAliases(library.aliases, new Set(library.entries.map((e) => e.id)));
   const index: LDrawIndex = {
     version: LDRAW_INDEX_VERSION,
     generated,
-    parts: [...library.entries].sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true })),
+    parts: withPlainParts(library.entries, aliases).sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true })),
     ...(aliases.length > 0 ? { aliases } : {}),
   };
   writeFileSync(join(dir, 'index.json'), JSON.stringify(index));

@@ -264,3 +264,54 @@ describe('finding parts by part pattern', () => {
     expect(finder.patternOf('nothing')).toBeUndefined();
   });
 });
+
+describe('printed and stickered parts', () => {
+  const printed = (id: string, name: string, w: number, d: number, base?: string): LDrawIndexEntry => ({
+    ...entry(id, name, 'Tile', w, d, 1),
+    printed: true,
+    ...(base ? { base } : {}),
+  });
+  // the prints come first in the library's own order, as they do by part number
+  const tiles = createFinder([], [
+    printed('3068bp01', 'Tile 2 × 2 with Black "POLICE" Pattern', 2, 2, '3068b'),
+    printed('3068bd01', 'Tile 2 × 2 with Map Sticker', 2, 2, '3068b'),
+    entry('3068b', 'Tile 2 × 2 with Groove', 'Tile', 2, 2, 1),
+    entry('4150', 'Tile 2 × 2 Round', 'Tile', 2, 2, 1),
+    // plain, and a weaker match for "tile 2x2" than the prints: its name does not begin with it
+    entry('2582', 'Hinge Tile 2 × 2 with Fingers', 'Hinge', 2, 2, 1),
+  ]);
+  const ids = (query: string, filters = {}) => tiles.find(query, filters).items.map((item) => item.number);
+
+  it('come after the plain parts, which are what most searches are for, however well they match', () => {
+    expect(ids('tile 2x2')).toEqual(['3068b', '4150', '2582', '3068bp01', '3068bd01']);
+    expect(ids('', { category: 'Tile' })).toEqual(['3068b', '4150', '3068bp01', '3068bd01']);
+    // a print's own number finds it alone
+    expect(ids('3068bp01')).toEqual(['3068bp01']);
+  });
+
+  it('are counted', () => {
+    expect(tiles.printed).toBe(2);
+    expect(finder.printed).toBe(0);
+  });
+
+  it('are found by what they show, by their number, and by "printed", as a whole word', () => {
+    expect(ids('police')).toEqual(['3068bp01']);
+    expect(ids('3068bd01')).toEqual(['3068bd01']);
+    expect(ids('printed')).toEqual(['3068bp01', '3068bd01']);
+    expect(ids('printed tile')).toEqual(['3068bp01', '3068bd01']);
+    // a word inside "printed" finds nothing the parts' own words do not
+    expect(ids('ted')).toEqual([]);
+    expect(ids('rint')).toEqual([]);
+  });
+
+  it('can be the only parts shown', () => {
+    expect(ids('tile 2x2', { printed: true })).toEqual(['3068bp01', '3068bd01']);
+    expect(tiles.find('3068b', { printed: true }).items.map((item) => item.printed)).toEqual([true, true]);
+  });
+
+  it('match +printed and -printed in a part pattern', () => {
+    expect(ids('T2x2 +printed')).toEqual(['3068bp01', '3068bd01']);
+    // the round tile is R in a pattern, not T
+    expect(ids('T2x2 -printed')).toEqual(['3068b']);
+  });
+});

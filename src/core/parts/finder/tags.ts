@@ -48,6 +48,9 @@ export const HEIGHTS: readonly { readonly id: HeightClass; readonly label: strin
 /** The nicknames a part can have, such as "cheese" and "jumper". */
 export const NICKNAME_TAGS: readonly string[] = NICKNAMES.map((n) => n.tag);
 
+/** What printed and stickered parts are tagged with, from the library's own mark rather than a name. */
+export const PRINTED_TAG = 'printed';
+
 export function nicknamesOf(name: string): string[] {
   return NICKNAMES.filter((n) => n.pattern.test(name)).map((n) => n.tag);
 }

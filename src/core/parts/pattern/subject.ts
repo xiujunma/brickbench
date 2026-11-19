@@ -3,7 +3,7 @@
  * features, and the top face in each of its four turns.
  */
 import { nominalFootprint, nominalPlates } from '../finder/indexing';
-import { featuresOf, NICKNAME_TAGS, nicknamesOf } from '../finder/tags';
+import { featuresOf, NICKNAME_TAGS, nicknamesOf, PRINTED_TAG } from '../finder/tags';
 import { normalizeForSearch } from '../finder/text';
 import type { PartDef } from '../types';
 import type { Kind } from './ast';
@@ -132,6 +132,6 @@ export function subjectOf(part: PartDef): Subject {
     plates: nominalPlates(name, part.h),
     grid: grids[0] as string,
     grids,
-    features: new Set([...featuresOf(name), ...nicknamesOf(name), ...keywordNicknames]),
+    features: new Set([...featuresOf(name), ...nicknamesOf(name), ...keywordNicknames, ...(part.printed ? [PRINTED_TAG] : [])]),
   };
 }

@@ -37,6 +37,22 @@ describe('part numbers BrickBench knows', () => {
     expect(NUMBERS.noted.bricklink.get('92')).toBe('92a');
   });
 
+  it('lets a print keep the catalogue numbers of prints, but not take its plain part’s number', () => {
+    const printed = (id: string, keywords: string[]): LDrawIndexEntry => ({ ...entry(id, keywords), printed: true });
+    const numbers = partNumbersOf([], [
+      entry('90001'),
+      // LDraw notes the plain part's number on the print
+      printed('90001p01', ['Rebrickable 90001']),
+      printed('3068bp01', ['BrickLink 3068bpb0001']),
+      // a print and a plain part note the same number: the plain part wins, though the print comes first by number
+      printed('7000p01', ['BrickLink 7000x']),
+      entry('7001', ['BrickLink 7000x']),
+    ], new Map());
+    expect(matchPart('90001', 'rebrickable', numbers)).toBe('90001');
+    expect(matchPart('3068bpb0001', 'bricklink', numbers)).toBe('3068bp01');
+    expect(matchPart('7000x', 'bricklink', numbers)).toBe('7001');
+  });
+
   it("reads a part's LDraw number", () => {
     expect(partNumberOf(PARTS.find((p) => p.id === 'brick-2x4'))).toBe('3001');
     expect(partNumberOf({ ldraw: { file: '3040B.DAT', origin: [0, 0, 0] } })).toBe('3040b');

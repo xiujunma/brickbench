@@ -64,7 +64,7 @@ function changes(plain: readonly PartTally[], moved: readonly PartTally[], squar
   return [
     { key: 'squared', title: 'Turned square', why: 'Submodels stood at an angle for show, turned to the nearest quarter turn.', rows: squared },
     { key: 'moved', title: 'Lined up', why: 'Submodels built a little off the rest, moved up to half a stud or plate to line up.', rows: moved },
-    { key: 'plain', title: 'Came in plain', why: 'Printed and stickered parts, built without their print.', rows: plain },
+    { key: 'plain', title: 'Came in plainer', why: 'Printed and stickered parts the library lacks, built without their print or stickers, or with less of them.', rows: plain },
     { key: 'recoloured', title: 'Nearest colours', why: 'Colours BrickBench doesn’t have, built in the nearest it does.', rows: recoloured },
   ].filter((change) => change.rows.length > 0);
 }

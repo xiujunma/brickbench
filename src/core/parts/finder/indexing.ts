@@ -1,6 +1,6 @@
 import type { LDrawIndexEntry } from '../../ldraw/format';
 import type { PartDef } from '../types';
-import { featuresOf, footprintKey, heightClassOf, nicknamesOf, type Feature, type HeightClass } from './tags';
+import { featuresOf, footprintKey, heightClassOf, nicknamesOf, PRINTED_TAG, type Feature, type HeightClass } from './tags';
 import { normalizeForSearch } from './text';
 
 export type PartSource = 'basic' | 'library';
@@ -18,6 +18,8 @@ export interface FinderItem {
   readonly d: number;
   readonly h: number;
   readonly author?: string | undefined;
+  /** A printed or stickered library part. */
+  readonly printed?: boolean | undefined;
 }
 
 /** A part prepared for searching and filtering. */
@@ -80,7 +82,8 @@ export function indexItem(item: FinderItem, keywords: readonly string[], order: 
     duplicate,
     name,
     haystack: [name, extra, ...nicknames].join(' '),
-    tags: new Set([...nicknames, ...naming]),
+    // "printed" names every print, but only as a whole word: in the text, "ted" would find ten thousand parts
+    tags: new Set([...nicknames, ...naming, ...(item.printed ? [PRINTED_TAG] : [])]),
     features: featuresOf(name),
     footprint: nominalFootprint(name, item.w, item.d),
     height: heightClassOf(nominalPlates(name, item.h)),
@@ -103,5 +106,6 @@ export function libraryItem(entry: LDrawIndexEntry): FinderItem {
     d: entry.d,
     h: entry.h,
     author: entry.author,
+    ...(entry.printed ? { printed: true } : {}),
   };
 }

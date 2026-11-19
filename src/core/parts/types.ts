@@ -51,6 +51,8 @@ export interface PartDef {
   readonly shape: PartShape;
   readonly ldraw?: LDrawRef | undefined;
   readonly keywords: readonly string[];
+  /** A printed or stickered library part. */
+  readonly printed?: boolean | undefined;
 }
 
 export type PartLookup = (id: string) => PartDef | undefined;

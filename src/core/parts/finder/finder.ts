@@ -3,7 +3,7 @@ import { readQuery, type PartPattern } from '../pattern';
 import type { PartDef } from '../types';
 import { builtInItem, indexItem, libraryItem, type FinderItem, type Indexed, type PartSource } from './indexing';
 import { createPatternIndex, MAX_SEARCH_WORK } from './patternSearch';
-import { parseQuery, type ParsedQuery } from './query';
+import { parseQuery, type ParsedQuery, type QueryTerm } from './query';
 import { browseRank, matches, rank, sortRanked, withCorrections } from './ranking';
 import type { Feature, HeightClass } from './tags';
 
@@ -21,6 +21,8 @@ export interface FinderFilters {
   readonly only?: ReadonlySet<string> | undefined;
   /** The parts the user owns: what @owned in a part pattern keeps to. */
   readonly ownedParts?: ReadonlySet<string> | undefined;
+  /** Only printed and stickered parts. */
+  readonly printed?: boolean | undefined;
 }
 
 export interface FinderResult {
@@ -41,6 +43,8 @@ export interface FootprintCount {
 
 export interface Finder {
   readonly count: number;
+  /** How many of them have a print or stickers. */
+  readonly printed: number;
   /** The finder's view of one part, built-in or library, if it knows it. */
   get(partId: string): FinderItem | undefined;
   /** Searches by words, or by a part pattern such as P2x4 or S45[oo/..] when the query is one. */
@@ -64,13 +68,17 @@ function inScope(entry: Indexed, filters: FinderFilters, withCopies = false): bo
 function passes(entry: Indexed, filters: FinderFilters, withCopies = false): boolean {
   if (!inScope(entry, filters, withCopies)) return false;
   if (filters.only && !filters.only.has(entry.item.partId)) return false;
+  if (filters.printed && !entry.item.printed) return false;
   if (filters.footprint !== undefined && entry.footprint !== filters.footprint) return false;
   if (filters.height !== undefined && entry.height !== filters.height) return false;
   return filters.feature === undefined || entry.features.has(filters.feature);
 }
 
+/** A term that is one of the part's tags, whole, such as "printed". */
+const isTag = (entry: Indexed, term: QueryTerm): boolean => term.options.some((option) => option.words.length === 1 && entry.tags.has(option.words[0] ?? ''));
+
 function matchesAll(entry: Indexed, parsed: ParsedQuery): boolean {
-  return parsed.terms.every((term) => matches(entry.haystack, term));
+  return parsed.terms.every((term) => matches(entry.haystack, term) || isTag(entry, term));
 }
 
 function search(candidates: readonly Indexed[], parsed: ParsedQuery): FinderItem[] {
@@ -134,6 +142,7 @@ export function createFinder(builtIns: readonly PartDef[], library: readonly LDr
 
   return {
     count: entries.filter((e) => !e.duplicate).length,
+    printed: entries.filter((e) => e.item.printed).length,
     get: (partId) => byId.get(partId),
     find,
     patternOf: (partId) => patterns.describe(partId),

@@ -55,7 +55,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: public/ldraw
-          key: ldraw-library-v1-${{ hashFiles('.ldraw-cache/complete.zip', 'scripts/ldraw/**/*.ts', 'src/core/ldraw/format.ts') }}
+          key: ldraw-library-v1-${{ hashFiles('.ldraw-cache/complete.zip', 'scripts/ldraw/**/*.ts', 'src/core/ldraw/format.ts', 'src/core/ldraw/prints.ts') }}
       - name: Convert the LDraw library
         run: bun run ldraw --if-missing
       - name: Check parts against the LDraw library
@@ -112,11 +112,18 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: public/ldraw
-          key: ldraw-library-v1-${{ hashFiles('.ldraw-cache/complete.zip', 'scripts/ldraw/**/*.ts', 'src/core/ldraw/format.ts') }}
+          key: ldraw-library-v1-${{ hashFiles('.ldraw-cache/complete.zip', 'scripts/ldraw/**/*.ts', 'src/core/ldraw/format.ts', 'src/core/ldraw/prints.ts') }}
       - name: Convert the LDraw library
         run: bun run ldraw --if-missing
       - name: Build the app
         run: bunx --bun vite build
+      # Cloudflare Pages takes 20,000 files a site on its free plan, nearly all of ours the parts library
+      - name: Count the files to upload
+        shell: bash
+        run: |
+          files=$(find dist -type f | wc -l)
+          echo "dist holds $files files"
+          if [ "$files" -gt 19000 ]; then echo "::warning::dist holds $files files, near the 20,000 Cloudflare Pages takes on its free plan"; fi
       - name: Upload to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

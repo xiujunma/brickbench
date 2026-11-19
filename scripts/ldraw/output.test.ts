@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { convertLibrary, keptAliases, writeLibraryFiles } from './convertLibrary.ts';
+import { convertLibrary, keptAliases, withPlainParts, writeLibraryFiles } from './convertLibrary.ts';
 import { isSafeName } from './library.ts';
 import { isCompleteBuild, MARKER, StagedOutput, writeInfo } from './output.ts';
 
@@ -18,7 +18,7 @@ afterEach(() => {
 
 const SOURCE = { url: 'https://example.org/complete.zip', sha256: 'abc' };
 
-/** Builds a tiny library folder: one brick, one printed variant, one stud primitive. */
+/** Builds a tiny library folder: one brick, a print of it, a sticker on its own, one stud primitive. */
 function makeLibrary(): string {
   const root = join(dir, 'ldraw');
   mkdirSync(join(root, 'parts'), { recursive: true });
@@ -26,7 +26,10 @@ function makeLibrary(): string {
   const brick = ['0 Brick  1 x  1', '0 Author: Jane Doe [jdoe]', '0 !LDRAW_ORG Part UPDATE 2020-01', '0 BFC CERTIFY CCW',
     '4 16 -10 0 -10 10 0 -10 10 0 10 -10 0 10', '4 16 -10 24 -10 -10 24 10 10 24 10 10 24 -10', '1 16 0 0 0 1 0 0 0 1 0 0 0 1 stud.dat'];
   writeFileSync(join(root, 'parts', '3005.dat'), brick.join('\n'));
-  writeFileSync(join(root, 'parts', '3005p01.dat'), ['0 Brick  1 x  1 with Smile Pattern', '0 !LDRAW_ORG Part'].join('\n'));
+  // the brick, with a black triangle printed on its front
+  const print = ['0 Brick  1 x  1 with Smile Pattern', '0 !LDRAW_ORG Part', '0 BFC CERTIFY CCW', '1 16 0 0 0 1 0 0 0 1 0 0 0 1 3005.dat', '3 0 -6 4 -10 6 4 -10 0 10 -10'];
+  writeFileSync(join(root, 'parts', '3005p01.dat'), print.join('\n'));
+  writeFileSync(join(root, 'parts', '3005s01.dat'), ['0 Sticker  1 x  1 with Smile', '0 !LDRAW_ORG Part', '0 !CATEGORY Sticker', '3 15 -6 0 -6 6 0 -6 0 0 6'].join('\n'));
   writeFileSync(join(root, 'p', 'stud.dat'), ['0 Stud', '0 Author: James Jessiman', '0 BFC CERTIFY CCW', '3 16 -6 -4 0 6 -4 0 0 -4 6'].join('\n'));
   writeFileSync(join(root, 'CAreadme.txt'), 'licence');
   return root;
@@ -40,11 +43,16 @@ describe('converting a library folder', () => {
     const converted = convertLibrary(root, join(out, 'parts'), { only: null, limit: Infinity });
     writeLibraryFiles(out, root, converted, '2026-11-11T00:00:00Z');
 
-    expect(converted.entries.map((e) => e.id)).toEqual(['3005']);
+    expect(converted.entries.map((e) => e.id)).toEqual(['3005', '3005p01']);
     expect(converted.entries[0]).toMatchObject({ name: 'Brick 1 × 1', author: 'Jane Doe', w: 1, d: 1, h: 3, snug: true });
-    expect(converted.tally.counts.get('printed')).toBe(1);
+    expect(converted.entries[0]).not.toHaveProperty('printed');
+    // a sticker on its own stays out
+    expect(converted.tally.counts.get('sticker')).toBe(1);
     expect(existsSync(join(out, 'parts', '3005.bin'))).toBe(true);
-    expect(JSON.parse(readFileSync(join(out, 'index.json'), 'utf8')).parts).toHaveLength(1);
+    expect(existsSync(join(out, 'parts', '3005p01.bin'))).toBe(true);
+    // the print says it is one, and which part it decorates
+    const parts = JSON.parse(readFileSync(join(out, 'index.json'), 'utf8')).parts as { id: string }[];
+    expect(parts.find((p) => p.id === '3005p01')).toMatchObject({ name: 'Brick 1 × 1 with Smile Pattern', printed: true, base: '3005', w: 1, d: 1, h: 3 });
     const credits = readFileSync(join(out, 'CREDITS.txt'), 'utf8');
     expect(credits).toContain('parts/3005.dat\tBrick  1 x  1\tJane Doe');
     expect(credits).toContain('p/stud.dat\tStud\tJames Jessiman');
@@ -57,7 +65,7 @@ describe('converting a library folder', () => {
     writeFileSync(join(root, 'parts', '3005b.dat'), ['0 ~Moved to 3005', '0 !LDRAW_ORG Part'].join('\n'));
     writeFileSync(join(root, 'parts', '3005a.dat'), ['0 ~Moved to 3005B', '0 !LDRAW_ORG Part'].join('\n'));
     writeFileSync(join(root, 'parts', '3005x.dat'), ['0 =Brick  1 x  1', '0 !LDRAW_ORG Part Alias', '1 16 0 0 0 1 0 0 0 1 0 0 0 1 3005.dat'].join('\n'));
-    writeFileSync(join(root, 'parts', '3005z.dat'), ['0 ~Moved to 3005p01', '0 !LDRAW_ORG Part'].join('\n'));
+    writeFileSync(join(root, 'parts', '3005z.dat'), ['0 ~Moved to 3005s01', '0 !LDRAW_ORG Part'].join('\n'));
     writeFileSync(join(root, 'parts', '3005o.dat'), ['0 ~Brick  1 x  1 (Obsolete)', '0 !LDRAW_ORG Part'].join('\n'));
     const out = join(dir, 'out');
     mkdirSync(join(out, 'parts'), { recursive: true });
@@ -152,5 +160,23 @@ describe('staged library output', () => {
     writeFileSync(join(foreign.staging, 'notes.txt'), 'mine');
     expect(() => foreign.discard()).toThrow(/Refusing to delete/);
     expect(existsSync(join(foreign.staging, MARKER))).toBe(false);
+  });
+
+  it('finds each print’s plain part, under a number it was renamed from too', () => {
+    const entry = (id: string, printed = false) => ({ id, name: id, category: 'Tile', w: 1, d: 1, h: 1, origin: [0, 0, 0] as const, snug: true, ...(printed ? { printed: true as const } : {}) });
+    const parts = withPlainParts(
+      [entry('3068b'), entry('3068bp01', true), entry('3068p02', true), entry('9999p01', true), entry('93085'), entry('93085p03', true), entry('93085p03d01', true)],
+      [['3068', '3068b']],
+    );
+    expect(parts.map((p) => [p.id, p.base ?? null])).toEqual([
+      ['3068b', null],
+      ['3068bp01', '3068b'],
+      ['3068p02', '3068b'],
+      ['9999p01', null],
+      ['93085', null],
+      ['93085p03', '93085'],
+      // stickers on a print: the plain part, not the print
+      ['93085p03d01', '93085'],
+    ]);
   });
 });

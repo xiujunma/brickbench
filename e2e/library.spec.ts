@@ -74,6 +74,21 @@ test.describe('LDraw parts library', () => {
       await expect(page.locator('.part-tile')).toHaveCount(120);
     });
 
+    test('puts printed parts after the plain ones, and shows only them when asked', async ({ page }) => {
+      await freshEditor(page);
+      const search = page.getByRole('searchbox').first();
+      await search.fill('tile 2x2');
+      const tiles = page.locator('.part-tile');
+      await expect(tiles.first()).toHaveAttribute('title', /^Tile 2 × 2/);
+      await expect(tiles.first()).not.toHaveAttribute('title', /Pattern|Sticker/);
+      await page.getByRole('button', { name: 'Printed', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Printed', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await expect(tiles.first()).toHaveAttribute('title', /^Tile 2 × 2 .*(Pattern|Sticker)/);
+      // a print by what it shows
+      await search.fill('police');
+      await expect(tiles.first()).toHaveAttribute('title', /POLICE/i);
+    });
+
     test('opens a saved model that uses library parts', async ({ page }, testInfo) => {
       const path = testInfo.outputPath('library-model.brickbench.json');
       const bricks = [

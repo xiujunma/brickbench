@@ -1,5 +1,6 @@
 import type { PartNumber, PartNumbers } from '../../inventory/match';
 import { partIdFor } from '../../inventory/stock';
+import { plainNumberOf } from '../../ldraw/prints';
 import { fileKey } from './read';
 
 /** The part BrickBench builds a model's part with. */
@@ -41,23 +42,14 @@ export function numberOfFile(file: string): string {
   return fileKey(file).replace(/^parts\//, '').replace(/\.dat$/, '');
 }
 
-/** LDraw numbers printed parts with a "p" suffix (3626bp01) and stickered ones with a "d" (10202d01). */
-const DECORATION_MARKS = new Set(['p', 'd']);
-
 export function createPartResolver(numbers: PartNumbers): PartResolver {
   const known = (number: string | undefined): PartNumber | null => (number !== undefined && numbers.known.has(number) ? number : null);
   const direct = (number: string): PartNumber | null => known(number) ?? known(numbers.aliases.get(number));
   const resolved = (number: PartNumber | null, plain: boolean): ResolvedPart | null =>
     number === null ? null : { partId: partIdFor(number), number, plain };
 
-  const plainOf = (number: string): PartNumber | null => {
-    for (let i = number.length - 1; i > 0; i--) {
-      if (!DECORATION_MARKS.has(number[i] ?? '')) continue;
-      const base = direct(number.slice(0, i));
-      if (base) return base;
-    }
-    return null;
-  };
+  // a print the library lacks comes in as its plain part (3626bp01 as 3626b)
+  const plainOf = (number: string): PartNumber | null => plainNumberOf(number, direct);
 
   const exact = (file: string): ResolvedPart | null => (isModelFile(file) ? null : resolved(direct(numberOfFile(file)), false));
 

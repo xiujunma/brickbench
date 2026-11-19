@@ -37,8 +37,23 @@ describe('library index', () => {
     expect(() => parseLDrawIndex({ version: 4, generated: '', parts: [], aliases: [['3001']] })).toThrow(/damaged/);
   });
 
+  it('reads printed parts and the plain part each decorates, as parts that say so', () => {
+    const print: LDrawIndexEntry = { ...BRICK, id: '3001p01', name: 'Brick 2 × 4 with Fire Logo Pattern', printed: true, base: '3001' };
+    const sticker: LDrawIndexEntry = { ...BRICK, id: '9999d01', name: 'Brick 2 × 4 with Map Sticker', printed: true };
+    const index = parseLDrawIndex({ version: 5, generated: '', parts: [BRICK, print, sticker] });
+    expect(index.parts.map((p) => [p.printed ?? false, p.base ?? null])).toEqual([
+      [false, null],
+      [true, '3001'],
+      [true, null],
+    ]);
+    expect(toPartDef(index.parts[1] as LDrawIndexEntry).printed).toBe(true);
+    expect(toPartDef(BRICK)).not.toHaveProperty('printed');
+    expect(() => parseLDrawIndex({ version: 5, generated: '', parts: [{ ...print, base: '../3001' }] })).toThrow(/damaged/);
+    expect(() => parseLDrawIndex({ version: 5, generated: '', parts: [{ ...print, printed: false }] })).toThrow(/damaged/);
+  });
+
   it('rejects damaged or unexpected indexes with a readable message', () => {
-    expect(() => parseLDrawIndex({ version: 5, generated: '', parts: [] })).toThrow(/damaged/);
+    expect(() => parseLDrawIndex({ version: 6, generated: '', parts: [] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, id: '../evil' }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, w: 0 }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex('nope')).toThrow(/damaged/);

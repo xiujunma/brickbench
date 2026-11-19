@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getColor } from '../../core/colors';
 import { useEditor } from '../../state/editorStore';
 import { hasFilters } from '../../state/finderSession';
+import { useLibrary } from '../../state/library';
 import { FilterBar } from './parts/FilterBar';
 import { FinderSearch } from './parts/FinderSearch';
 import { FindResults } from './parts/FindResults';
@@ -53,6 +54,7 @@ function usePicking(session: FinderSession, onPicked: (() => void) | undefined) 
 
 export function PartsPanel({ onPicked }: Props) {
   const finder = useFinder();
+  const libraryStatus = useLibrary((s) => s.status);
   const owned = useOwnedPartIds();
   const openDialog = useEditor((s) => s.openDialog);
   const session = useFinderSession(finder, owned);
@@ -74,6 +76,9 @@ export function PartsPanel({ onPicked }: Props) {
     return hadAnything;
   };
 
+  // there from the start, so it does not push the parts down as the library loads; gone where there are no prints
+  const printable = libraryStatus === 'ready' ? finder.printed > 0 : libraryStatus !== 'missing' && libraryStatus !== 'failed';
+
   return (
     <aside className="panel panel-parts" aria-label="Parts library">
       <div className="panel-head">
@@ -88,7 +93,13 @@ export function PartsPanel({ onPicked }: Props) {
         onEnter={buildWithChosen}
         onEscape={clear}
       />
-      <FilterBar filters={session.filters} footprints={footprints} ownable={owned !== null} onChange={(filters) => dispatch({ type: 'filters', filters })} />
+      <FilterBar
+        filters={session.filters}
+        footprints={footprints}
+        ownable={owned !== null}
+        printable={printable}
+        onChange={(filters) => dispatch({ type: 'filters', filters })}
+      />
       {result ? (
         <FindResults
           {...tile}

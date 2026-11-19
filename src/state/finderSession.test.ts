@@ -9,6 +9,8 @@ describe('finder session', () => {
     expect(isSearching('   ', {})).toBe(false);
     expect(isSearching('2x4', {})).toBe(true);
     expect(isSearching('', { height: 'plate' })).toBe(true);
+    expect(isSearching('', { printed: true })).toBe(true);
+    expect(hasFilters({ printed: true })).toBe(true);
     // punctuation alone names nothing
     expect(isSearching('?', {})).toBe(false);
     expect(isSearching('“”', {})).toBe(false);

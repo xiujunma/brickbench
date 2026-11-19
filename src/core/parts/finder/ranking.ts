@@ -58,12 +58,19 @@ export function browseRank(entry: Indexed, category: string | undefined): Rank {
   return { tier: lead && entry.name.startsWith(lead) ? 0 : 1, position: 0 };
 }
 
-/** Best first: by tier, then built-in parts (the common, polished ones), then position, then catalogue order. */
+/**
+ * Best first: plain parts before printed ones, however well a print matches
+ * (a tile's prints run into hundreds, and a part's own number finds only
+ * it); then by tier, then built-in parts (the common, polished ones), then
+ * position, then catalogue order.
+ */
 export function sortRanked(ranked: readonly { readonly entry: Indexed; readonly rank: Rank }[]): FinderItem[] {
   const source = (e: Indexed): number => (e.item.source === 'basic' ? 0 : 1);
+  const printed = (e: Indexed): number => (e.item.printed ? 1 : 0);
   return [...ranked]
     .sort(
       (a, b) =>
+        printed(a.entry) - printed(b.entry) ||
         a.rank.tier - b.rank.tier ||
         source(a.entry) - source(b.entry) ||
         a.rank.position - b.rank.position ||

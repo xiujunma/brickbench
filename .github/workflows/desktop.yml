@@ -58,7 +58,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: public/ldraw
-          key: ldraw-library-v1-${{ runner.os }}-${{ hashFiles('.ldraw-cache/complete.zip', 'scripts/ldraw/**/*.ts', 'src/core/ldraw/format.ts') }}
+          key: ldraw-library-v1-${{ runner.os }}-${{ hashFiles('.ldraw-cache/complete.zip', 'scripts/ldraw/**/*.ts', 'src/core/ldraw/format.ts', 'src/core/ldraw/prints.ts') }}
 
       - name: Build the installers
         env:

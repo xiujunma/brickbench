@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { fitPart } from './fit.ts';
 import { buildMesh } from './mesh.ts';
 import type { V3 } from './parse.ts';
-import { displayName, exclusionReason, readHeader } from './select.ts';
+import { displayName, exclusionReason, isPrintedPart, readHeader } from './select.ts';
 
 type Tri = { a: V3; b: V3; c: V3; doubleSided?: boolean };
 
@@ -121,13 +121,22 @@ describe('part headers', () => {
     expect(readHeader('0 Plate  1 x  2\n0 !LDRAW_ORG Part').category).toBe('Plate');
   });
 
-  it('keeps plain parts and drops obsolete, alias, printed and non-part files', () => {
+  it('knows a printed part by its name, or a part with its stickers on by its category', () => {
+    expect(isPrintedPart({ ...header, description: 'Tile 1 x 1 with Smile Pattern' })).toBe(true);
+    expect(isPrintedPart({ ...header, description: 'Tile 2 x 4 with Tram Route Map', kind: 'Shortcut', category: 'Sticker Shortcut' })).toBe(true);
+    expect(isPrintedPart({ ...header, description: 'Minifig Head Rodian without Pattern' })).toBe(false);
+    expect(isPrintedPart(header)).toBe(false);
+  });
+
+  it('keeps plain and printed parts, and drops obsolete, alias, sticker and non-part files', () => {
     expect(exclusionReason(header)).toBeNull();
     expect(exclusionReason({ ...header, description: '~Moved to 3040b' })).toBe('obsolete');
     expect(exclusionReason({ ...header, description: '=Brick 2 x 4' })).toBe('alias');
     expect(exclusionReason({ ...header, description: '_Brick 2 x 4 Red' })).toBe('colour variant');
     expect(exclusionReason({ ...header, description: '| Hubelino 2 x 2 Track' })).toBe('third-party');
-    expect(exclusionReason({ ...header, description: 'Tile 1 x 1 with Smile Pattern' })).toBe('printed');
+    expect(exclusionReason({ ...header, description: 'Tile 1 x 1 with Smile Pattern' })).toBeNull();
+    expect(exclusionReason({ ...header, description: 'Slope 45 2 x 2 with Fire Logo Sticker', kind: 'Shortcut', category: 'Sticker Shortcut' })).toBeNull();
+    expect(exclusionReason({ ...header, description: 'Sticker 1.9 x 1.9 with Fire Logo', category: 'Sticker' })).toBe('sticker');
     expect(exclusionReason({ ...header, kind: 'Subpart' })).toBe('not a part');
   });
 

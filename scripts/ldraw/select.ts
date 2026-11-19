@@ -1,3 +1,5 @@
+import { isPrintedName } from '../../src/core/ldraw/prints.ts';
+
 /** What a part file says about itself in its header lines. */
 export interface PartHeader {
   readonly description: string;
@@ -43,7 +45,8 @@ export function exclusionReason(header: PartHeader): string | null {
   if (description.startsWith('_')) return 'colour variant';
   // LDraw marks parts from other makers (Hubelino, Rotacaster…) with a leading bar
   if (description.startsWith('|')) return 'third-party';
-  if (/\b(Pattern|Sticker|Stickers)\b/i.test(description)) return 'printed';
+  // a sticker on its own is a sheet to stick on a part, which BrickBench cannot do; parts with their stickers on stay
+  if (header.category === 'Sticker') return 'sticker';
   if (header.kind !== 'Part' && header.kind !== 'Shortcut') return 'not a part';
   return null;
 }
@@ -66,6 +69,11 @@ function firstSubFile(text: string): string | null {
     if (match?.[1]) return match[1];
   }
   return null;
+}
+
+/** A part with a print or stickers: so named, or filed by LDraw as a part with its stickers on. */
+export function isPrintedPart(header: PartHeader): boolean {
+  return isPrintedName(header.description) || header.category === 'Sticker Shortcut';
 }
 
 /** "Brick  2 x  4" → "Brick 2 × 4". */

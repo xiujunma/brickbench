@@ -34,8 +34,8 @@ export interface PartLibrary {
   retry(): void;
 }
 
-/** The index is about 1 MB; give slow connections a while, but not for ever. */
-const INDEX_TIMEOUT_MS = 30_000;
+/** The index is about 6 MB (1 MB as hosts compress it); give slow connections a while, but not for ever. */
+const INDEX_TIMEOUT_MS = 60_000;
 
 const INITIAL: LibraryState = { status: 'idle', entries: [], aliases: new Map(), categories: [], error: null };
 

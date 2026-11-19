@@ -9,10 +9,27 @@ type Props = {
   readonly onChange: (filters: PartFilters) => void;
   /** Offers the Owned filter: the user has added parts lists. */
   readonly ownable?: boolean;
+  /** Offers the Printed filter: the library has parts with prints or stickers. */
+  readonly printable?: boolean;
 };
 
-/** Size, height and shape: three quick ways to narrow thousands of parts to a handful, and the parts the user owns. */
-export function FilterBar({ filters, footprints, onChange, ownable = false }: Props) {
+type ToggleProps = {
+  readonly label: string;
+  readonly title: string;
+  readonly pressed: boolean;
+  readonly onToggle: () => void;
+};
+
+function Toggle({ label, title, pressed, onToggle }: ToggleProps) {
+  return (
+    <button type="button" className="filter-toggle" aria-pressed={pressed} title={title} onClick={onToggle}>
+      {label}
+    </button>
+  );
+}
+
+/** Size, height and shape: three quick ways to narrow thousands of parts to a handful; then the parts the user owns, and prints. */
+export function FilterBar({ filters, footprints, onChange, ownable = false, printable = false }: Props) {
   // the library's sizes join the list once it loads, so start as soon as the filters are in reach
   const prepare = (): void => partLibrary.request();
   // a value can also change without focus or a pointer, e.g. from assistive technology
@@ -21,7 +38,7 @@ export function FilterBar({ filters, footprints, onChange, ownable = false }: Pr
     onChange(next);
   };
   return (
-    <div className={ownable ? 'filter-bar has-owned' : 'filter-bar'} role="group" aria-label="Filter parts" onFocus={prepare} onPointerEnter={prepare}>
+    <div className="filter-bar" role="group" aria-label="Filter parts" onFocus={prepare} onPointerEnter={prepare}>
       <select
         aria-label="Part size"
         className="select select-sm"
@@ -61,16 +78,20 @@ export function FilterBar({ filters, footprints, onChange, ownable = false }: Pr
           </option>
         ))}
       </select>
-      {ownable && (
-        <button
-          type="button"
-          className="filter-toggle"
-          aria-pressed={Boolean(filters.owned)}
-          title="Only parts you own"
-          onClick={() => change({ ...filters, owned: filters.owned ? undefined : true })}
-        >
-          Owned
-        </button>
+      {(ownable || printable) && (
+        <div className="filter-toggles">
+          {ownable && (
+            <Toggle label="Owned" title="Only parts you own" pressed={Boolean(filters.owned)} onToggle={() => change({ ...filters, owned: filters.owned ? undefined : true })} />
+          )}
+          {printable && (
+            <Toggle
+              label="Printed"
+              title="Only parts with a print or stickers"
+              pressed={Boolean(filters.printed)}
+              onToggle={() => change({ ...filters, printed: filters.printed ? undefined : true })}
+            />
+          )}
+        </div>
       )}
     </div>
   );
