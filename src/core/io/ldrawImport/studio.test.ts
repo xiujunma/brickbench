@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js/lib/zip-native.js';
+import { BlobReader, BlobWriter, ERR_INVALID_PASSWORD, TextReader, TextWriter, ZipReader, ZipWriter } from '@zip.js/zip.js/lib/zip-native.js';
 import { STUDIO_PASSWORD, readStudioModel } from './studio';
 
 const MODEL = '﻿0 FILE whale.io\r\n0 Untitled Model\r\n1 272 0 -8 -20 1 0 0 0 1 0 0 0 1 3034.dat\r\n';
@@ -40,6 +40,30 @@ describe('readStudioModel', () => {
   it('says so when a file is locked with another password', async () => {
     const io = await archive({ 'model.ldr': MODEL }, 'something else');
     expect(await readStudioModel(io, MB)).toEqual({ ok: false, error: 'This Studio file is locked with a password BrickBench does not know.' });
+  });
+
+  it('says so even when a wrong password gets past the archive’s quick check', async () => {
+    // ZipCrypto checks a password against one byte, so about one archive in 256 lets a wrong one through to unpack garbage
+    const passesCheck = async (blob: Blob): Promise<boolean> => {
+      const reader = new ZipReader(new BlobReader(blob), { password: STUDIO_PASSWORD, useWebWorkers: false });
+      try {
+        const [entry] = await reader.getEntries();
+        if (!entry || entry.directory) return false;
+        await entry.getData(new TextWriter());
+        return true;
+      } catch (error: unknown) {
+        return !(error instanceof Error && error.message === ERR_INVALID_PASSWORD);
+      } finally {
+        await reader.close();
+      }
+    };
+    let io: Blob | null = null;
+    for (let tries = 0; tries < 5000 && io === null; tries++) {
+      const candidate = await archive({ 'model.ldr': MODEL }, 'something else');
+      if (await passesCheck(candidate)) io = candidate;
+    }
+    expect(io).not.toBeNull();
+    expect(await readStudioModel(io as Blob, MB)).toEqual({ ok: false, error: 'This Studio file is locked with a password BrickBench does not know.' });
   });
 
   it('says so when there is no LDraw model inside', async () => {
