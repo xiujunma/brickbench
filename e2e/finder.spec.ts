@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { autosaved, counts, freshEditor, reloadEditor, viewportCentre } from './helpers';
 
 const LIBRARY_BUILT = existsSync('public/ldraw/index.json');

@@ -5,6 +5,8 @@ import { Dialog } from '../components/Dialog';
 
 const LDRAW_LIBRARY = 'https://library.ldraw.org';
 const CC_BY_4 = 'https://creativecommons.org/licenses/by/4.0/';
+/** Written into every build by scripts/thirdPartyLicences.ts. */
+const THIRD_PARTY = `${import.meta.env.BASE_URL}third-party-licences.txt`;
 const IN_DESKTOP_APP = desktopApi() !== null;
 const KEPT_WHERE = IN_DESKTOP_APP ? 'on this computer' : 'in this browser’s storage';
 const KEEPING = IN_DESKTOP_APP
@@ -42,6 +44,13 @@ export function AboutDialog() {
             (older parts CC BY 2.0).{' '}
             <a href={`${partLibrary.baseUrl}CREDITS.txt`} target="_blank" rel="noopener noreferrer">
               Everyone who made them
+            </a>
+            .
+          </p>
+          <p>
+            Built with open-source packages, among them three.js, React and jsPDF:{' '}
+            <a href={THIRD_PARTY} target="_blank" rel="noopener noreferrer">
+              their licences
             </a>
             .
           </p>

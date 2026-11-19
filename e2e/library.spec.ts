@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { autosaved, counts, freshEditor, reloadEditor, viewportCentre } from './helpers';
 
 /** Opens a model file through File › Open…. */

@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { counts, freshEditor, viewportCentre } from './helpers';
 
 /** MP4 files name their brand at byte 4; WebM files start with the EBML magic number. */

@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { autosaved, counts, freshEditor, reloadEditor, viewportCentre } from './helpers';
 
 test.describe('building', () => {
@@ -275,10 +275,18 @@ test.describe('interface', () => {
     await page.keyboard.press('Escape');
     await expect(about).toBeHidden();
 
-    await page.keyboard.press('?');
+    // the button, not ?: the store hears that a dialog closed a moment after Escape hides it, and ? waits for no dialog
+    await page.getByRole('button', { name: 'Help and shortcuts' }).click();
     await page.getByRole('button', { name: 'About BrickBench, privacy and credits' }).click();
     await expect(page.getByRole('heading', { name: 'Mouse & keyboard' })).toBeHidden();
     await expect(about).toBeVisible();
+  });
+
+  test('is served under the hosted site’s security policy', async ({ page }) => {
+    test.skip(!process.env['CI'], 'the policy comes with the production build, which only CI serves to the tests');
+    const response = await page.goto('/');
+    expect(response?.headers()['content-security-policy']).toContain("default-src 'self'");
+    expect(response?.headers()['x-frame-options']).toBe('DENY');
   });
 
   test('fits a phone screen without sideways scrolling', async ({ page }) => {

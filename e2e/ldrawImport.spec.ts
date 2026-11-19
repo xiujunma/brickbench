@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js/lib/zip-native.js';
 import { counts, freshEditor } from './helpers';
 

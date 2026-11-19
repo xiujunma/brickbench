@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { autosaved, counts, freshEditor, reloadEditor, viewportCentre } from './helpers';
 
 /** A set's parts as Rebrickable exports them: 3023 is a number LDraw moved to 3023b, 5903 a part it lacks. */

@@ -247,14 +247,27 @@ The first file checks each part's size, origin and slope direction. The second e
 
 ### Continuous integration
 
-GitHub Actions runs `.github/workflows/test.yml` on every push to `main` and on every pull request, in two jobs:
+GitHub Actions runs `.github/workflows/test.yml` on every push to `main` and on every pull request, in two jobs, plus a third that deploys the site once it is [set up](#hosting):
 
 - **Type check and unit tests:** `bun run typecheck` and `bun run coverage`, about a minute.
 - **LDraw checks and browser tests:** builds the LDraw library, runs `bun test verify` against it, builds the app, then runs `bun run e2e` against that build in headless Chromium. The library download and the converted library are cached, so only the first run, or one after the converter changes, spends a few minutes converting. Traces of failed browser tests are kept for a week as a `playwright-traces` artifact.
 
-The runners have no GPU, so WebGL is drawn on the CPU: with `CI` set, Playwright tests the production build (`vite preview`) one test at a time, gives each test two minutes, retries once, and stops after three failures. Run the same way locally with `bunx --bun vite build && CI=1 bun run e2e`. The browser tests also start the agent bridge, on port 7499, with a stand-in for Claude Code that builds through MCP, so they spend nothing on a real model.
+The runners have no GPU, so WebGL is drawn on the CPU: with `CI` set, Playwright tests the production build (`vite preview`, which sends the hosted site's headers and security policy; any test whose page breaks the policy fails) one test at a time, gives each test two minutes, retries once, and stops after three failures. Run the same way locally with `bunx --bun vite build && CI=1 bun run e2e`. The browser tests also start the agent bridge, on port 7499, with a stand-in for Claude Code that builds through MCP, so they spend nothing on a real model.
 
 To pick up a newer LDraw release in CI, bump `ldraw-download-v1` in the workflow.
+
+### Hosting
+
+BrickBench is a static site: `bun run build` writes it to `dist/`, about 190 MB in some 7,800 files, nearly all of them the parts library. It needs no server of its own, and the parts are stored compressed, which the app undoes itself, so any static host serves it as it is. The build also writes `third-party-licences.txt`, the licences of the packages bundled into it, which About links to.
+
+The workflow deploys to [Cloudflare Pages](https://pages.cloudflare.com) after both test jobs pass on `main`. To switch it on:
+
+1. In Cloudflare, create a Pages project for direct upload (no Git connection), and an API token allowed to edit Cloudflare Pages. Note your account ID.
+2. In the GitHub repository's settings, add the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and the variable `CLOUDFLARE_PROJECT` set to the project's name.
+3. Push to `main`, or run the workflow by hand. The **Deploy to Cloudflare Pages** job uploads the build; Cloudflare sends only files that changed.
+4. Add your domain to the project under Custom domains. Cloudflare sets up HTTPS.
+
+`public/_headers` sets the hosted site's response headers: a Content Security Policy, other security headers, and how long browsers keep files (the app's own for good, since their names change with every build; library files for a day). The agent chat on a hosted site still talks to the bridge on each visitor's own computer: start it with `BRICKBENCH_AGENT_ORIGINS=https://your-domain bun run agent` to let the site's page in.
 
 ## The LDraw parts library
 

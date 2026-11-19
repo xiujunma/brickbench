@@ -81,3 +81,46 @@ jobs:
           name: playwright-traces
           path: test-results/
           retention-days: 7
+
+  deploy:
+    name: Deploy to Cloudflare Pages
+    needs: [unit, browser]
+    # off until the site is set up: a CLOUDFLARE_PROJECT repository variable, and the
+    # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets (README › Hosting)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.CLOUDFLARE_PROJECT != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # one deployment at a time; Cloudflare switches to a new one only once it has all its files
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      # the same library the browser tests just used, from the caches they filled
+      - name: Restore the LDraw download
+        uses: actions/cache/restore@v6
+        with:
+          path: .ldraw-cache/complete.zip
+          key: ldraw-download-v1
+      - name: Download and unpack the LDraw library
+        run: bun run ldraw --fetch-only
+      - name: Restore the converted library
+        uses: actions/cache/restore@v6
+        with:
+          path: public/ldraw
+          key: ldraw-library-v1-${{ hashFiles('.ldraw-cache/complete.zip', 'scripts/ldraw/**/*.ts', 'src/core/ldraw/format.ts') }}
+      - name: Convert the LDraw library
+        run: bun run ldraw --if-missing
+      - name: Build the app
+        run: bunx --bun vite build
+      - name: Upload to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: ${{ vars.CLOUDFLARE_PROJECT }}
+          COMMIT: ${{ github.sha }}
+        run: npx --yes wrangler@4.157.0 pages deploy dist --project-name="$PROJECT" --branch=main --commit-hash="$COMMIT"
