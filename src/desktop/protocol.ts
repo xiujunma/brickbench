@@ -1,8 +1,9 @@
 /**
  * What the desktop app (Electron, in electron/) and the page say to each
  * other. The main process sends menu commands, files to open and where saved
- * files went; the page says when it is ready for them. Shared by both sides,
- * so it imports nothing.
+ * files went; the page says when it is ready for them. The Agent panel talks
+ * to the agent bridge the app runs, as a browser does over a WebSocket.
+ * Shared by both sides, so it imports nothing.
  */
 
 /** The scheme and host the desktop app serves BrickBench from: brickbench://app/index.html. */
@@ -19,6 +20,14 @@ export const CHANNELS = {
   ready: 'brickbench:ready',
   /** main → page: how a file the page saved fared in the Save dialog. */
   saved: 'brickbench:saved',
+  /** page → main: connect the Agent panel to the app's agent bridge, starting it. */
+  agentOpen: 'brickbench:agent-open',
+  /** page → main: a message for the bridge. */
+  agentSend: 'brickbench:agent-send',
+  /** page → main: disconnect, which stops the bridge. */
+  agentClose: 'brickbench:agent-close',
+  /** main → page: the bridge's side of the link (AgentLinkEvent). */
+  agentEvent: 'brickbench:agent-event',
 } as const;
 
 /** Menu commands the page carries out, as its own File menu and keys do. */
@@ -63,8 +72,47 @@ export interface SavedPayload {
   readonly state: (typeof SAVE_STATES)[number];
 }
 
+/**
+ * What the app's agent bridge tells the page: a connection is open, a
+ * message for it, or it has closed. Each names the connection it is for, so
+ * nothing meant for one the page has let go of reaches the next.
+ */
+export type AgentLinkEvent =
+  | { readonly type: 'open'; readonly id: string }
+  | { readonly type: 'message'; readonly id: string; readonly data: string }
+  | { readonly type: 'close'; readonly id: string };
+
+/** The longest message either way: a picture of the model fits. */
+export const MAX_AGENT_MESSAGE = 16 * 1024 * 1024;
+
+/** A connection's id: made by the page, short. */
+export function isConnectionId(value: unknown): value is string {
+  return typeof value === 'string' && /^[\w-]{1,64}$/.test(value);
+}
+
+/** An event from the app's agent bridge, or null for anything malformed. */
+export function toAgentLinkEvent(value: unknown): AgentLinkEvent | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { type, id, data } = value as { readonly type?: unknown; readonly id?: unknown; readonly data?: unknown };
+  if (!isConnectionId(id)) return null;
+  if (type === 'open' || type === 'close') return { type, id };
+  return type === 'message' && typeof data === 'string' && data.length <= MAX_AGENT_MESSAGE ? { type, id, data } : null;
+}
+
+/** The Agent panel's link to the agent bridge the desktop app runs, one connection (named by the page) at a time. */
+export interface DesktopAgentApi {
+  /** Connects, starting the bridge; an "open" event follows, or "close" if it could not start. */
+  open(id: string): void;
+  send(id: string, text: string): void;
+  /** Disconnects, which stops the bridge. */
+  close(id: string): void;
+  /** Calls `listener` with each event from the bridge; returns a function that stops listening. */
+  onEvent(listener: (event: unknown) => void): () => void;
+}
+
 /** What the desktop app's preload script gives the page, as window.brickbench. */
 export interface DesktopApi {
+  readonly agent: DesktopAgentApi;
   /** Calls `listener` for each menu command; returns a function that stops listening. */
   onMenuCommand(listener: (command: unknown) => void): () => void;
   /** Calls `listener` for each file to open; returns a function that stops listening. */

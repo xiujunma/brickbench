@@ -26,6 +26,8 @@ export interface AgentLinkState {
   readonly status: LinkStatus;
   /** The agent behind the bridge's chat, once the bridge has said. */
   readonly agent: AgentInfo | null;
+  /** Where agents in a terminal reach the bridge's MCP server, once it has said. */
+  readonly mcpUrl: string | null;
 }
 
 export interface AgentLinkDeps {
@@ -63,7 +65,7 @@ function resultMessage(id: string, outcome: ToolOutcome): AppMessage {
 }
 
 export function createAgentLink(deps: AgentLinkDeps): AgentLink {
-  const store = createStore<AgentLinkState>(() => ({ status: 'off', agent: null }));
+  const store = createStore<AgentLinkState>(() => ({ status: 'off', agent: null, mcpUrl: null }));
   const schedule = deps.schedule ?? defaultSchedule;
   let socket: SocketLike | null = null;
   let open = false;
@@ -88,7 +90,7 @@ export function createAgentLink(deps: AgentLinkDeps): AgentLink {
     if (typeof data !== 'string') return;
     const message = parseMessage(bridgeMessageSchema, data);
     if (!message) return;
-    if (message.kind === 'hello') store.setState({ status: 'connected', agent: message.agent });
+    if (message.kind === 'hello') store.setState({ status: 'connected', agent: message.agent, mcpUrl: message.mcp ?? null });
     else if (message.kind === 'call') answer(message.id, message.tool, message.input);
     else deps.onAgentEvent(message.event);
   };
@@ -113,7 +115,7 @@ export function createAgentLink(deps: AgentLinkDeps): AgentLink {
       const wasOpen = open;
       socket = null;
       open = false;
-      store.setState({ status: wasOpen ? 'connecting' : 'unreachable', agent: null });
+      store.setState({ status: wasOpen ? 'connecting' : 'unreachable', agent: null, mcpUrl: null });
       cancelRetry = schedule(attempt, retryMs);
       retryMs = Math.min(retryMs * 2, MAX_RETRY_MS);
     });
@@ -135,7 +137,7 @@ export function createAgentLink(deps: AgentLinkDeps): AgentLink {
       socket = null;
       open = false;
       current?.close();
-      store.setState({ status: 'off', agent: null });
+      store.setState({ status: 'off', agent: null, mcpUrl: null });
     },
     send,
     markActive: () => void send({ kind: 'active' }),

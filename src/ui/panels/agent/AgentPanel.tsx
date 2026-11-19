@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { agentStorage, AGENT_PORT, forgetAgent } from '../../../agent/connection';
 import { agentChat, agentLink } from '../../../app/agent';
+import { desktopApi } from '../../../desktop/protocol';
 import { Icon } from '../../components/Icon';
 import { Composer } from './Composer';
 import { Transcript } from './Transcript';
@@ -12,7 +13,11 @@ const SUGGESTIONS = [
   'Lay out a green garden with a path and a few trees',
 ];
 
-const MCP_COMMAND = `claude mcp add --transport http brickbench http://127.0.0.1:${AGENT_PORT}/mcp`;
+/** The command that adds BrickBench to Claude Code, for the bridge's MCP server: where it says it is, or the usual place. */
+const mcpCommand = (mcpUrl: string | null): string => `claude mcp add --transport http brickbench ${mcpUrl ?? `http://127.0.0.1:${AGENT_PORT}/mcp`}`;
+
+/** In the desktop app, which runs the agent bridge itself. */
+const IN_DESKTOP = desktopApi() !== null;
 
 function StatusLine() {
   const status = useAgentLink((s) => s.status);
@@ -46,6 +51,14 @@ function StatusLine() {
 }
 
 function BridgeHelp() {
+  if (IN_DESKTOP) {
+    return (
+      <div className="agent-help">
+        <strong>The agent bridge did not start</strong>
+        <p>BrickBench keeps trying. If it never starts, quit BrickBench and open it again.</p>
+      </div>
+    );
+  }
   return (
     <div className="agent-help">
       <strong>Start the agent bridge</strong>
@@ -60,6 +73,7 @@ function BridgeHelp() {
 }
 
 function Welcome({ disabled }: { readonly disabled: boolean }) {
+  const mcpUrl = useAgentLink((s) => s.mcpUrl);
   return (
     <div className="agent-welcome">
       <p>Ask the agent to build in your model. You see every brick as it goes in, and you can undo anything it does.</p>
@@ -73,7 +87,7 @@ function Welcome({ disabled }: { readonly disabled: boolean }) {
       <details className="agent-terminal">
         <summary>Build from a terminal instead</summary>
         <p>Add BrickBench to Claude Code once, then ask it to build in BrickBench while this page is open:</p>
-        <code className="agent-command">{MCP_COMMAND}</code>
+        <code className="agent-command">{mcpCommand(mcpUrl)}</code>
       </details>
     </div>
   );

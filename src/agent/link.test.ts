@@ -60,7 +60,7 @@ function setup(
   return { link, sockets, socket, events, timers, state: () => link.store.getState() };
 }
 
-const hello: BridgeMessage = { kind: 'hello', version: '1.0.0', agent: { available: true, name: 'Claude Code 2.1' } };
+const hello: BridgeMessage = { kind: 'hello', version: '1.0.0', agent: { available: true, name: 'Claude Code 2.1' }, mcp: 'http://127.0.0.1:7425/mcp' };
 
 describe('the link to the agent bridge', () => {
   it('connects when asked, says this tab is in use, and learns which agent answers', () => {
@@ -71,7 +71,7 @@ describe('the link to the agent bridge', () => {
     expect(state().status).toBe('connecting');
     socket().emit('open');
     socket().deliver(hello);
-    expect(state()).toEqual({ status: 'connected', agent: { available: true, name: 'Claude Code 2.1' } });
+    expect(state()).toEqual({ status: 'connected', agent: { available: true, name: 'Claude Code 2.1' }, mcpUrl: 'http://127.0.0.1:7425/mcp' });
     expect(socket().sent).toEqual([{ kind: 'active' }]);
     link.markActive();
     expect(socket().sent).toHaveLength(2);
@@ -134,7 +134,7 @@ describe('the link to the agent bridge', () => {
     socket().deliver(hello);
     socket().emit('close');
     // it was connected: try again, and show it
-    expect(state()).toEqual({ status: 'connecting', agent: null });
+    expect(state()).toEqual({ status: 'connecting', agent: null, mcpUrl: null });
     timers[0]?.();
     socket().emit('open');
     link.disconnect();

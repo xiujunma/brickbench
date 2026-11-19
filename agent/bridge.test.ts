@@ -63,7 +63,7 @@ describe('the agent bridge', () => {
     const { runner } = scriptedRunner();
     bridge = startBridge({ runner, port: 0 });
     const tab = await openTab(bridge);
-    expect(tab.received[0]).toMatchObject({ kind: 'hello', agent: { available: true, name: 'Scripted agent' } });
+    expect(tab.received[0]).toMatchObject({ kind: 'hello', agent: { available: true, name: 'Scripted agent' }, mcp: `${bridge.url}/mcp` });
 
     const client = new Client({ name: 'test-agent', version: '1.0.0' });
     await client.connect(new StreamableHTTPClientTransport(new URL(`${bridge.url}/mcp`)));

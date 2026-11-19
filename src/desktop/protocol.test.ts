@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'bun:test';
-import { MAX_OPEN_BYTES, connectDesktop, desktopApi, isMenuCommand, savedNotice, toOpenFile, toSaved, type DesktopApi, type MenuCommand, type SavedPayload } from './protocol';
+import {
+  MAX_AGENT_MESSAGE,
+  MAX_OPEN_BYTES,
+  connectDesktop,
+  desktopApi,
+  isConnectionId,
+  isMenuCommand,
+  savedNotice,
+  toAgentLinkEvent,
+  toOpenFile,
+  toSaved,
+  type DesktopApi,
+  type MenuCommand,
+  type SavedPayload,
+} from './protocol';
 
 /** A stand-in for the preload API that the test drives by hand. */
 function fakeApi() {
@@ -14,6 +28,7 @@ function fakeApi() {
       return () => set.delete(listener);
     };
   const api: DesktopApi = {
+    agent: { open: () => undefined, send: () => undefined, close: () => undefined, onEvent: () => () => undefined },
     onMenuCommand: listenTo(menu),
     onOpenFile: listenTo(files),
     onSaved: listenTo(saves),
@@ -115,5 +130,27 @@ describe('connectDesktop', () => {
 
     stop();
     expect(fake.listeners()).toBe(0);
+  });
+});
+
+describe('toAgentLinkEvent', () => {
+  it('takes the events the app’s agent bridge sends, each for a connection, and nothing else', () => {
+    expect(toAgentLinkEvent({ type: 'open', id: 'a-1' })).toEqual({ type: 'open', id: 'a-1' });
+    expect(toAgentLinkEvent({ type: 'close', id: 'a-1', extra: 1 })).toEqual({ type: 'close', id: 'a-1' });
+    expect(toAgentLinkEvent({ type: 'message', id: 'a-1', data: '{"kind":"hello"}' })).toEqual({ type: 'message', id: 'a-1', data: '{"kind":"hello"}' });
+    expect(toAgentLinkEvent({ type: 'open' })).toBeNull();
+    expect(toAgentLinkEvent({ type: 'open', id: 'not an id!' })).toBeNull();
+    expect(toAgentLinkEvent({ type: 'open', id: 'x'.repeat(65) })).toBeNull();
+    expect(toAgentLinkEvent({ type: 'message', id: 'a', data: 3 })).toBeNull();
+    expect(toAgentLinkEvent({ type: 'message', id: 'a', data: 'x'.repeat(MAX_AGENT_MESSAGE + 1) })).toBeNull();
+    expect(toAgentLinkEvent({ type: 'explode', id: 'a' })).toBeNull();
+    expect(toAgentLinkEvent('open')).toBeNull();
+    expect(toAgentLinkEvent(null)).toBeNull();
+  });
+
+  it('takes short ids of letters, digits and dashes', () => {
+    expect(isConnectionId(crypto.randomUUID())).toBe(true);
+    expect(isConnectionId('')).toBe(false);
+    expect(isConnectionId(7)).toBe(false);
   });
 });

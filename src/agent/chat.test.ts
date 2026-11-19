@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { chatReducer, createAgentChat, EMPTY_CHAT, type ChatState } from './chat';
+import { chatReducer, type ChatState, createAgentChat, DESKTOP_BRIDGE_NOT_RUNNING, EMPTY_CHAT } from './chat';
 import type { AppMessage } from './protocol';
 
 const run = (...actions: Parameters<typeof chatReducer>[1][]): ChatState => actions.reduce(chatReducer, EMPTY_CHAT);
@@ -79,11 +79,14 @@ describe('talking to the agent', () => {
     expect(state().running).toBe(true);
   });
 
-  it('says so when the bridge is not there', () => {
+  it('says so when the bridge is not there, and how to start it where the page runs', () => {
     const { chat, state } = setup(false);
     chat.ask('Build a tower');
     expect(state().running).toBe(false);
     expect(state().entries.at(-1)).toMatchObject({ kind: 'error', text: expect.stringContaining('bun run agent') });
+    const desktop = createAgentChat({ send: () => false, notRunning: DESKTOP_BRIDGE_NOT_RUNNING });
+    desktop.ask('Build a tower');
+    expect(desktop.store.getState().entries.at(-1)).toMatchObject({ kind: 'error', text: DESKTOP_BRIDGE_NOT_RUNNING });
   });
 });
 

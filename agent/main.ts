@@ -2,7 +2,7 @@
 /**
  * `bun run agent`: starts the agent bridge, so BrickBench's chat can run an
  * agent (Claude Code, or a model behind an API) and any MCP agent can build
- * in BrickBench.
+ * in BrickBench. The desktop app runs the same bridge itself.
  *
  * Settings: BRICKBENCH_AGENT_PORT (default 7425), BRICKBENCH_AGENT_ORIGINS
  * (the only pages let in, comma-separated; any page from this computer
@@ -14,116 +14,32 @@
  * BRICKBENCH_AGENT_API (chat or responses). See agent/providers.ts.
  */
 import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { createApiRunner } from './api/apiRunner';
-import { chatCompletions } from './api/chatCompletions';
-import { responsesApi } from './api/responses';
-import { createAppLink, type AppLink } from './appLink';
-import { DEFAULT_PORT, startBridge } from './bridge';
-import { unavailableRunner, type ChatRunner } from './chat';
-import { createClaudeRunner } from './claudeRunner';
+import { homedir, tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createAppLink } from './appLink';
+import { startBridge } from './bridge';
+import { createChat } from './chatSetup';
 import { parseOrigins } from './origins';
-import { chooseAgent, type ApiSettings } from './providers';
+import { portOf, readSetting } from './settings';
 
-const VERSION_TIMEOUT_MS = 10_000;
-/** The most one chat request may spend unless the user says otherwise: enough for a big build, not a runaway. */
-const DEFAULT_BUDGET_USD = 5;
 const NO_CLAUDE =
   'Claude Code is not installed on this computer, so the chat cannot run. Install it from https://code.claude.com, then restart the bridge. Other MCP agents can still connect.';
 
-function setting(name: string): string | undefined {
-  const value = Bun.env[name]?.trim();
-  return value ? value : undefined;
-}
-
-function portSetting(): number {
-  const value = setting('BRICKBENCH_AGENT_PORT');
-  if (value === undefined) return DEFAULT_PORT;
-  const port = Number(value);
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error(`BRICKBENCH_AGENT_PORT must be a port number, not "${value}".`);
-  return port;
-}
-
-function budgetSetting(): number | undefined {
-  const value = setting('BRICKBENCH_AGENT_BUDGET_USD');
-  if (value === undefined) return DEFAULT_BUDGET_USD;
-  if (value.toLowerCase() === 'none') return undefined;
-  const budget = Number(value);
-  if (!(budget > 0)) throw new Error(`BRICKBENCH_AGENT_BUDGET_USD must be a positive amount or "none", not "${value}".`);
-  return budget;
-}
-
-/** "2.1.323" from `claude --version`, or null if it does not answer. */
-async function versionOf(command: string): Promise<string | null> {
-  try {
-    const process = Bun.spawn([command, '--version'], { stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' });
-    const timer = setTimeout(() => process.kill(), VERSION_TIMEOUT_MS);
-    const output = await new Response(process.stdout).text();
-    clearTimeout(timer);
-    return (await process.exited) === 0 ? (output.trim().split(/\s+/)[0] ?? null) : null;
-  } catch {
-    // not runnable: the caller says Claude Code is missing
-    return null;
-  }
-}
-
-/** The claude command: BRICKBENCH_CLAUDE (a path, or a name on PATH) or claude itself, as an absolute path. */
-function claudeCommand(): string | null {
-  const chosen = setting('BRICKBENCH_CLAUDE');
-  // the runner starts it from another folder, so a relative path must be made absolute first
-  if (chosen && /[\\/]/.test(chosen)) return resolve(chosen);
-  return Bun.which(chosen ?? 'claude');
-}
-
-function apiRunner(settings: ApiSettings, link: AppLink): ChatRunner {
-  return createApiRunner({
-    label: settings.label,
-    baseUrl: settings.baseUrl,
-    model: settings.model,
-    format: settings.api === 'responses' ? responsesApi : chatCompletions,
-    // the same tools Claude Code reaches through MCP, run in the same tab
-    tools: (tool, input) => link.call(tool, input),
-    apiKey: settings.apiKey,
-    keyVariable: settings.keyVariable,
-    local: settings.local,
-  });
-}
-
-interface Chat {
-  readonly runner: ChatRunner;
-  /** For the user, when the bridge starts. */
-  readonly notes: readonly string[];
-}
-
-async function claudeRunner(mcpUrl: string, workDir: string): Promise<ChatRunner> {
-  const command = claudeCommand();
-  const version = command ? await versionOf(command) : null;
-  if (!command || version === null) return unavailableRunner(NO_CLAUDE);
-  return createClaudeRunner({
-    command: [command],
-    mcpUrl,
-    workDir,
-    name: `Claude Code ${version}`,
-    model: setting('BRICKBENCH_AGENT_MODEL'),
-    maxBudgetUsd: budgetSetting(),
-  });
-}
-
-async function chat(mcpUrl: string, workDir: string, link: AppLink): Promise<Chat> {
-  const choice = chooseAgent(Bun.env);
-  if (choice.kind === 'unavailable') return { runner: unavailableRunner(choice.reason), notes: [] };
-  if (choice.kind === 'api') return { runner: apiRunner(choice.settings, link), notes: choice.notes };
-  return { runner: await claudeRunner(mcpUrl, workDir), notes: [] };
-}
-
 async function main(): Promise<void> {
-  const port = portSetting();
+  const env = process.env;
+  const port = portOf(env);
   const mcpUrl = `http://127.0.0.1:${port}/mcp`;
   const workDir = mkdtempSync(join(tmpdir(), 'brickbench-agent-'));
   const link = createAppLink();
-  const { runner, notes } = await chat(mcpUrl, workDir, link);
-  const bridge = startBridge({ runner, link, port, onlyOrigins: parseOrigins(setting('BRICKBENCH_AGENT_ORIGINS')) });
+  const { runner, notes } = await createChat({
+    lookup: { env, platform: process.platform, home: homedir(), cwd: process.cwd() },
+    link,
+    mcpUrl,
+    workDir,
+    noClaude: NO_CLAUDE,
+    restart: 'restart the bridge',
+  });
+  const bridge = startBridge({ runner, link, port, onlyOrigins: parseOrigins(readSetting(env, 'BRICKBENCH_AGENT_ORIGINS')) });
   const agent = runner.status();
   process.stdout.write(
     [

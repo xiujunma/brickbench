@@ -45,6 +45,16 @@ describe('running Claude Code for the chat', () => {
     expect(runner.running).toBe(false);
   });
 
+  it('keeps a character whole when it comes in two pieces', async () => {
+    expect(await ask(fakeRunner('split'), 'Build', true)).toContainEqual({ type: 'text', text: 'Built 🧱 bricks' });
+  });
+
+  it('says why when Claude Code ends before it reads the request', async () => {
+    // a long prompt, so writing it finds the pipe already closed
+    const done = (await ask(fakeRunner('early'), 'Build '.repeat(200_000), true)).at(-1);
+    expect(done).toEqual({ type: 'done', ok: false, error: 'Claude Code stopped: Claude Code could not start: no login' });
+  });
+
   it('hands over the prompt as text, even one that looks like a flag', async () => {
     expect(replyOf(await ask(fakeRunner('echo'), '--help', true))).toBe('You said: --help');
   });

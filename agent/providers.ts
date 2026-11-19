@@ -5,6 +5,9 @@
  */
 import { MAX_ROUNDS } from './api/apiRunner';
 import { isLocalHost } from './origins';
+import { readSetting as read, type Environment } from './settings';
+
+export type { Environment } from './settings';
 
 export const PROVIDER_NAMES = ['claude', 'openai', 'xai', 'openrouter', 'ollama', 'lmstudio', 'custom'] as const;
 export type ProviderName = (typeof PROVIDER_NAMES)[number];
@@ -88,19 +91,12 @@ export type AgentChoice =
   /** Set up, but missing something it needs; the chat says what. */
   | { readonly kind: 'unavailable'; readonly reason: string };
 
-export type Environment = Readonly<Record<string, string | undefined>>;
-
 const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /** A variable's name worth repeating: the usual shape, which keys made of letters and digits alone do not have. */
 const SHOWN_NAME = /^[A-Z][A-Z0-9_]{0,63}$/;
 /** What an API key holds: printable ASCII, no spaces; anything else would not even go in a request header. */
 const KEY_CHARACTERS = /^[\x21-\x7e]+$/;
 const KEY_SETTING = 'the variable that BRICKBENCH_AGENT_API_KEY_VAR names';
-
-function read(env: Environment, name: string): string | undefined {
-  const value = env[name]?.trim();
-  return value ? value : undefined;
-}
 
 function isProvider(name: string): name is ProviderName {
   return (PROVIDER_NAMES as readonly string[]).includes(name);
@@ -159,8 +155,9 @@ function notesFor(env: Environment, settings: ApiSettings): string[] {
  * Reads the chat's settings. Throws on a setting that is malformed, so the
  * bridge stops and says so; a missing key or model leaves the chat
  * unavailable with the reason, while other agents can still connect.
+ * `restart` says how to try again once it is put right.
  */
-export function chooseAgent(env: Environment): AgentChoice {
+export function chooseAgent(env: Environment, restart = 'restart the bridge'): AgentChoice {
   const provider = providerOf(env);
   if (provider === 'claude') return { kind: 'claude' };
   const preset = PRESETS[provider];
@@ -174,15 +171,15 @@ export function chooseAgent(env: Environment): AgentChoice {
   const apiKey = keyVariable ? read(env, keyVariable) : undefined;
   if (keyVariable && apiKey === undefined) {
     const key = `your ${preset.label ? `${preset.label} ` : ''}API key`;
-    const reason = shownVariable ? `Set ${shownVariable} to ${key}, then restart the bridge.` : `Put ${key} in ${KEY_SETTING}, then restart the bridge.`;
+    const reason = shownVariable ? `Set ${shownVariable} to ${key}, then ${restart}.` : `Put ${key} in ${KEY_SETTING}, then ${restart}.`;
     return { kind: 'unavailable', reason };
   }
   if (apiKey !== undefined && !KEY_CHARACTERS.test(apiKey)) {
-    return { kind: 'unavailable', reason: `The API key in ${shownVariable ?? KEY_SETTING} has characters no key has, such as spaces: set it again, then restart the bridge.` };
+    return { kind: 'unavailable', reason: `The API key in ${shownVariable ?? KEY_SETTING} has characters no key has, such as spaces: set it again, then ${restart}.` };
   }
   const model = read(env, 'BRICKBENCH_AGENT_MODEL') ?? preset.model;
   if (model === null) {
-    return { kind: 'unavailable', reason: `Choose the model: set BRICKBENCH_AGENT_MODEL to its name (${preset.modelHint}), then restart the bridge.` };
+    return { kind: 'unavailable', reason: `Choose the model: set BRICKBENCH_AGENT_MODEL to its name (${preset.modelHint}), then ${restart}.` };
   }
   const settings: ApiSettings = { provider, label, baseUrl, api, model, apiKey, keyVariable: shownVariable, local: isLocalHost(host) };
   return { kind: 'api', settings, notes: notesFor(env, settings) };

@@ -144,6 +144,8 @@ export const bridgeMessageSchema = z.discriminatedUnion('kind', [
     kind: z.literal('hello'),
     version: z.string().max(40),
     agent: z.object({ available: z.boolean(), name: z.string().max(80), detail: z.string().max(400).optional() }),
+    /** Where agents in a terminal reach this bridge's MCP server: shown as a command to copy, so only a plain local address. */
+    mcp: z.string().regex(/^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d{1,5}\/mcp$/).optional(),
   }),
   z.object({ kind: z.literal('call'), id: z.string().min(1).max(64), tool: z.string().max(64), input: z.unknown() }),
   z.object({ kind: z.literal('agent'), event: agentEventSchema }),

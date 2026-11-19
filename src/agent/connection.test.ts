@@ -14,7 +14,7 @@ function memory(initial: Record<string, string> = {}) {
 }
 
 function fakeLink() {
-  const store = createStore<AgentLinkState>(() => ({ status: 'off', agent: null }));
+  const store = createStore<AgentLinkState>(() => ({ status: 'off', agent: null, mcpUrl: null }));
   const calls: string[] = [];
   return { store, calls, connect: () => void calls.push('connect'), markActive: () => void calls.push('active'), disconnect: () => void calls.push('disconnect') };
 }

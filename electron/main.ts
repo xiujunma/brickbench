@@ -1,15 +1,17 @@
 /**
  * BrickBench as a desktop app: one window showing the built web app, served
  * from brickbench://app (so fetch, modules and storage work as on the web),
- * with a native menu, and model files opened from Finder, Explorer or the
- * command line. Built and run by scripts/desktop.ts.
+ * with a native menu, model files opened from Finder, Explorer or the
+ * command line, and the agent bridge for the Agent panel. Built and run by
+ * scripts/desktop.ts.
  */
-import { BrowserWindow, Menu, app, dialog, ipcMain, net, protocol, session, shell, type WebContents } from 'electron';
+import { BrowserWindow, Menu, app, dialog, ipcMain, net, protocol, session, shell, type IpcMainEvent, type WebContents } from 'electron';
 import { readFile, stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { OPENABLE_EXTENSIONS } from '../src/core/io/openable';
 import { APP_ORIGIN, APP_SCHEME, CHANNELS, MAX_OPEN_BYTES, type MenuCommand, type OpenFilePayload, type SavedPayload } from '../src/desktop/protocol';
+import { createAgentHost, startDesktopBridge } from './agentHost';
 import { filesToOpen } from './launchFiles';
 import { menuTemplate } from './menu';
 import { resolveAppFile } from './webRoot';
@@ -21,6 +23,12 @@ const WEB_ROOT = app.isPackaged ? join(app.getAppPath(), 'web') : (process.env['
 const START_URL = DEV_URL ?? `${APP_ORIGIN}/index.html`;
 
 let window: BrowserWindow | null = null;
+/** The Agent panel's bridge: started when the panel connects, with this app's environment. */
+const agent = createAgentHost({
+  start: () => startDesktopBridge(process.env),
+  channel: CHANNELS.agentEvent,
+  report: (message) => void process.stderr.write(`BrickBench: ${message}\n`),
+});
 /** Whether the page listens for files yet; until then they wait here. */
 let pageReady = false;
 const waiting: string[] = [];
@@ -98,8 +106,14 @@ function createWindow(): void {
   window = created;
   pageReady = false;
   created.once('ready-to-show', () => created.show());
+  // the page going (reloaded, or crashed) takes the agent with it; moves within the page, such as a new #, do not
+  created.webContents.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument) void agent.stop();
+  });
+  created.webContents.on('render-process-gone', () => void agent.stop());
   created.on('closed', () => {
     if (window === created) window = null;
+    void agent.stop();
   });
   void created.loadURL(START_URL);
 }
@@ -162,6 +176,20 @@ if (!app.requestSingleInstanceLock()) {
     pageReady = true;
     for (const path of waiting.splice(0)) void openPath(path);
   });
+
+  // the Agent panel's link to the agent bridge, from the app's own page only
+  const fromPage = (event: IpcMainEvent): boolean => event.sender === window?.webContents && event.senderFrame === window.webContents.mainFrame;
+  ipcMain.on(CHANNELS.agentOpen, (event, id: unknown) => {
+    if (fromPage(event)) agent.open(event.sender, id);
+  });
+  ipcMain.on(CHANNELS.agentSend, (event, id: unknown, text: unknown) => {
+    if (fromPage(event)) agent.send(event.sender, id, text);
+  });
+  ipcMain.on(CHANNELS.agentClose, (event, id: unknown) => {
+    if (fromPage(event)) agent.close(event.sender, id);
+  });
+  // an agent at work stops with the app
+  app.on('will-quit', () => void agent.stop());
 
   void app.whenReady().then(() => {
     protocol.handle(APP_SCHEME, serveAppFile);

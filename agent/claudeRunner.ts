@@ -1,8 +1,10 @@
 /**
  * Answers the app's chat by running Claude Code headless, once per request,
  * with the user's own login. It may use the BrickBench tools and nothing else:
- * no shell, no files, none of the user's hooks or plugins.
+ * no shell, no files, none of the user's hooks or plugins. Node's child
+ * processes start it, so this runs in Bun and in the desktop app alike.
  */
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { AgentEvent } from '../src/agent/protocol';
 import type { AgentStatus, ChatRunner } from './chat';
 import { createStreamReader, type StreamReader } from './claudeStream';
@@ -55,10 +57,12 @@ export function claudeArgs(options: ClaudeRunnerOptions, resume: string | null):
   ];
 }
 
-async function* lines(stream: ReadableStream<Uint8Array>): AsyncGenerator<string> {
+/** The output's lines, as they come. */
+async function* lines(chunks: AsyncIterable<Uint8Array | string>): AsyncGenerator<string> {
+  const decoder = new TextDecoder();
   let buffer = '';
-  for await (const chunk of stream.pipeThrough(new TextDecoderStream())) {
-    buffer += chunk;
+  for await (const chunk of chunks) {
+    buffer += typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true });
     let end = buffer.indexOf('\n');
     while (end !== -1) {
       yield buffer.slice(0, end);
@@ -66,6 +70,7 @@ async function* lines(stream: ReadableStream<Uint8Array>): AsyncGenerator<string
       end = buffer.indexOf('\n');
     }
   }
+  buffer += decoder.decode();
   if (buffer) yield buffer;
 }
 
@@ -77,8 +82,34 @@ function failure(stderr: string, code: number): string {
 }
 
 interface Run {
-  readonly process: Bun.Subprocess<'pipe', 'pipe', 'pipe'>;
+  readonly child: ChildProcessWithoutNullStreams;
+  /** Settles when Claude Code has exited, with its exit code, or could not start, with why. */
+  readonly ended: Promise<{ readonly code: number; readonly error: Error | null }>;
+  /** The tail of what it printed to stderr. */
+  readonly stderr: () => string;
   stopped: boolean;
+}
+
+/** Starts Claude Code: with Node's child processes, so the bridge runs in the desktop app as well as in Bun. */
+function launch(options: ClaudeRunnerOptions, args: readonly string[]): Run {
+  const [command = 'claude', ...before] = options.command;
+  const child = spawn(command, [...before, ...args], {
+    cwd: options.workDir,
+    env: { ...process.env, ...options.env },
+    stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+  const ended = new Promise<{ code: number; error: Error | null }>((resolve) => {
+    child.once('error', (error) => resolve({ code: -1, error }));
+    child.once('close', (code, signal) => resolve({ code: code ?? (signal ? 1 : 0), error: null }));
+  });
+  let stderr = '';
+  child.stderr.setEncoding('utf8').on('data', (text: string) => {
+    stderr = (stderr + text).slice(-MAX_STDERR);
+  });
+  // gone before it read the prompt: how it ended says why
+  child.stdin.on('error', () => undefined);
+  return { child, ended, stderr: () => stderr, stopped: false };
 }
 
 export function createClaudeRunner(options: ClaudeRunnerOptions): ChatRunner {
@@ -86,19 +117,23 @@ export function createClaudeRunner(options: ClaudeRunnerOptions): ChatRunner {
   let sessionId: string | null = null;
 
   const pump = async (run: Run, reader: StreamReader, onEvent: (event: AgentEvent) => void): Promise<void> => {
-    const stderr = new Response(run.process.stderr).text();
     // "done" waits for Claude Code to exit, so that once it is sent the next request can start
     let done: AgentEvent | null = null;
-    for await (const line of lines(run.process.stdout)) {
-      for (const event of reader.read(line)) {
-        if (event.type === 'done') done = event;
-        else onEvent(event);
+    try {
+      for await (const line of lines(run.child.stdout)) {
+        for (const event of reader.read(line)) {
+          if (event.type === 'done') done = event;
+          else onEvent(event);
+        }
       }
+    } catch {
+      // the output broke off: how Claude Code ended says why
     }
-    const code = await run.process.exited;
+    const { code, error } = await run.ended;
     sessionId = reader.sessionId ?? sessionId;
     current = null;
-    onEvent(done ?? { type: 'done', ok: false, error: run.stopped ? 'Stopped.' : failure((await stderr).slice(-MAX_STDERR), code) });
+    if (error && !done) onEvent({ type: 'done', ok: false, error: `Could not start Claude Code: ${error.message}` });
+    else onEvent(done ?? { type: 'done', ok: false, error: run.stopped ? 'Stopped.' : failure(run.stderr(), code) });
   };
 
   return {
@@ -114,22 +149,14 @@ export function createClaudeRunner(options: ClaudeRunnerOptions): ChatRunner {
       if (fresh) sessionId = null;
       let run: Run;
       try {
-        const process = Bun.spawn([...options.command, ...claudeArgs(options, sessionId)], {
-          cwd: options.workDir,
-          env: { ...Bun.env, ...options.env },
-          stdin: 'pipe',
-          stdout: 'pipe',
-          stderr: 'pipe',
-        });
-        run = { process, stopped: false };
+        run = launch(options, claudeArgs(options, sessionId));
       } catch (error: unknown) {
         onEvent({ type: 'done', ok: false, error: `Could not start Claude Code: ${error instanceof Error ? error.message : String(error)}` });
         return;
       }
       current = run;
       // the prompt goes in on stdin, so text that looks like a flag stays text
-      run.process.stdin.write(prompt);
-      void run.process.stdin.end();
+      run.child.stdin.end(prompt);
       void pump(run, createStreamReader(), onEvent).catch((error: unknown) => {
         current = null;
         onEvent({ type: 'done', ok: false, error: `Lost touch with Claude Code: ${error instanceof Error ? error.message : String(error)}` });
@@ -139,10 +166,10 @@ export function createClaudeRunner(options: ClaudeRunnerOptions): ChatRunner {
       const run = current;
       if (!run) return;
       run.stopped = true;
-      run.process.kill();
+      run.child.kill();
       // a run that ignores the polite request still has to end
       setTimeout(() => {
-        if (current === run) run.process.kill('SIGKILL');
+        if (current === run) run.child.kill('SIGKILL');
       }, options.killAfterMs ?? KILL_AFTER_MS);
     },
   };

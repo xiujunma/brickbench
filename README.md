@@ -156,7 +156,7 @@ BrickBench also runs as a desktop app, built with [Electron](https://www.electro
 - **A native menu** with File, Edit and View. The keys work as in the browser: ⌘Z undoes in the scene, and undoes your typing in a text box.
 - **Saving** asks where to save, as other desktop apps do, then says where the file went (and nothing if you cancel).
 - **Your work stays in the app:** autosave, favourites and your parts lists are kept in the app's own storage, apart from your browser's.
-- **The agent chat** works too, once the agent bridge runs (`bun run agent`, as for the browser).
+- **The agent chat** needs no `bun run agent`: the app runs the agent bridge itself while the Agent panel is connected, and uses Claude Code if it is installed. It finds Claude Code where its installers put it, since an app opened from the Finder or the Start menu has no terminal's PATH; on Windows, that is the native installer's `claude.exe`. Agents in a terminal reach the app's MCP server at the address the Agent panel shows. Opened from a terminal, the app takes the same settings as `bun run agent`, such as `BRICKBENCH_AGENT_PROVIDER`.
 
 To run it from this repository, `bun run desktop` builds the web app and opens it in Electron (`bun scripts/desktop.ts start --skip-web` reuses the last build). To make an installer, `bun run desktop:dist` builds everything and writes it to `release/`: a `.dmg` on macOS, an installer on Windows and an AppImage on Linux. Build each on its own system; `bun scripts/desktop.ts dist --dir` makes just the app, unpacked, which is quicker to try. The installers aren't signed with a developer certificate yet (that needs an Apple Developer ID and a Windows code-signing certificate). The macOS app is signed ad hoc, so the first time you open a downloaded copy, macOS needs **right-click › Open**; Windows asks before running the installer.
 
@@ -168,7 +168,7 @@ An AI agent can build in BrickBench: Claude Code, GPT, Grok or a model on your o
 
 ![The Agent panel: Claude Code making a house's roof dark grey and putting a white fence around its garden](docs/agent-panel.png)
 
-1. Start the agent bridge, a small server on your computer, in a terminal in the BrickBench folder:
+1. Start the agent bridge, a small server on your computer, in a terminal in the BrickBench folder (the [desktop app](#desktop-app) runs it itself, so skip this there):
 
    ```bash
    bun run agent
@@ -220,7 +220,7 @@ then ask Claude Code to build something in BrickBench. Any MCP client can use th
 | `look` | A picture of the model from any side, with bricks outlined if asked |
 | `set_model_name`, `undo`, `clear_model` | Rename, undo steps, or start afresh (only when you ask) |
 
-**Settings** (environment variables for `bun run agent`):
+**Settings** (environment variables for `bun run agent`, or for the desktop app when you open it from a terminal):
 
 | Variable | What it sets |
 |---|---|
@@ -351,7 +351,7 @@ src/
 scripts/ldraw/  the LDraw library converter (run straight from TypeScript by Bun)
 agent/        the agent bridge: an MCP server for agents, a WebSocket for BrickBench tabs,
               and the chat's agent: Claude Code run headless, or a model behind an API (api/)
-electron/     the desktop app's main process and preload script
+electron/     the desktop app's main process and preload script, and the agent bridge it runs
 e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 ```
 

@@ -3,8 +3,9 @@
  * Stands in for `claude -p --output-format stream-json` in tests: reads the
  * prompt from stdin and prints the same kind of lines. FAKE_CLAUDE_MODE picks
  * what it does: echo (default), fail, old (an outdated CLI), hang, stubborn
- * (hangs and ignores SIGTERM), args, or build, which really places bricks
- * through the MCP server named in --mcp-config.
+ * (hangs and ignores SIGTERM), args, early (exits before reading the prompt),
+ * split (sends a character in two pieces), or build, which really places
+ * bricks through the MCP server named in --mcp-config.
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -20,8 +21,13 @@ const valueOf = (flag: string): string | undefined => {
 };
 const say = (value: unknown): void => void process.stdout.write(`${JSON.stringify(value)}\n`);
 const session = valueOf('--resume') ?? 'fake-session-1';
-const prompt = (await new Response(Bun.stdin.stream()).text()).trim();
 const mode = process.env['FAKE_CLAUDE_MODE'] ?? 'echo';
+if (mode === 'early') {
+  // gone before reading the prompt, as a Claude Code that fails at start-up is
+  process.stderr.write('Claude Code could not start: no login\n');
+  process.exit(3);
+}
+const prompt = (await new Response(Bun.stdin.stream()).text()).trim();
 
 async function build(): Promise<string> {
   const config = JSON.parse(valueOf('--mcp-config') ?? '{}') as { mcpServers?: { brickbench?: { url?: string } } };
@@ -57,6 +63,16 @@ if (mode === 'fail') {
 }
 say({ type: 'system', subtype: 'init', session_id: session, model: 'fake-model', tools: [] });
 if (mode === 'hang' || mode === 'stubborn') await new Promise(() => undefined);
+if (mode === 'split') {
+  // a line whose brick emoji is cut in two, as a pipe may deliver it
+  const line = new TextEncoder().encode(`${JSON.stringify({ type: 'assistant', session_id: session, message: { content: [{ type: 'text', text: 'Built 🧱 bricks' }] } })}\n`);
+  const middle = line.indexOf(0xf0) + 2;
+  process.stdout.write(line.subarray(0, middle));
+  await Bun.sleep(40);
+  process.stdout.write(line.subarray(middle));
+  say({ type: 'result', subtype: 'success', is_error: false, result: 'Built', session_id: session, num_turns: 1, total_cost_usd: 0 });
+  process.exit(0);
+}
 const reply = mode === 'args' ? JSON.stringify(args) : mode === 'build' ? await build() : `You said: ${prompt}`;
 say({ type: 'assistant', session_id: session, message: { content: [{ type: 'text', text: reply }] } });
 say({ type: 'result', subtype: 'success', is_error: false, result: reply, session_id: session, num_turns: 1, total_cost_usd: 0 });
