@@ -22,8 +22,19 @@ export function Menu({ label, children }: MenuProps) {
       popover.style.left = `${Math.max(8, Math.min(box.left, window.innerWidth - 248))}px`;
       popover.style.top = `${box.bottom + 6}px`;
     };
+    // once open it has a size: one that would run off the bottom, as from a dialog's footer, opens upwards
+    const fit = (event: Event): void => {
+      if ((event as ToggleEvent).newState !== 'open') return;
+      const box = trigger.getBoundingClientRect();
+      const height = popover.getBoundingClientRect().height;
+      if (box.bottom + 6 + height > window.innerHeight - 8) popover.style.top = `${Math.max(8, box.top - 6 - height)}px`;
+    };
     popover.addEventListener('beforetoggle', place);
-    return () => popover.removeEventListener('beforetoggle', place);
+    popover.addEventListener('toggle', fit);
+    return () => {
+      popover.removeEventListener('beforetoggle', place);
+      popover.removeEventListener('toggle', fit);
+    };
   }, []);
 
   const close = (): void => popoverRef.current?.hidePopover();

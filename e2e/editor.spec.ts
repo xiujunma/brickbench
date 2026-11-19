@@ -46,6 +46,16 @@ test.describe('building', () => {
     await expect(table).toContainText('Plate 2 × 2');
     await expect(table).toContainText('Blue');
     await expect(table).toContainText('3022');
+
+    // to buy them: in each catalogue's numbers, where blue is BrickLink's 7 and Rebrickable's 1
+    const buy = async (item: string): Promise<string> => {
+      const downloadPromise = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Buy these parts' }).click();
+      await page.getByRole('menuitem', { name: item }).click();
+      return readFile(await (await downloadPromise).path(), 'utf8');
+    };
+    expect(await buy('BrickLink wanted list (.xml)')).toContain('<ITEMID>3022</ITEMID>\n    <COLOR>7</COLOR>\n    <MINQTY>1</MINQTY>');
+    expect(await buy('Rebrickable parts list (.csv)')).toBe('Part,Color,Quantity\r\n3022,1,1\r\n');
   });
 
   test('finds parts by search', async ({ page }) => {

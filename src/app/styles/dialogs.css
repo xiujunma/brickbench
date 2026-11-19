@@ -439,3 +439,10 @@
   text-decoration-color: var(--line-strong);
   text-underline-offset: 2px;
 }
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}

@@ -1,12 +1,15 @@
 import { useMemo } from 'react';
+import type { Catalogue } from '../../core/inventory/read';
 import { allotStock } from '../../core/inventory/stock';
 import { buildPartsList } from '../../core/io/partsList';
 import { getPart } from '../../core/parts/catalog';
+import { exportCatalogueList } from '../../state/catalogueLists';
 import { exportPartsCsv } from '../../state/commands';
 import { useEditor } from '../../state/editorStore';
 import { bricksOf } from '../../state/selectors';
 import { Dialog } from '../components/Dialog';
 import { Icon } from '../components/Icon';
+import { Menu, MenuItem } from '../components/Menu';
 import { cssVars } from '../platform';
 import { useStock } from '../useStock';
 
@@ -22,6 +25,12 @@ export function PartsListDialog() {
   }, [isOpen, model, stock]);
   const total = rows.reduce((sum, row) => sum + row.quantity, 0);
   const missing = rows.reduce((sum, row) => sum + row.missing, 0);
+  // with the user's sets, what they lack; without, the whole model
+  const toBuy = rows.length > 0 && (!stock.active || missing > 0);
+  const buy = (catalogue: Catalogue, close: () => void): void => {
+    close();
+    void exportCatalogueList(catalogue);
+  };
 
   const footer = (
     <>
@@ -29,9 +38,21 @@ export function PartsListDialog() {
         {total} bricks · {rows.length} different
         {stock.active && (missing > 0 ? ` · ${missing} missing from your parts` : ' · all in your parts')}
       </span>
-      <button type="button" className="btn btn-primary" onClick={exportPartsCsv} disabled={rows.length === 0}>
-        <Icon name="save" size={16} /> Download CSV
-      </button>
+      <span className="dialog-actions">
+        {toBuy && (
+          <Menu label={stock.active ? 'Buy missing parts' : 'Buy these parts'}>
+            {(close) => (
+              <>
+                <MenuItem icon="save" label="BrickLink wanted list (.xml)" onSelect={() => buy('bricklink', close)} />
+                <MenuItem icon="save" label="Rebrickable parts list (.csv)" onSelect={() => buy('rebrickable', close)} />
+              </>
+            )}
+          </Menu>
+        )}
+        <button type="button" className="btn btn-primary" onClick={exportPartsCsv} disabled={rows.length === 0}>
+          <Icon name="save" size={16} /> Download CSV
+        </button>
+      </span>
     </>
   );
 
