@@ -66,5 +66,11 @@ describe('describing tool calls', () => {
     expect(toolSummary('mcp__brickbench__undo', { steps: 2 })).toBe('Undoing 2 steps');
     expect(toolSummary('mcp__brickbench__list_colors', {})).toBe('Reading the colours');
     expect(toolSummary('TodoWrite', {})).toBe('Using TodoWrite');
+    expect(toolSummary('mcp__brickbench__list_owned_parts', {})).toBe('Reading your parts');
+    expect(toolSummary('mcp__brickbench__place_bricks', null)).toBe('Placing 0 bricks');
+    expect(toolSummary('mcp__brickbench__something_new', {})).toBe('Using something_new');
+    // fields a model sends are only words when they are text or numbers
+    expect(toolSummary('mcp__brickbench__paint_bricks', { color: { toString: 1 } })).toBe('Painting bricks');
+    expect(toolSummary('mcp__brickbench__paint_bricks', { color: 4 })).toBe('Painting bricks 4');
   });
 });

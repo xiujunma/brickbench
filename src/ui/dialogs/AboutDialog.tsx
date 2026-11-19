@@ -27,7 +27,11 @@ export function AboutDialog() {
             <li>There are no accounts. Your models, your favourite and recent parts, and the parts lists you add are kept {KEPT_WHERE}, not on a server.</li>
             <li>BrickBench downloads only its own files, such as the LDraw parts you use, from wherever it is hosted. There is no tracking and there are no adverts.</li>
             <li>A share link carries the model itself, after the “#”, which browsers never send to the site: only whoever opens the link sees it.</li>
-            <li>If you connect an AI agent, what you ask it and the model it works on go to that agent: with Claude Code, to Anthropic, under your own account.</li>
+            <li>
+              If you connect an AI agent, what you ask it and the model it works on go to whoever runs it: with Claude Code, to Anthropic, under your own account;
+              with GPT or Grok, to OpenAI or xAI, under your API key. With a model you run yourself, through Ollama or LM Studio, they go only to where it runs,
+              usually this computer.
+            </li>
             <li>{KEEPING}</li>
           </ul>
         </section>

@@ -4,6 +4,7 @@
  */
 import { z } from 'zod';
 import type { AgentEvent } from '../src/agent/protocol';
+import { summarizeTool } from './toolSummary';
 
 const BRICKBENCH_PREFIX = 'mcp__brickbench__';
 const MAX_ERROR_LENGTH = 300;
@@ -28,38 +29,9 @@ const toolResultBlock = z.object({
   content: z.union([z.string(), z.array(block)]).optional(),
 });
 
-const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
-
 /** A few words on what a tool call does, for the chat. */
 export function toolSummary(name: string, input: unknown): string {
-  if (!name.startsWith(BRICKBENCH_PREFIX)) return `Using ${name}`;
-  const value = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>;
-  switch (name.slice(BRICKBENCH_PREFIX.length)) {
-    case 'place_bricks':
-      return `Placing ${plural(Array.isArray(value['bricks']) ? value['bricks'].length : 0, 'brick', 'bricks')}`;
-    case 'find_parts':
-      return `Searching parts for “${String(value['query'] ?? '')}”`;
-    case 'paint_bricks':
-      return `Painting bricks ${String(value['color'] ?? '')}`.trim();
-    case 'set_model_name':
-      return `Naming the model “${String(value['name'] ?? '')}”`;
-    case 'look':
-      return typeof value['view'] === 'string' && value['view'] !== 'iso' ? `Looking at the model from the ${value['view']}` : 'Looking at the model';
-    case 'undo':
-      return typeof value['steps'] === 'number' && value['steps'] > 1 ? `Undoing ${value['steps']} steps` : 'Undoing the last step';
-    case 'get_model':
-      return 'Reading the model';
-    case 'move_bricks':
-      return 'Moving bricks';
-    case 'remove_bricks':
-      return 'Removing bricks';
-    case 'clear_model':
-      return 'Clearing the model';
-    case 'list_colors':
-      return 'Reading the colours';
-    default:
-      return `Using ${name.slice(BRICKBENCH_PREFIX.length)}`;
-  }
+  return name.startsWith(BRICKBENCH_PREFIX) ? summarizeTool(name.slice(BRICKBENCH_PREFIX.length), input) : `Using ${name}`;
 }
 
 function firstLine(content: z.infer<typeof toolResultBlock>['content']): string {

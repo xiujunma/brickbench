@@ -7,7 +7,7 @@ import type { Server, ServerWebSocket, WebSocketHandler } from 'bun';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { appMessageSchema, clampEvent, parseMessage, type AgentEvent } from '../src/agent/protocol';
 import { createAppLink, type AppLink } from './appLink';
-import type { ChatRunner } from './chat';
+import type { AgentStatus, ChatRunner } from './chat';
 import { createBrickBenchMcp, SERVER_VERSION } from './mcpServer';
 import { isAllowedOrigin, isLocalHost } from './origins';
 
@@ -29,6 +29,17 @@ export interface BridgeHandlers {
 
 const forbidden = (why: string): Response => new Response(why, { status: 403 });
 
+/** The longest agent name and detail the app takes; a longer one would leave it never hearing hello. */
+const MAX_AGENT_NAME = 80;
+const MAX_AGENT_DETAIL = 400;
+const cut = (text: string, limit: number): string => (text.length > limit ? `${text.slice(0, limit - 1)}…` : text);
+
+/** The runner's status, cut to the lengths the app accepts. */
+export function agentInfo(status: AgentStatus): AgentStatus {
+  const name = cut(status.name, MAX_AGENT_NAME);
+  return status.detail === undefined ? { ...status, name } : { ...status, name, detail: cut(status.detail, MAX_AGENT_DETAIL) };
+}
+
 /** Answers one MCP request with a server of its own: stateless, so any number of agents can call at once. */
 async function answerMcp(link: AppLink, request: Request): Promise<Response> {
   if (request.method !== 'POST') return new Response('This MCP server takes POST requests only.', { status: 405, headers: { allow: 'POST' } });
@@ -42,8 +53,8 @@ async function answerMcp(link: AppLink, request: Request): Promise<Response> {
   }
 }
 
-export function createBridgeHandlers(runner: ChatRunner, onlyOrigins: readonly string[] = []): BridgeHandlers {
-  const link = createAppLink();
+/** `link` is made here unless given, as when the chat's runner calls tools through it too. */
+export function createBridgeHandlers(runner: ChatRunner, onlyOrigins: readonly string[] = [], link: AppLink = createAppLink()): BridgeHandlers {
   let chatting: Socket | null = null;
   let tabs = 0;
 
@@ -98,14 +109,14 @@ export function createBridgeHandlers(runner: ChatRunner, onlyOrigins: readonly s
         if (origin !== null && !isAllowedOrigin(origin, onlyOrigins)) return forbidden('Web pages from other sites may not use this MCP server.');
         return answerMcp(link, request);
       }
-      if (pathname === '/health') return Response.json({ ok: true, tabs: link.tabs, agent: runner.status() });
+      if (pathname === '/health') return Response.json({ ok: true, tabs: link.tabs, agent: agentInfo(runner.status()) });
       return new Response('BrickBench agent bridge. Agents connect to /mcp; BrickBench connects to /app.', { status: 404 });
     },
     websocket: {
       maxPayloadLength: MAX_MESSAGE_BYTES,
       open(socket) {
         link.attach(socket);
-        link.send(socket, { kind: 'hello', version: SERVER_VERSION, agent: runner.status() });
+        link.send(socket, { kind: 'hello', version: SERVER_VERSION, agent: agentInfo(runner.status()) });
       },
       message(socket, raw) {
         onMessage(socket, typeof raw === 'string' ? raw : new TextDecoder().decode(raw));
@@ -126,6 +137,8 @@ export interface BridgeOptions {
   /** 0 picks a free port. */
   readonly port?: number;
   readonly onlyOrigins?: readonly string[];
+  /** The link to BrickBench tabs, when the runner needs it too. */
+  readonly link?: AppLink;
 }
 
 export interface Bridge {
@@ -136,7 +149,7 @@ export interface Bridge {
 
 /** Starts the bridge on this machine only. */
 export function startBridge(options: BridgeOptions): Bridge {
-  const handlers = createBridgeHandlers(options.runner, options.onlyOrigins);
+  const handlers = createBridgeHandlers(options.runner, options.onlyOrigins, options.link);
   const server = Bun.serve<SocketData>({
     hostname: '127.0.0.1',
     port: options.port ?? DEFAULT_PORT,

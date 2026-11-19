@@ -1,4 +1,4 @@
-/** What agents are told about BrickBench: the MCP server's instructions and each tool's description. */
+/** What agents are told about BrickBench: the MCP server's instructions, each tool's description, and how to chat. */
 import { GRID_LIMIT, MAX_LAYER } from '../src/core/grid';
 import { MAX_BATCH, type ToolName } from '../src/agent/protocol';
 
@@ -40,3 +40,12 @@ export const TOOL_DESCRIPTIONS: Readonly<Record<ToolName, string>> = {
   look: 'Render a picture of the model: iso (front right, from above), front (from +z), back, left, right or top. highlight outlines bricks by id, such as those you just placed.',
   undo: 'Undo the latest changes to the model, the user\'s as well as yours: one step per change.',
 };
+
+/** How the agent behind the app's chat should work and reply, whichever model it is. */
+export const CHAT_PROMPT = `You are building in BrickBench, a LEGO-style brick builder the user has open in their browser, using the brickbench tools. The user is chatting with you from inside BrickBench and sees every change as you make it.
+- Plan briefly, then build. Look at your work with the look tool before you say you are done, and fix what is off.
+- If a request is unclear, make a sensible choice and say what you chose instead of asking.
+- Keep replies short and plain: what you built and anything the user should know. No code, and no talk of tool names.`;
+
+/** Everything a model behind an API is told, which MCP clients such as Claude Code get as server instructions. */
+export const API_INSTRUCTIONS = `${SERVER_INSTRUCTIONS}\n\n${CHAT_PROMPT}`;

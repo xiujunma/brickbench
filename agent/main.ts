@@ -1,21 +1,30 @@
 #!/usr/bin/env bun
 /**
- * `bun run agent`: starts the agent bridge, so BrickBench's chat can run
- * Claude Code and any MCP agent can build in BrickBench.
+ * `bun run agent`: starts the agent bridge, so BrickBench's chat can run an
+ * agent (Claude Code, or a model behind an API) and any MCP agent can build
+ * in BrickBench.
  *
  * Settings: BRICKBENCH_AGENT_PORT (default 7425), BRICKBENCH_AGENT_ORIGINS
  * (the only pages let in, comma-separated; any page from this computer
- * otherwise), BRICKBENCH_CLAUDE (path to the claude command),
- * BRICKBENCH_AGENT_MODEL and BRICKBENCH_AGENT_BUDGET_USD (per request,
- * default 5, or none).
+ * otherwise), BRICKBENCH_AGENT_PROVIDER (claude, the default, or openai, xai,
+ * openrouter, ollama, lmstudio or custom), BRICKBENCH_AGENT_MODEL, and for
+ * Claude Code BRICKBENCH_CLAUDE (path to the claude command) and
+ * BRICKBENCH_AGENT_BUDGET_USD (per request, default 5, or none); for an API,
+ * BRICKBENCH_AGENT_API_KEY_VAR, BRICKBENCH_AGENT_BASE_URL and
+ * BRICKBENCH_AGENT_API (chat or responses). See agent/providers.ts.
  */
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { createApiRunner } from './api/apiRunner';
+import { chatCompletions } from './api/chatCompletions';
+import { responsesApi } from './api/responses';
+import { createAppLink, type AppLink } from './appLink';
 import { DEFAULT_PORT, startBridge } from './bridge';
 import { unavailableRunner, type ChatRunner } from './chat';
 import { createClaudeRunner } from './claudeRunner';
 import { parseOrigins } from './origins';
+import { chooseAgent, type ApiSettings } from './providers';
 
 const VERSION_TIMEOUT_MS = 10_000;
 /** The most one chat request may spend unless the user says otherwise: enough for a big build, not a runaway. */
@@ -67,7 +76,27 @@ function claudeCommand(): string | null {
   return Bun.which(chosen ?? 'claude');
 }
 
-async function chatRunner(mcpUrl: string, workDir: string): Promise<ChatRunner> {
+function apiRunner(settings: ApiSettings, link: AppLink): ChatRunner {
+  return createApiRunner({
+    label: settings.label,
+    baseUrl: settings.baseUrl,
+    model: settings.model,
+    format: settings.api === 'responses' ? responsesApi : chatCompletions,
+    // the same tools Claude Code reaches through MCP, run in the same tab
+    tools: (tool, input) => link.call(tool, input),
+    apiKey: settings.apiKey,
+    keyVariable: settings.keyVariable,
+    local: settings.local,
+  });
+}
+
+interface Chat {
+  readonly runner: ChatRunner;
+  /** For the user, when the bridge starts. */
+  readonly notes: readonly string[];
+}
+
+async function claudeRunner(mcpUrl: string, workDir: string): Promise<ChatRunner> {
   const command = claudeCommand();
   const version = command ? await versionOf(command) : null;
   if (!command || version === null) return unavailableRunner(NO_CLAUDE);
@@ -81,17 +110,26 @@ async function chatRunner(mcpUrl: string, workDir: string): Promise<ChatRunner> 
   });
 }
 
+async function chat(mcpUrl: string, workDir: string, link: AppLink): Promise<Chat> {
+  const choice = chooseAgent(Bun.env);
+  if (choice.kind === 'unavailable') return { runner: unavailableRunner(choice.reason), notes: [] };
+  if (choice.kind === 'api') return { runner: apiRunner(choice.settings, link), notes: choice.notes };
+  return { runner: await claudeRunner(mcpUrl, workDir), notes: [] };
+}
+
 async function main(): Promise<void> {
   const port = portSetting();
   const mcpUrl = `http://127.0.0.1:${port}/mcp`;
   const workDir = mkdtempSync(join(tmpdir(), 'brickbench-agent-'));
-  const runner = await chatRunner(mcpUrl, workDir);
-  const bridge = startBridge({ runner, port, onlyOrigins: parseOrigins(setting('BRICKBENCH_AGENT_ORIGINS')) });
+  const link = createAppLink();
+  const { runner, notes } = await chat(mcpUrl, workDir, link);
+  const bridge = startBridge({ runner, link, port, onlyOrigins: parseOrigins(setting('BRICKBENCH_AGENT_ORIGINS')) });
   const agent = runner.status();
   process.stdout.write(
     [
       `BrickBench agent bridge: ${bridge.url}`,
-      agent.available ? `  Chat: open BrickBench and click Agent. ${agent.name} answers, with your login.` : `  Chat unavailable: ${agent.detail ?? ''}`,
+      agent.available ? `  Chat: open BrickBench and click Agent. ${agent.name} answers. ${agent.detail ?? ''}`.trimEnd() : `  Chat unavailable: ${agent.detail ?? ''}`,
+      ...notes.map((note) => `  Note: ${note}`),
       '  Build from Claude Code in any terminal after adding the server once:',
       `    claude mcp add --transport http brickbench ${mcpUrl}`,
       '  Press Ctrl+C to stop.',

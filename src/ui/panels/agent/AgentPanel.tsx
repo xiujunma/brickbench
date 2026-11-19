@@ -51,7 +51,10 @@ function BridgeHelp() {
       <strong>Start the agent bridge</strong>
       <p>In a terminal in the BrickBench folder, run:</p>
       <code className="agent-command">bun run agent</code>
-      <p>This panel connects by itself once it is running. Replies come from Claude Code on this computer, using your own login.</p>
+      <p>
+        This panel connects by itself once it is running. Replies come from Claude Code on this computer, using your own login, or from the model you start
+        the bridge with: GPT, Grok, or one on this computer through Ollama or LM Studio.
+      </p>
     </div>
   );
 }
@@ -59,9 +62,7 @@ function BridgeHelp() {
 function Welcome({ disabled }: { readonly disabled: boolean }) {
   return (
     <div className="agent-welcome">
-      <p>
-        Ask Claude Code to build in your model. You see every brick as it goes in, and you can undo anything it does.
-      </p>
+      <p>Ask the agent to build in your model. You see every brick as it goes in, and you can undo anything it does.</p>
       <div className="agent-suggestions">
         {SUGGESTIONS.map((suggestion) => (
           <button key={suggestion} type="button" className="chip" disabled={disabled} onClick={() => agentChat.ask(suggestion)}>
@@ -82,7 +83,7 @@ type Props = {
   readonly onClose: () => void;
 };
 
-/** Chat with an agent that builds in the model: Claude Code, through the local agent bridge. */
+/** Chat with an agent that builds in the model (Claude Code, or a model behind an API) through the local agent bridge. */
 export function AgentPanel({ onClose }: Props) {
   const status = useAgentLink((s) => s.status);
   const agent = useAgentLink((s) => s.agent);

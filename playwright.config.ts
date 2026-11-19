@@ -1,7 +1,37 @@
 import { defineConfig, devices } from '@playwright/test';
-import { AGENT_PORT, APP_PORT as PORT } from './e2e/ports';
+import { AGENT_PORT, API_AGENT_PORT, APP_PORT as PORT, CHAT_AGENT_PORT, FAKE_MODEL_PORT } from './e2e/ports';
 
 const CI = Boolean(process.env['CI']);
+
+/**
+ * The chat's settings for a test bridge, every one given, so none comes from
+ * the shell running the tests: a provider set there would have the tests talk
+ * to a real model, and spend money.
+ */
+const agentSettings = (settings: Readonly<Record<string, string>>): Record<string, string> => ({
+  BRICKBENCH_AGENT_PROVIDER: 'claude',
+  BRICKBENCH_AGENT_MODEL: '',
+  BRICKBENCH_AGENT_BASE_URL: '',
+  BRICKBENCH_AGENT_API: '',
+  BRICKBENCH_AGENT_API_KEY_VAR: '',
+  BRICKBENCH_AGENT_BUDGET_USD: '',
+  BRICKBENCH_AGENT_ORIGINS: '',
+  ...settings,
+});
+
+/** A test bridge whose chat runs the stand-in model, over one wire format. */
+const modelBridge = (port: number, api: 'responses' | 'chat') => ({
+  command: 'bun agent/main.ts',
+  url: `http://127.0.0.1:${port}/health`,
+  reuseExistingServer: false,
+  env: agentSettings({
+    BRICKBENCH_AGENT_PORT: String(port),
+    BRICKBENCH_AGENT_PROVIDER: 'custom',
+    BRICKBENCH_AGENT_BASE_URL: `http://127.0.0.1:${FAKE_MODEL_PORT}/v1`,
+    BRICKBENCH_AGENT_API: api,
+    BRICKBENCH_AGENT_MODEL: `fake-${api}`,
+  }),
+});
 
 export default defineConfig({
   testDir: 'e2e',
@@ -42,11 +72,21 @@ export default defineConfig({
       command: 'bun agent/main.ts',
       url: `http://127.0.0.1:${AGENT_PORT}/health`,
       reuseExistingServer: false,
-      env: {
+      env: agentSettings({
         BRICKBENCH_AGENT_PORT: String(AGENT_PORT),
         BRICKBENCH_CLAUDE: 'agent/fixtures/fakeClaude.ts',
         FAKE_CLAUDE_MODE: 'build',
-      },
+      }),
     },
+    {
+      // a stand-in for a model behind an API, as GPT and Grok are, that builds a small wall
+      command: 'bun agent/fixtures/fakeModelApi.ts',
+      url: `http://127.0.0.1:${FAKE_MODEL_PORT}/health`,
+      reuseExistingServer: false,
+      env: { FAKE_MODEL_PORT: String(FAKE_MODEL_PORT) },
+    },
+    // bridges whose chat runs that model, over each wire format
+    modelBridge(API_AGENT_PORT, 'responses'),
+    modelBridge(CHAT_AGENT_PORT, 'chat'),
   ],
 });

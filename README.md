@@ -15,7 +15,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
   - **Mine** keeps your starred favourites, recent picks and the parts already in your model. Favourites and picks stay in this browser, shared by its tabs.
   - **Keyboard first:** press `/`, type, use ↑ ↓ and press Enter to build with the part.
 - **Build with the parts you own:** add the parts lists of your sets from Rebrickable or BrickLink, and BrickBench counts how many of each part you have left as you build. The parts list shows what's missing, and an agent can build from your parts too. See [Building with the parts you own](#building-with-the-parts-you-own).
-- **Build with an AI agent:** ask Claude Code, from a chat panel in the app or from your terminal, to build or change the model. It places, paints and moves bricks while you watch, checks its work with pictures of the model, and one undo takes back a whole request.
+- **Build with an AI agent:** ask Claude Code, GPT, Grok or a model on your own computer, from a chat panel in the app (or Claude Code and other agents from your terminal), to build or change the model. It places, paints and moves bricks while you watch, checks its work with pictures of the model, and one undo takes back a whole request.
 - **68 colours:** solid, transparent and metallic, following the LDraw palette, the newer ones included (Dark Purple, Light Aqua, Warm Tan, Reddish Orange and more).
 - **Grid snapping that understands bricks.** Point at a top face to stack, at a side to build beside it (lined up with that brick's courses), or underneath to hang below. Parts never overlap: the preview turns red when there's no room, and drops land on top of whatever is in the way.
 - **Tools:** Build, Select & move (click, Shift-click, box select, drag to move), Paint and Erase, plus an eyedropper (Alt-click) and rotate, nudge, copy, paste and duplicate.
@@ -164,7 +164,7 @@ To run it from this repository, `bun run desktop` builds the web app and opens i
 
 ## Building with an AI agent
 
-An AI agent can build in BrickBench: Claude Code from the **Agent** panel in the app, or Claude Code (or any other agent that speaks [MCP](https://modelcontextprotocol.io)) from a terminal. It places, paints, moves and removes bricks while you watch, looks at pictures of the model to check its work, and whatever it does for one request is one step you can undo.
+An AI agent can build in BrickBench: Claude Code, GPT, Grok or a model on your own computer from the **Agent** panel in the app, or Claude Code (or any other agent that speaks [MCP](https://modelcontextprotocol.io)) from a terminal. It places, paints, moves and removes bricks while you watch, looks at pictures of the model to check its work, and whatever it does for one request is one step you can undo.
 
 ![The Agent panel: Claude Code making a house's roof dark grey and putting a white fence around its garden](docs/agent-panel.png)
 
@@ -176,7 +176,28 @@ An AI agent can build in BrickBench: Claude Code from the **Agent** panel in the
 
 2. Open BrickBench and click **Agent** in the top bar. Ask for something: "build a small red house with a door and two windows", "make the roof dark grey", "put a fence around it".
 
-The chat runs [Claude Code](https://code.claude.com) on your computer with your own login, so Claude Code has to be installed. It gets the BrickBench tools and nothing else: no shell, no files, and none of your Claude Code hooks, plugins or settings files. That use of your login is meant for you on your own computer; if other people will use the chat, set `ANTHROPIC_API_KEY` for the bridge so it runs on an API key instead.
+Unless you choose another model (below), the chat runs [Claude Code](https://code.claude.com) on your computer with your own login, so Claude Code has to be installed. It gets the BrickBench tools and nothing else: no shell, no files, and none of your Claude Code hooks, plugins or settings files. That use of your login is meant for you on your own computer; if other people will use the chat, set `ANTHROPIC_API_KEY` for the bridge so it runs on an API key instead.
+
+**Other models: GPT, Grok, OpenRouter, or a model on your computer.** Start the bridge with `BRICKBENCH_AGENT_PROVIDER` set, and the chat runs that model instead. It gets the same tools and instructions as Claude Code, calls them by function calling, and sees the pictures `look` draws (a model that cannot see pictures carries on without them, and the chat says so). One request is still one step to undo.
+
+| Provider | `BRICKBENCH_AGENT_PROVIDER` | API key | Model, unless `BRICKBENCH_AGENT_MODEL` says otherwise |
+|---|---|---|---|
+| [OpenAI](https://developers.openai.com/api/docs/models) (GPT) | `openai` | `OPENAI_API_KEY` | `gpt-6.2-sol` |
+| [xAI](https://docs.x.ai/developers/models) (Grok) | `xai` | `XAI_API_KEY` | `grok-4.7` |
+| [OpenRouter](https://openrouter.ai/models) | `openrouter` | `OPENROUTER_API_KEY` | none: set one |
+| [Ollama](https://ollama.com), on your computer | `ollama` | none | none: set one that `ollama list` shows |
+| [LM Studio](https://lmstudio.ai), on your computer | `lmstudio` | none | none: set one it has loaded |
+| Any other OpenAI-compatible API | `custom`, with `BRICKBENCH_AGENT_BASE_URL` | the variable `BRICKBENCH_AGENT_API_KEY_VAR` names, if any | none: set one |
+
+```bash
+# Grok, with the API key from your xAI console in XAI_API_KEY
+BRICKBENCH_AGENT_PROVIDER=xai bun run agent
+
+# or a model on this computer, through Ollama
+BRICKBENCH_AGENT_PROVIDER=ollama BRICKBENCH_AGENT_MODEL=qwen3.5:9b bun run agent
+```
+
+Choose a model that handles tool calls well and can see pictures; small models on your computer manage simple builds. What you ask, and the model being built, go to the provider under your API key (with Ollama or LM Studio, only to wherever you run it). The bridge asks OpenAI and xAI not to store the conversation, and sends it whole with each request instead. There is no spending cap as there is for Claude Code; instead, a request stops after 60 rounds of tool calls.
 
 **From a terminal.** With the bridge running and BrickBench open, add BrickBench to Claude Code once:
 
@@ -204,9 +225,13 @@ then ask Claude Code to build something in BrickBench. Any MCP client can use th
 | Variable | What it sets |
 |---|---|
 | `BRICKBENCH_AGENT_PORT` | The bridge's port, 7425 by default. Open BrickBench with `?agentPort=` and the same number to match. |
-| `BRICKBENCH_AGENT_MODEL` | The model the chat uses, such as `sonnet` or `opus`; Claude Code's default otherwise |
-| `BRICKBENCH_AGENT_BUDGET_USD` | The most one chat request may spend: $5 unless you set it, or `none` for no cap |
+| `BRICKBENCH_AGENT_PROVIDER` | Who runs the chat's model: `claude` (Claude Code, the default), `openai`, `xai`, `openrouter`, `ollama`, `lmstudio` or `custom` |
+| `BRICKBENCH_AGENT_MODEL` | The model the chat uses: for Claude Code, such as `sonnet` or `opus` (its default otherwise); for the others, as the provider names it |
+| `BRICKBENCH_AGENT_BUDGET_USD` | For Claude Code, the most one chat request may spend: $5 unless you set it, or `none` for no cap |
 | `BRICKBENCH_CLAUDE` | Where the `claude` command is, if it is not on your PATH |
+| `BRICKBENCH_AGENT_API_KEY_VAR` | The name of the environment variable that holds the API key, if not the provider's usual one (as in the table above) |
+| `BRICKBENCH_AGENT_BASE_URL` | The API's address, ending in `/v1`: needed for `custom`, or to reach Ollama or LM Studio on another computer |
+| `BRICKBENCH_AGENT_API` | `responses` or `chat`, to override how the bridge talks to the API: OpenAI and xAI use the Responses API, the rest Chat Completions |
 | `BRICKBENCH_AGENT_ORIGINS` | The only pages that may connect, comma-separated, such as `http://localhost:5173` |
 
 The bridge listens on this computer only (127.0.0.1) and answers only pages served from this computer. Any of them could start the chat, so if you run other web servers you do not trust, set `BRICKBENCH_AGENT_ORIGINS` to BrickBench's own address.
@@ -218,7 +243,7 @@ The bridge listens on this computer only (127.0.0.1) and answers only pages serv
 | `bun run dev` | Start the dev server (Vite) |
 | `bun run build` | Type-check, build the LDraw library if it is missing, and build to `dist/` |
 | `bun run ldraw` | Download and convert the LDraw parts library into `public/ldraw/` |
-| `bun run agent` | Start the agent bridge, so Claude Code and other MCP agents can build in BrickBench |
+| `bun run agent` | Start the agent bridge, so the Agent panel's chat and other MCP agents can build in BrickBench |
 | `bun test` | Run the unit tests (`bun test`, about a second) |
 | `bun run coverage` | Run the unit tests with coverage; fails if any file drops below 80% of its lines or functions |
 | `bun run e2e` | Run the browser tests (Playwright; starts the dev server itself) |
@@ -325,7 +350,7 @@ src/
   samples/    the sample cottage
 scripts/ldraw/  the LDraw library converter (run straight from TypeScript by Bun)
 agent/        the agent bridge: an MCP server for agents, a WebSocket for BrickBench tabs,
-              and Claude Code run headless for the chat
+              and the chat's agent: Claude Code run headless, or a model behind an API (api/)
 electron/     the desktop app's main process and preload script
 e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 ```
@@ -365,7 +390,7 @@ e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 
 ## Privacy
 
-BrickBench has no accounts and no server of its own. Your models, favourite and recent parts, and parts lists stay in your browser's storage (in the desktop app, on your computer). It downloads only its own files, such as the LDraw parts you use, from wherever it is hosted, with no tracking or adverts. If you connect an AI agent, what you ask it and the model it works on go to that agent: with Claude Code, to Anthropic under your own account. A share link carries the model after its `#`, which browsers never send to the site. **About & privacy**, at the foot of the parts panel, says the same in the app, with the credits and trademark notices.
+BrickBench has no accounts and no server of its own. Your models, favourite and recent parts, and parts lists stay in your browser's storage (in the desktop app, on your computer). It downloads only its own files, such as the LDraw parts you use, from wherever it is hosted, with no tracking or adverts. If you connect an AI agent, what you ask it and the model it works on go to whoever runs it: with Claude Code, to Anthropic under your own account; with GPT or Grok, to OpenAI or xAI under your API key. With a model you run yourself, through Ollama or LM Studio, they go only to where it runs, usually your own computer. A share link carries the model after its `#`, which browsers never send to the site. **About & privacy**, at the foot of the parts panel, says the same in the app, with the credits and trademark notices.
 
 ## Licence
 

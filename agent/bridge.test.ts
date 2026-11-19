@@ -3,6 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { AgentEvent, AppMessage, BridgeMessage } from '../src/agent/protocol';
 import { waitFor } from '../src/testing/helpers';
+import { createAppLink } from './appLink';
 import { createBridgeHandlers, startBridge, type Bridge } from './bridge';
 import type { ChatRunner } from './chat';
 
@@ -112,6 +113,22 @@ describe('the agent bridge', () => {
     // junk is ignored
     tab.socket.send('not json');
     tab.socket.send(new TextEncoder().encode(JSON.stringify({ kind: 'active' })));
+    tab.socket.close();
+  });
+
+  it('shares its link with a runner that calls tools itself, and cuts the agent’s name to what the app takes', async () => {
+    const link = createAppLink();
+    const runner: ChatRunner = {
+      status: () => ({ available: true, name: `Test AI · ${'m'.repeat(200)}`, detail: 'd'.repeat(1000) }),
+      running: false,
+      start: () => undefined,
+      stop: () => undefined,
+    };
+    bridge = startBridge({ runner, port: 0, link });
+    const tab = await openTab(bridge);
+    const hello = tab.received[0];
+    expect(hello?.kind === 'hello' ? [hello.agent.name.length, hello.agent.detail?.length] : []).toEqual([80, 400]);
+    expect(await link.call('get_model', {})).toEqual({ ok: true, data: { echo: 'get_model' } });
     tab.socket.close();
   });
 

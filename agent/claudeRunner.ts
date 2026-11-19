@@ -6,11 +6,7 @@
 import type { AgentEvent } from '../src/agent/protocol';
 import type { AgentStatus, ChatRunner } from './chat';
 import { createStreamReader, type StreamReader } from './claudeStream';
-
-export const CHAT_PROMPT = `You are building in BrickBench, a LEGO-style brick builder the user has open in their browser, using the brickbench tools. The user is chatting with you from inside BrickBench and sees every change as you make it.
-- Plan briefly, then build. Look at your work with the look tool before you say you are done, and fix what is off.
-- If a request is unclear, make a sensible choice and say what you chose instead of asking.
-- Keep replies short and plain: what you built and anything the user should know. No code, and no talk of tool names.`;
+import { CHAT_PROMPT } from './guide';
 
 /** The tail of Claude Code's error output worth showing. */
 const MAX_STDERR = 4000;
