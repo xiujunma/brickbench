@@ -1,4 +1,5 @@
 import { connectorOf, connectorPrimitive, placeConnector, type FlatConnector } from './connectors.ts';
+import { MINIFIG_JOINTS } from './minifigJoints.ts';
 import { normalizeName, type LibrarySource } from './library.ts';
 import { parseLDraw, type Transform, type V3 } from './parse.ts';
 
@@ -211,7 +212,9 @@ export class Flattener {
     const primitive = connectorPrimitive(key);
     // a connection primitive is one piece of a connection, whatever smaller ones it is drawn from
     const own = primitive ? connectorOf(primitive, triangles) : null;
-    return { triangles, topStuds: dedupe(topStuds), sideStuds: dedupeDirected(sideStuds), connectors: own ? [own] : connectors };
+    // the files minifigures are drawn from carry their joints too
+    const joints = MINIFIG_JOINTS[key] ?? [];
+    return { triangles, topStuds: dedupe(topStuds), sideStuds: dedupeDirected(sideStuds), connectors: own ? [own] : [...connectors, ...joints] };
   }
 }
 

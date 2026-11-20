@@ -49,15 +49,39 @@ export function brickConnectors(brick: PlacedPart, lookup: PartLookup): WorldCon
   return connectors.map((connector) => placeConnector(connector, origin, turn));
 }
 
-/** What plugs into what: a pin into a pin hole, an axle into either kind of hole, a hinge's single finger into a fork. */
-export function mates(a: ConnectorKind, b: ConnectorKind): boolean {
-  const pair = (p: ConnectorKind, q: ConnectorKind): boolean => (a === p && b === q) || (a === q && b === p);
-  return pair('pin', 'pinhole') || pair('axle', 'pinhole') || pair('axle', 'axlehole') || pair('finger', 'fork');
+function isPair(a: ConnectorKind, b: ConnectorKind, p: ConnectorKind, q: ConnectorKind): boolean {
+  return (a === p && b === q) || (a === q && b === p);
 }
 
-/** Whether plugged-together connections turn about their axis: all but an axle in an axle hole, which locks it. */
+/**
+ * What plugs into what: a pin into a pin hole, an axle into either kind of
+ * hole, a hinge's single finger into a fork, and a minifigure's head on its
+ * neck, hips under its waist, legs on the hips, arms at its shoulders and
+ * hands at its wrists.
+ */
+export function mates(a: ConnectorKind, b: ConnectorKind): boolean {
+  const pairs: readonly (readonly [ConnectorKind, ConnectorKind])[] = [
+    ['pin', 'pinhole'],
+    ['axle', 'pinhole'],
+    ['axle', 'axlehole'],
+    ['finger', 'fork'],
+    ['neck', 'head'],
+    ['waist', 'hips'],
+    ['hip', 'leg'],
+    ['shoulder', 'arm'],
+    ['wrist', 'hand'],
+  ];
+  return pairs.some(([p, q]) => isPair(a, b, p, q));
+}
+
+/** Whether plugged-together connections turn about their axis: all but an axle in an axle hole, which locks it, and hips in a torso. */
 export function turnsFreely(a: ConnectorKind, b: ConnectorKind): boolean {
-  return !((a === 'axle' && b === 'axlehole') || (a === 'axlehole' && b === 'axle'));
+  return !isPair(a, b, 'axle', 'axlehole') && !isPair(a, b, 'waist', 'hips');
+}
+
+/** Round connections, whose own turn about their axis means nothing to what plugs into them. */
+export function isRound(kind: ConnectorKind): boolean {
+  return kind === 'pin' || kind === 'pinhole' || kind === 'axle' || kind === 'axlehole';
 }
 
 /** How far a point lies from a connection's line. */

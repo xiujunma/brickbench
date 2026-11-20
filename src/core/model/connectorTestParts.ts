@@ -1,8 +1,9 @@
 /**
- * Technic and click-hinge parts for tests, with the connections the
- * library converter finds on the real ones (LDraw 3673, 32523, 3700, 3705,
- * 3713, 30364 and 30365), in the editor's frame: studs, y up, from the
- * middle of the part's footprint at its bottom.
+ * Technic, click-hinge and minifigure parts for tests, with the
+ * connections the library converter finds on the real ones (LDraw 3673,
+ * 32523, 3700, 3705, 3713, 30364, 30365, 973, 3626b and 3818), in the
+ * editor's frame: studs, y up, from the middle of the part's footprint at
+ * its bottom.
  */
 import { getPart } from '../parts/catalog';
 import type { Connector, PartDef, PartLookup } from '../parts/types';
@@ -42,7 +43,30 @@ export const BUSH = part('bush', 1, 1, 2, [{ kind: 'axlehole', at: { x: 0, y: 0.
 export const FINGER = part('finger', 3, 1, 3, [{ kind: 'finger', at: { x: 1, y: 0.7, z: 0 }, axis: Z, length: 0.9 }]);
 export const FORK = part('fork', 3, 1, 3, [{ kind: 'fork', at: { x: 1, y: 0.7, z: 0 }, axis: Z, length: 0.85 }]);
 
-const TECHNIC = new Map([PIN, BEAM, TECHNIC_BRICK, AXLE, BUSH, FINGER, FORK].map((p) => [p.id, p]));
+const SHOULDER_TILT = Math.atan2(0.17, 0.985);
+
+/** A minifigure torso: its neck on top, its waist's two sockets under it, a shoulder each side tilted about 9.8°. */
+export const TORSO = part('torso', 2, 1, 5, [
+  { kind: 'neck', at: { x: 0, y: 1.6, z: 0 }, axis: Y, length: 0.2 },
+  { kind: 'waist', at: { x: -0.5, y: 0, z: 0 }, axis: Y, length: 0.275 },
+  { kind: 'waist', at: { x: 0.5, y: 0, z: 0 }, axis: Y, length: 0.275 },
+  { kind: 'shoulder', at: { x: -0.7776, y: 1.15, z: 0 }, axis: { x: Math.cos(SHOULDER_TILT), y: -Math.sin(SHOULDER_TILT), z: 0 }, length: 0.3 },
+  { kind: 'shoulder', at: { x: 0.7776, y: 1.15, z: 0 }, axis: { x: Math.cos(SHOULDER_TILT), y: Math.sin(SHOULDER_TILT), z: 0 }, length: 0.3 },
+]);
+
+/** Minifigure hips and legs, the hips' two studs on their top, their box reaching above them as the real one's does. */
+export const HIPS = part('hips', 2, 1, 7, [
+  { kind: 'hips', at: { x: -0.5, y: 2, z: 0 }, axis: Y, length: 0.275 },
+  { kind: 'hips', at: { x: 0.5, y: 2, z: 0 }, axis: Y, length: 0.275 },
+]);
+
+/** A minifigure head, its joint at the middle of its underside. */
+export const HEAD = part('head', 1, 1, 3, [{ kind: 'head', at: { x: 0, y: 0, z: 0 }, axis: Y, length: 0.2 }]);
+
+/** A minifigure's right arm, by its shoulder pin, which its body hangs out and down from. */
+export const ARM = part('arm', 1, 1, 4, [{ kind: 'arm', at: { x: 0.4, y: 1.4, z: 0 }, axis: X, length: 0.3 }]);
+
+const TECHNIC = new Map([PIN, BEAM, TECHNIC_BRICK, AXLE, BUSH, FINGER, FORK, TORSO, HIPS, HEAD, ARM].map((p) => [p.id, p]));
 
 /** The test parts, and the built-in catalogue's. */
-export const technicLookup: PartLookup = (id) => TECHNIC.get(id) ?? getPart(id);
+export const connectorLookup: PartLookup = (id) => TECHNIC.get(id) ?? getPart(id);

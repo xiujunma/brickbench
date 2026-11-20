@@ -3,7 +3,7 @@ import { type Vec3 } from '../grid';
 import { attachToConnector } from '../placement/connect';
 import { materialize, payloadFromPart } from '../placement/payload';
 import { brickConnectors, engaged, holdOf, mates, turnsFreely } from './connections';
-import { technicLookup as lookup } from './technicTestParts';
+import { connectorLookup as lookup } from './connectorTestParts';
 import { makeBrick } from './testUtils';
 import type { Brick } from './types';
 
@@ -40,6 +40,13 @@ describe('connections of placed parts', () => {
     expect(turnsFreely('pin', 'pinhole')).toBe(true);
     expect(turnsFreely('axle', 'pinhole')).toBe(true);
     expect(turnsFreely('axlehole', 'axle')).toBe(false);
+    // a minifigure's head on its neck, hips under its waist, legs, arms and hands
+    for (const [a, b] of [['neck', 'head'], ['hips', 'waist'], ['hip', 'leg'], ['arm', 'shoulder'], ['wrist', 'hand']] as const) expect(mates(a, b)).toBe(true);
+    expect(mates('head', 'waist')).toBe(false);
+    expect(mates('arm', 'pinhole')).toBe(false);
+    // heads, legs, arms and hands turn; a torso on its hips does not
+    expect(turnsFreely('neck', 'head')).toBe(true);
+    expect(turnsFreely('hips', 'waist')).toBe(false);
   });
 
   it('are plugged together when they mate, lie on one line and overlap along it', () => {

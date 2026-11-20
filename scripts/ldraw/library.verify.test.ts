@@ -11,10 +11,10 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import { decodePartMesh, encodePartMesh } from '../../src/core/ldraw/format.ts';
 import { readColourTable } from './colours.ts';
-import { HINGE_PRIMITIVES } from './connectors.ts';
+import { finishConnectors, HINGE_PRIMITIVES, type FlatConnector } from './connectors.ts';
 import { convertPart } from './convert.ts';
 import { Flattener } from './flatten.ts';
-import { directorySource } from './library.ts';
+import { directorySource, memorySource, type LibrarySource } from './library.ts';
 import { parseLDraw, type Transform } from './parse.ts';
 
 const LDRAW_DIR = process.env['LDRAW_DIR'];
@@ -138,6 +138,46 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
       const [most] = [...found.entries()].sort((p, q) => q[1] - p[1]);
       expect(`${name} ${most?.[0]}`).toBe(`${name} ${primitive.through[1]},${primitive.through[2]}`);
     }
+  });
+
+  it('joins minifigures where LDraw’s own assembled minifigures put their parts', () => {
+    // a source with LDraw's files, and one more of our own on top
+    const withModel = (name: string, text: string): LibrarySource => {
+      const extra = memorySource({ [name]: text });
+      const library = directorySource(LDRAW_DIR ?? '');
+      return { read: (file) => extra.read(file) ?? library.read(file) };
+    };
+    const joinsOf = (file: string, source?: LibrarySource): FlatConnector[] => finishConnectors(new Flattener(source ?? directorySource(LDRAW_DIR ?? '')).flatten(file).connectors);
+    /** Pairs of joints of these kinds that sit together (to half an LDraw unit) along one line. */
+    const together = (joints: readonly FlatConnector[], a: FlatConnector['kind'], b: FlatConnector['kind']): number =>
+      joints
+        .filter((j) => j.kind === a)
+        .filter((j) =>
+          joints.some(
+            (k) =>
+              k.kind === b &&
+              Math.hypot(j.at[0] - k.at[0], j.at[1] - k.at[1], j.at[2] - k.at[2]) < 0.5 &&
+              Math.abs(j.axis[0] * k.axis[0] + j.axis[1] * k.axis[1] + j.axis[2] * k.axis[2]) > 0.999,
+          ),
+        ).length;
+    // a torso with arms and hands: both shoulders hold an arm, both wrists a hand
+    const torsoWithArms = joinsOf('76382.dat');
+    expect(together(torsoWithArms, 'shoulder', 'arm')).toBe(2);
+    expect(together(torsoWithArms, 'wrist', 'hand')).toBe(2);
+    // hips with legs: the legs on the hips' axle (both legs' joints are one place, so kept once)
+    expect(together(joinsOf('73200b-f1.dat'), 'hip', 'leg')).toBe(1);
+    // a head sitting on the torso's shoulders, its neck in it, and the hips under the torso by their two studs
+    const figure = ['1 16 0 0 0 1 0 0 0 1 0 0 0 1 973.dat', '1 16 0 -24 0 1 0 0 0 1 0 0 0 1 3626b.dat', '1 16 0 32 0 1 0 0 0 1 0 0 0 1 3815b.dat'].join('\n');
+    const whole = joinsOf('figure.ldr', withModel('figure.ldr', figure));
+    expect(together(whole, 'neck', 'head')).toBe(1);
+    expect(together(whole, 'waist', 'hips')).toBe(2);
+    // the head's joint is at its underside, which rests on the torso's top
+    const head = new Flattener(directorySource(LDRAW_DIR ?? '')).flatten('3626b.dat');
+    expect(Math.max(...head.triangles.flatMap((t) => [t.a[1], t.b[1], t.c[1]]))).toBeCloseTo(joinsOf('3626b.dat')[0]?.at[1] ?? NaN, 1);
+    // printed variants carry their part's joints: a printed torso, a head with the other hollow stud, a right leg
+    expect(joinsOf('973p01.dat').map((j) => j.kind)).toEqual(['neck', 'waist', 'waist', 'shoulder', 'shoulder']);
+    expect(joinsOf('3626c.dat').map((j) => j.kind)).toEqual(['head']);
+    expect(joinsOf('3816c.dat').map((j) => j.kind)).toEqual(['leg']);
   });
 
   it('says which way a jumper plate’s stud sits between cells, and that a plain plate’s do not', () => {

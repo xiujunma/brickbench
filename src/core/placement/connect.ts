@@ -7,8 +7,8 @@
  * neighbour rather than colliding with it.
  */
 import { LDU_PER_UNIT, PLATE_HEIGHT, type Vec3 } from '../grid';
-import { along, brickConnectors, dot, mates, type WorldConnector } from '../model/connections';
-import { brickCellBox, placeLoose } from '../model/geometry';
+import { along, brickConnectors, dot, engaged, isRound, mates, placeConnector, type WorldConnector } from '../model/connections';
+import { brickCellBox, brickTurn, placeLoose } from '../model/geometry';
 import type { Brick } from '../model/types';
 import { multiplyTurns, rotateBy, turnAbout, type Turn } from '../orientation';
 import type { Connector, PartLookup } from '../parts/types';
@@ -22,9 +22,14 @@ export interface ConnectTurn {
   readonly flipped: boolean;
 }
 
-/** How near a hole's mouth the cursor must be to plug into it, and how near a pin, axle or hinge, in studs. */
+/**
+ * How near a hole's mouth the cursor must be to plug into it, how near a
+ * pin, axle or hinge, and how near a minifigure's joint, which lies deeper
+ * inside the box its part is picked by, in studs.
+ */
 const MOUTH_REACH = 0.45;
 const REACH = 0.6;
+const JOINT_REACH = 1;
 /** Parts slide along an axle in half studs. */
 const SLIDE_STEP = 0.5;
 
@@ -45,6 +50,12 @@ function unit(v: Vec3): Vec3 {
 
 function isHole(connector: { readonly kind: string }): boolean {
   return connector.kind === 'pinhole' || connector.kind === 'axlehole';
+}
+
+/** How near the cursor must be to a connection to plug into it (see MOUTH_REACH). */
+function reachOf(socket: WorldConnector): number {
+  if (isHole(socket)) return MOUTH_REACH;
+  return isRound(socket.kind) || socket.kind === 'finger' || socket.kind === 'fork' ? REACH : JOINT_REACH;
 }
 
 /** How far the cursor is from a connection it could plug into: from a hole's nearer mouth, or from anywhere along a pin, axle or hinge. */
@@ -102,7 +113,7 @@ function middleOn(plug: Connector, socket: WorldConnector, axis: Vec3, hit: Hit)
     const fromEnd = Math.round((s - plug.length / 2 + half) / SLIDE_STEP) * SLIDE_STEP;
     return along(socket.at, socket.axis, Math.min(Math.max(fromEnd - half + plug.length / 2, -room), room));
   }
-  // a hinge's finger in its fork, middle to middle
+  // a hinge's finger in its fork, or a minifigure's joint, middle to middle
   return socket.at;
 }
 
@@ -120,8 +131,29 @@ function overlap(a: Box, b: Box): number {
 
 type Box = ReturnType<typeof brickCellBox>;
 
-/** Every way the payload's part plugs into the socket, scored: most upright, then least in the target's way, then turned least. */
-function fitsOf(part: readonly Connector[], brick: PayloadBrick, socket: WorldConnector, hit: Hit, target: Box, lookup: PartLookup): Fit[] {
+/** trace(aᵀ · b): the larger, the less one rotation turns from the other. */
+function closeness(a: Turn, b: Turn): number {
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += (a[i] ?? 0) * (b[i] ?? 0);
+  return sum;
+}
+
+/**
+ * Every way the payload's part plugs into the socket, scored: the most of
+ * its connections plugged into the target's (a torso on both the hips'
+ * studs, not one), then most upright, then least in the target's way, then
+ * (but for round connections, whose turn means nothing) facing most as the
+ * target does, then turned least.
+ */
+function fitsOf(part: readonly Connector[], brick: PayloadBrick, socket: WorldConnector, hit: Hit, target: Brick, lookup: PartLookup): Fit[] {
+  const targetBox = brickCellBox(target, lookup);
+  const facing = isRound(socket.kind) ? null : brickTurn(target);
+  const sockets = brickConnectors(target, lookup);
+  const seated = (origin: Vec3, turn: Turn): number =>
+    part.filter((plug) => {
+      const placed = placeConnector(plug, origin, turn);
+      return sockets.some((other) => engaged(placed, other));
+    }).length;
   const fits: Fit[] = [];
   for (const plug of part) {
     if (!mates(plug.kind, socket.kind)) continue;
@@ -132,7 +164,8 @@ function fitsOf(part: readonly Connector[], brick: PayloadBrick, socket: WorldCo
         const turn = multiplyTurns(turnAbout(axis, (spin * Math.PI) / 2), lined);
         const origin = minus(middle, rotateBy(turn, plug.at));
         const [a, , , , e, , , , i] = turn;
-        fits.push({ turn, origin, middle, score: [-e, overlap(brickCellBox(placedAt(brick, origin, turn, lookup), lookup), target), -(a + e + i)] });
+        const inTheWay = overlap(brickCellBox(placedAt(brick, origin, turn, lookup), lookup), targetBox);
+        fits.push({ turn, origin, middle, score: [-seated(origin, turn), -e, inTheWay, facing ? -closeness(facing, turn) : 0, -(a + e + i)] });
       }
     }
   }
@@ -182,11 +215,11 @@ export function attachToConnector(hit: Hit, target: Brick, payload: Payload, tur
   const sockets = brickConnectors(target, lookup).filter((socket) => plugs.some((plug) => mates(plug.kind, socket.kind)));
   const near = sockets
     .map((socket) => ({ socket, reach: reachTo(socket, hit.point) }))
-    .filter(({ socket, reach }) => reach <= (isHole(socket) ? MOUTH_REACH : REACH))
+    .filter(({ socket, reach }) => reach <= reachOf(socket))
     .sort((a, b) => a.reach - b.reach);
   const socket = near[0]?.socket;
   if (!socket) return null;
-  const best = fitsOf(plugs, only, socket, hit, brickCellBox(target, lookup), lookup).reduce<Fit | null>((top, fit) => (top === null || better(fit, top) ? fit : top), null);
+  const best = fitsOf(plugs, only, socket, hit, target, lookup).reduce<Fit | null>((top, fit) => (top === null || better(fit, top) ? fit : top), null);
   if (!best) return null;
   // from the best fit, T turns the part end over end where it stands, and R a quarter turn about the connection for each press
   const bestBox = brickCellBox(placedAt(only, best.origin, best.turn, lookup), lookup);

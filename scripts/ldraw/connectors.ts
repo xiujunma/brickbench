@@ -191,7 +191,24 @@ function settled(connector: FlatConnector): FlatConnector {
 }
 
 /** How far apart pieces on one line may be and still be one connection, in LDU: a Technic brick's peg-hole ends are 16 apart. */
-const JOIN_GAP: Readonly<Record<ConnectorKind, number | null>> = { pin: null, pinhole: 16, axle: 2, axlehole: 16, finger: 0, fork: 8 };
+const JOIN_GAP: Readonly<Record<ConnectorKind, number | null>> = {
+  pin: null,
+  pinhole: 16,
+  axle: 2,
+  axlehole: 16,
+  finger: 0,
+  fork: 8,
+  neck: null,
+  head: null,
+  waist: null,
+  hips: null,
+  hip: null,
+  leg: null,
+  shoulder: null,
+  arm: null,
+  wrist: null,
+  hand: null,
+};
 /** Pieces of a connection lie on one line to within this, in LDU. */
 const ON_LINE = 0.5;
 
@@ -254,13 +271,20 @@ function alongAxleHole(hole: FlatConnector, axleHoles: readonly FlatConnector[])
 }
 
 
+/** The same connection given twice, as by a head drawn with two of the files its neck joint is set on: kept once. */
+function once(connectors: readonly FlatConnector[]): FlatConnector[] {
+  return connectors.filter(
+    (c, i) => !connectors.slice(0, i).some((d) => d.kind === c.kind && Math.hypot(...sub(c.at, d.at)) < 0.1 && Math.abs(dot(c.axis, d.axis)) > 0.999),
+  );
+}
+
 /**
  * A part's connections, from all the pieces it is drawn with: axles told
  * from axle holes, pieces on one line joined, mouths of axle holes dropped,
- * in a steady order.
+ * each once, in a steady order.
  */
 export function finishConnectors(pieces: readonly FlatConnector[]): FlatConnector[] {
-  const joined = joinRuns(pieces.map(settled).filter((piece) => piece.length > 0));
+  const joined = once(joinRuns(pieces.map(settled).filter((piece) => piece.length > 0)));
   const axleHoles = joined.filter((c) => c.kind === 'axlehole');
   const byPlace = (a: FlatConnector, b: FlatConnector): number => {
     for (let k = 0; k < 3; k++) {

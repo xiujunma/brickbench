@@ -107,3 +107,29 @@ describe('connections read from LDraw primitives', () => {
     expect(holes.map((c) => c.at[0])).toEqual([-20, 20]);
   });
 });
+
+describe('minifigure joints', () => {
+  const body = certified('3 16 -20 0 0 20 0 0 0 32 10');
+
+  it('come with the files every variant of a part is drawn from, turned and mirrored with them', () => {
+    const source = memorySource({
+      's/973s01.dat': body,
+      's/3818s01.dat': body,
+      'torso.dat': certified('1 16 0 0 0 1 0 0 0 1 0 0 0 1 s\\973s01.dat'),
+      // the left arm is the right one mirrored
+      'leftarm.dat': certified('1 16 0 0 0 -1 0 0 0 1 0 0 0 1 s\\3818s01.dat'),
+    });
+    const torso = finishConnectors(flattenPart('torso.dat', source).connectors);
+    expect(torso.map((c) => c.kind)).toEqual(['neck', 'waist', 'waist', 'shoulder', 'shoulder']);
+    const arm = finishConnectors(flattenPart('leftarm.dat', source).connectors);
+    expect(arm.map((c) => [c.kind, Math.round(c.at[0] * 1000) / 1000 + 0, Math.round(c.axis[0] * 1000) / 1000 + 0])).toEqual([
+      ['arm', 0, -1],
+      ['wrist', 4.994, 0],
+    ]);
+  });
+
+  it('are kept once when a part is drawn with two files that set the same joint', () => {
+    const source = memorySource({ 's/3626bs02.dat': body, 's/3626cs02.dat': body, 'head.dat': certified('1 16 0 0 0 1 0 0 0 1 0 0 0 1 s\\3626bs02.dat\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 s\\3626cs02.dat') });
+    expect(finishConnectors(flattenPart('head.dat', source).connectors).map((c) => c.kind)).toEqual(['head']);
+  });
+});

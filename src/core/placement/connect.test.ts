@@ -2,8 +2,9 @@ import { describe, expect, it } from 'bun:test';
 import { PLATE_HEIGHT, type Vec3 } from '../grid';
 import { brickConnectors, engaged } from '../model/connections';
 import { brickCellBox, isLoose } from '../model/geometry';
-import { technicLookup as lookup } from '../model/technicTestParts';
+import { connectorLookup as lookup } from '../model/connectorTestParts';
 import { makeBrick } from '../model/testUtils';
+import { turnOf } from '../orientation';
 import type { Brick } from '../model/types';
 import { attachToConnector, type ConnectTurn } from './connect';
 import { materialize, payloadFromPart } from './payload';
@@ -124,5 +125,36 @@ describe('what does not plug in', () => {
     const single = payloadFromPart(pinPart, 4, 0);
     const pair = { ...single, bricks: [...single.bricks, ...single.bricks] };
     expect(attachToConnector(hit({ x: 0.55, y: 1.2, z: 1.45 }, UP, 'beam'), beam, pair, STILL, lookup)).toBeNull();
+  });
+});
+
+describe('putting a minifigure together', () => {
+  it('sets a head on the torso’s neck, facing the way the torso faces', () => {
+    const torso = makeBrick({ id: 'torso', partId: 'torso', r: 1 });
+    const head = plug(torso, 'head', { x: 0.55, y: 2, z: 1.05 }, UP);
+    if (!head?.m) throw new Error('no head');
+    turnOf(1).forEach((v, i) => expect(head.m?.[i]).toBeCloseTo(v, 9));
+    expect(pluggedInto(head, torso)).toBe(true);
+    // its underside on the torso's top, round the neck
+    expect(box(head).y[0]).toBeCloseTo(1.6, 9);
+  });
+
+  it('seats a torso on both the hips’ studs, not on one with the other beside it', () => {
+    const hips = makeBrick({ id: 'hips', partId: 'hips' });
+    // the cursor over the hips' left stud
+    const torso = plug(hips, 'torso', { x: 0.45, y: 2.8, z: 0.5 }, UP);
+    if (!torso) throw new Error('no torso');
+    expect(box(torso).x).toEqual([0, 2]);
+    expect(box(torso).y[0]).toBeCloseTo(2, 9);
+  });
+
+  it('hangs an arm from a shoulder, out from the torso, tilted as the shoulder is', () => {
+    const torso = makeBrick({ id: 'torso', partId: 'torso' });
+    const arm = plug(torso, 'arm', { x: 0, y: 1.15, z: 0.55 }, { x: -1, y: 0, z: 0 });
+    if (!arm?.m) throw new Error('no arm');
+    expect(arm.m[4]).toBeCloseTo(0.985 / Math.hypot(0.985, 0.17), 9);
+    const { x } = box(arm);
+    expect(((x[0] ?? 0) + (x[1] ?? 0)) / 2).toBeLessThan(0);
+    expect(pluggedInto(arm, torso)).toBe(true);
   });
 });
