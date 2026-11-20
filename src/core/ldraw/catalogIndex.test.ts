@@ -84,7 +84,7 @@ describe('library index', () => {
     expect(toPartDef(BRICK)).not.toHaveProperty('connectors');
     // no such kind, no axis, no length
     for (const connector of [
-      [18, 0, 0, 0, 1, 0, 0, 1],
+      [19, 0, 0, 0, 1, 0, 0, 1],
       [0, 0, 0, 0, 0, 0, 0, 1],
       [0, 0, 0, 0, 1, 0, 0, 0],
     ]) {
@@ -101,7 +101,7 @@ describe('library index', () => {
   });
 
   it('rejects damaged or unexpected indexes with a readable message', () => {
-    expect(() => parseLDrawIndex({ version: 11, generated: '', parts: [] })).toThrow(/damaged/);
+    expect(() => parseLDrawIndex({ version: 12, generated: '', parts: [] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, id: '../evil' }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, w: 0 }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex('nope')).toThrow(/damaged/);

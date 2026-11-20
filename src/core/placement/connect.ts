@@ -11,7 +11,7 @@ import { along, brickConnectors, dot, engaged, isRound, mates, placeConnector, t
 import { brickCellBox, brickTurn, placeLoose } from '../model/geometry';
 import type { Brick } from '../model/types';
 import { multiplyTurns, rotateBy, turnAbout, type Turn } from '../orientation';
-import type { Connector, PartLookup } from '../parts/types';
+import type { Connector, PartDef, PartLookup } from '../parts/types';
 import type { Attachment } from './attach';
 import type { Payload, PayloadBrick } from './payload';
 import type { Hit } from './ray';
@@ -49,7 +49,7 @@ function unit(v: Vec3): Vec3 {
 }
 
 function isHole(connector: { readonly kind: string }): boolean {
-  return connector.kind === 'pinhole' || connector.kind === 'axlehole';
+  return connector.kind === 'pinhole' || connector.kind === 'axlehole' || connector.kind === 'barhole';
 }
 
 /** How near the cursor must be to a connection to plug into it (see MOUTH_REACH). */
@@ -58,11 +58,21 @@ function reachOf(socket: WorldConnector): number {
   return isRound(socket.kind) || ['finger', 'fork', 'clip'].includes(socket.kind) ? REACH : JOINT_REACH;
 }
 
-/** How far the cursor is from a connection it could plug into: from a hole's nearer mouth, or from anywhere along a pin, axle or hinge. */
+/**
+ * Which end of a hole a part goes in at, +1 the end its axis points to: an
+ * open stud's top, the only end it is open at; for a hole through a part,
+ * the one nearer the cursor.
+ */
+function mouthOf(socket: WorldConnector, point: Vec3): 1 | -1 {
+  if (socket.kind === 'barhole') return 1;
+  return dot(minus(point, socket.at), socket.axis) < 0 ? -1 : 1;
+}
+
+/** How far the cursor is from a connection it could plug into: from a hole's mouth, or from anywhere along a pin, axle or hinge. */
 function reachTo(socket: WorldConnector, point: Vec3): number {
   const s = dot(minus(point, socket.at), socket.axis);
   const half = socket.length / 2;
-  const nearest = along(socket.at, socket.axis, isHole(socket) ? (s < 0 ? -half : half) : Math.min(Math.max(s, -half), half));
+  const nearest = along(socket.at, socket.axis, isHole(socket) ? mouthOf(socket, point) * half : Math.min(Math.max(s, -half), half));
   return length(minus(point, nearest));
 }
 
@@ -81,6 +91,57 @@ function turnTaking(from: Vec3, to: Vec3): Turn {
   return turnAbout(axis, Math.acos(c));
 }
 
+/** How far a part may reach from its bar's line and still be a bar to stand in an open stud, in studs: a sword's crossguard or a claw's clip reaches about half a stud. */
+const SLIM_REACH = 0.8;
+/** A bar's end is free when the part reaches no further past it than this, in studs: an LDraw unit or so of rounding. */
+const FREE_END = 0.06;
+
+/** The corners of the shape a part's reach is judged by: what it really fills, when the index says; its whole cells otherwise. */
+function shapeCorners(part: PartDef): Vec3[] {
+  const { min, max } = part.extent ?? { min: { x: -part.w / 2, y: 0, z: -part.d / 2 }, max: { x: part.w / 2, y: part.h * PLATE_HEIGHT, z: part.d / 2 } };
+  return [min.x, max.x].flatMap((x) => [min.y, max.y].flatMap((y) => [min.z, max.z].map((z) => ({ x, y, z }))));
+}
+
+/** Whether a part is little more than its bar: its shape stays within SLIM_REACH of the bar's line. */
+function isSlimAbout(bar: Connector, part: PartDef): boolean {
+  return shapeCorners(part).every((corner) => {
+    const off = minus(corner, bar.at);
+    const s = dot(off, bar.axis);
+    return length(minus(off, { x: bar.axis.x * s, y: bar.axis.y * s, z: bar.axis.z * s })) <= SLIM_REACH;
+  });
+}
+
+/**
+ * The ends of a part's bar that go down an open stud, each as the way the
+ * bar's own axis then points: +1 out of the stud (its near end went in), -1
+ * into it (its far end did). An end goes in when it is free, the part
+ * reaching no further that way, so the rest of the part stands out of the
+ * stud; and a bar that stands upright in its part goes in by its bottom
+ * only, so an antenna stacks on its base rather than standing on its head.
+ */
+function barEnds(bar: Connector, part: PartDef): (1 | -1)[] {
+  if (!isSlimAbout(bar, part)) return [];
+  const corners = shapeCorners(part);
+  const reach = (way: 1 | -1): number => Math.max(...corners.map((corner) => way * dot(minus(corner, bar.at), bar.axis)));
+  const upright = Math.abs(bar.axis.y) > 0.999;
+  // the far end (where the axis points) is the top of an upright bar whose axis points up, the near end of one whose axis points down
+  const isTop = (way: 1 | -1): boolean => upright && way * bar.axis.y > 0;
+  const goesIn = (way: 1 | -1): boolean => reach(way) <= bar.length / 2 + FREE_END && !isTop(way);
+  return [...(goesIn(-1) ? [1 as const] : []), ...(goesIn(1) ? [-1 as const] : [])];
+}
+
+/**
+ * Whether building a part plugs this connection of it into a socket. An
+ * open stud is somewhere to put a bar, not a way onto one, and studs are
+ * where parts stack: so a part's own open stud never plugs it in, and only
+ * a part that is little more than a bar, by a free end of it, stands in
+ * one. A plate with a handle stacks on the stud instead.
+ */
+function plugsInto(plug: Connector, socket: WorldConnector, part: PartDef): boolean {
+  if (!mates(plug.kind, socket.kind) || plug.kind === 'barhole') return false;
+  return socket.kind !== 'barhole' || barEnds(plug, part).length > 0;
+}
+
 /** One way the part can plug in: how it is turned, where its origin and its connection's middle go (world units), and how well it sits. */
 interface Fit {
   readonly turn: Turn;
@@ -92,14 +153,14 @@ interface Fit {
 /** Where a plug's middle goes on a socket, plugged in along `axis` (one way or the other along the socket). */
 function middleOn(plug: Connector, socket: WorldConnector, axis: Vec3, hit: Hit): Vec3 {
   const half = socket.length / 2;
-  // which end of the socket the cursor is at: +1 the end its axis points to
-  const side = dot(minus(hit.point, socket.at), socket.axis) < 0 ? -1 : 1;
+  // the end of the socket the part goes in at: +1 the end its axis points to
+  const side = mouthOf(socket, hit.point);
   if (plug.kind === 'pin' && isHole(socket)) {
     // in at the mouth under the cursor, as far as it goes
     return along(along(socket.at, socket.axis, side * half), axis, plug.length / 2);
   }
-  if (plug.kind === 'axle' && isHole(socket)) {
-    // through the hole, its far end flush with the far face, the rest towards the cursor
+  if ((plug.kind === 'axle' || plug.kind === 'bar') && isHole(socket)) {
+    // through the hole, its far end flush with the far face, the rest towards the cursor: an axle through a beam, a bar down an open stud
     return along(along(socket.at, socket.axis, -side * half), socket.axis, side * (plug.length / 2));
   }
   if (socket.kind === 'pin') {
@@ -117,10 +178,16 @@ function middleOn(plug: Connector, socket: WorldConnector, axis: Vec3, hit: Hit)
   return socket.at;
 }
 
-/** The ways a plug can point along a socket: a pin's tip into the hole, away from the cursor; anything else, either way. */
-function endsFor(plug: Connector, socket: WorldConnector, hit: Hit): Vec3[] {
+/**
+ * The ways a plug can point along a socket: a pin's tip into the hole, away
+ * from the cursor; a bar down an open stud, by an end that goes in
+ * (barEnds); anything else, either way.
+ */
+function endsFor(plug: Connector, socket: WorldConnector, hit: Hit, part: PartDef): Vec3[] {
   const flip = (v: Vec3): Vec3 => ({ x: -v.x, y: -v.y, z: -v.z });
-  if (plug.kind === 'pin' && isHole(socket)) return [dot(minus(hit.point, socket.at), socket.axis) < 0 ? socket.axis : flip(socket.axis)];
+  if (plug.kind === 'pin' && isHole(socket)) return [mouthOf(socket, hit.point) < 0 ? socket.axis : flip(socket.axis)];
+  // an open stud's axis points out of it
+  if (socket.kind === 'barhole') return barEnds(plug, part).map((way) => (way > 0 ? socket.axis : flip(socket.axis)));
   return [socket.axis, flip(socket.axis)];
 }
 
@@ -145,19 +212,20 @@ function closeness(a: Turn, b: Turn): number {
  * (but for round connections, whose turn means nothing) facing most as the
  * target does, then turned least.
  */
-function fitsOf(part: readonly Connector[], brick: PayloadBrick, socket: WorldConnector, hit: Hit, target: Brick, lookup: PartLookup): Fit[] {
+function fitsOf(part: PartDef, brick: PayloadBrick, socket: WorldConnector, hit: Hit, target: Brick, lookup: PartLookup): Fit[] {
+  const plugs = part.connectors ?? [];
   const targetBox = brickCellBox(target, lookup);
   const facing = isRound(socket.kind) ? null : brickTurn(target);
   const sockets = brickConnectors(target, lookup);
   const seated = (origin: Vec3, turn: Turn): number =>
-    part.filter((plug) => {
+    plugs.filter((plug) => {
       const placed = placeConnector(plug, origin, turn);
       return sockets.some((other) => engaged(placed, other));
     }).length;
   const fits: Fit[] = [];
-  for (const plug of part) {
-    if (!mates(plug.kind, socket.kind)) continue;
-    for (const axis of endsFor(plug, socket, hit)) {
+  for (const plug of plugs) {
+    if (!plugsInto(plug, socket, part)) continue;
+    for (const axis of endsFor(plug, socket, hit, part)) {
       const lined = turnTaking(plug.axis, axis);
       const middle = middleOn(plug, socket, axis, hit);
       for (let spin = 0; spin < 4; spin++) {
@@ -210,21 +278,22 @@ function better(a: Fit, b: Fit): boolean {
  */
 export function attachToConnector(hit: Hit, target: Brick, payload: Payload, turned: ConnectTurn, lookup: PartLookup): Attachment | null {
   const [only] = payload.bricks;
-  const plugs = only ? (lookup(only.partId)?.connectors ?? []) : [];
-  if (payload.bricks.length !== 1 || !only || plugs.length === 0) return null;
-  const sockets = brickConnectors(target, lookup).filter((socket) => plugs.some((plug) => mates(plug.kind, socket.kind)));
+  const part = only ? lookup(only.partId) : undefined;
+  const plugs = part?.connectors ?? [];
+  if (payload.bricks.length !== 1 || !only || !part || plugs.length === 0) return null;
+  const sockets = brickConnectors(target, lookup).filter((socket) => plugs.some((plug) => plugsInto(plug, socket, part)));
   const near = sockets
     .map((socket) => ({ socket, reach: reachTo(socket, hit.point) }))
     .filter(({ socket, reach }) => reach <= reachOf(socket))
     .sort((a, b) => a.reach - b.reach);
   const socket = near[0]?.socket;
   if (!socket) return null;
-  const best = fitsOf(plugs, only, socket, hit, target, lookup).reduce<Fit | null>((top, fit) => (top === null || better(fit, top) ? fit : top), null);
+  const best = fitsOf(part, only, socket, hit, target, lookup).reduce<Fit | null>((top, fit) => (top === null || better(fit, top) ? fit : top), null);
   if (!best) return null;
-  // from the best fit, T turns the part end over end where it stands, and R a quarter turn about the connection for each press
+  // from the best fit, T turns the part end over end where it stands (but in an open stud, open only at its top), and R a quarter turn about the connection for each press
   const bestBox = brickCellBox(placedAt(only, best.origin, best.turn, lookup), lookup);
   const centre = { x: (bestBox.x0 + bestBox.x1) / 2, y: ((bestBox.y0 + bestBox.y1) / 2) * PLATE_HEIGHT, z: (bestBox.z0 + bestBox.z1) / 2 };
-  const over = turned.flipped ? turnAbout(overAxis(best, socket.axis, centre), Math.PI) : IDENTITY;
+  const over = turned.flipped && socket.kind !== 'barhole' ? turnAbout(overAxis(best, socket.axis, centre), Math.PI) : IDENTITY;
   const turn = multiplyTurns(turnAbout(socket.axis, (turned.spin * Math.PI) / 2), over);
   const origin = along(best.middle, rotateBy(turn, minus(best.origin, best.middle)), 1);
   const placed = placedAt(only, origin, multiplyTurns(turn, best.turn), lookup);

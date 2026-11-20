@@ -45,6 +45,8 @@ describe('connections of placed parts', () => {
     expect(mates('head', 'waist')).toBe(false);
     // a bar in a clip, or in a minifigure's hand, which turns in it
     expect(mates('clip', 'bar')).toBe(true);
+    expect(mates('barhole', 'bar')).toBe(true);
+    expect(mates('barhole', 'pin')).toBe(false);
     expect(mates('bar', 'pinhole')).toBe(false);
     expect(turnsFreely('bar', 'clip')).toBe(true);
     expect(mates('arm', 'pinhole')).toBe(false);
@@ -70,14 +72,27 @@ describe('what a group hangs by', () => {
   const top = plug(pin, 'beam', { x: 0.9, y: 1.6, z: 1.5 }, { x: 1, y: 0, z: 0 }, 'top');
   const model = [beam, pin, top];
 
+  /** A brick a brick's height up, off the baseplate. */
+  const raised = (brick: Brick): Brick => ({ ...brick, y: brick.y + 3 });
+
   it('swings about a pin it hangs on, alone or with the pin', () => {
-    for (const group of [[top], [pin, top], [beam]]) {
-      const hold = holdOf(group, model, lookup);
+    const up = model.map(raised);
+    for (const [group, all] of [[[top], model], [[pin, top], model], [[raised(beam)], up]] as const) {
+      const hold = holdOf(group, all, lookup);
       if (hold.kind !== 'joint') throw new Error(`${group.map((b) => b.id).join('+')} is held ${hold.kind}`);
       expect(Math.abs(hold.axis.y)).toBeCloseTo(1, 9);
       expect(hold.pivot.x).toBeCloseTo(0.5, 9);
       expect(hold.pivot.z).toBeCloseTo(1.5, 9);
     }
+  });
+
+  it('stays put on the baseplate, whatever is plugged into it', () => {
+    // the beam under the pin stands on the baseplate's studs: it turns on the grid, as bricks there always have
+    expect(holdOf([beam], model, lookup).kind).toBe('rigid');
+    const brick = makeBrick({ id: 'brick', partId: 'technic-brick' });
+    const axle = plug(brick, 'axle', { x: 1.05, y: 0.75, z: 1 }, { x: 0, y: 0, z: 1 }, 'axle');
+    expect(holdOf([brick], [brick, axle], lookup).kind).toBe('rigid');
+    expect(holdOf([raised(brick)], [raised(brick), raised(axle)], lookup).kind).toBe('joint');
   });
 
   it('is held rigidly on two pins, or on an axle in an axle hole, and not at all by nothing', () => {
@@ -95,9 +110,9 @@ describe('what a group hangs by', () => {
     // the axle turns in the brick's round hole, bush and all
     expect(holdOf([axle, bush], [brick, axle, bush], lookup).kind).toBe('joint');
     // stacked on studs as well, a Technic brick on an axle can't swing about it
-    const under = makeBrick({ id: 'under', partId: 'brick-2x4', y: -3 });
-    expect(holdOf([brick], [under, brick, axle], lookup).kind).toBe('rigid');
-    expect(holdOf([brick], [makeBrick({ id: 'aside', partId: 'brick-2x4', x: 5, y: -3 }), brick, axle], lookup).kind).toBe('joint');
+    const [brickUp, axleUp] = [{ ...brick, y: 3 }, { ...axle, y: axle.y + 3 }];
+    expect(holdOf([brickUp], [makeBrick({ id: 'under', partId: 'brick-2x4' }), brickUp, axleUp], lookup).kind).toBe('rigid');
+    expect(holdOf([brickUp], [makeBrick({ id: 'aside', partId: 'brick-2x4', x: 5 }), brickUp, axleUp], lookup).kind).toBe('joint');
     expect(holdOf([makeBrick({ id: 'lone' })], model, lookup).kind).toBe('none');
     expect(holdOf([makeBrick({ id: 'apart', partId: 'beam', x: 9 })], model, lookup).kind).toBe('none');
   });

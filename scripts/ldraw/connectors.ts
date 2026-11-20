@@ -117,6 +117,11 @@ const RODS: Readonly<Record<string, ConnectorPrimitive>> = {
   handle2: rod('bar', ALONG_X, [0, 0, 4]),
 };
 
+/** Open studs: a bar-sized hole down their middle, which a bar stands in; open only at their top, so their axis runs from their base (y 0) up to it (y -4). */
+const OPEN_STUD: ConnectorPrimitive = { kind: 'barhole', axis: [0, -1, 0], through: ORIGIN, either: false };
+/** The plain open stud and those shaped for round and octagonal parts, with their base edges or without, with the logo or without. */
+const OPEN_STUDS = /^stud(2|6|17)a?(-logo\d*)?$/;
+
 /** The clip and handle primitives and the line each holds a bar on, for the verify test. */
 export const ROD_PRIMITIVES: Readonly<Record<string, ConnectorPrimitive>> = RODS;
 
@@ -147,6 +152,7 @@ export function connectorPrimitive(name: string): ConnectorPrimitive | undefined
   if (/^(peghole\d*|beamhol[e2]|connhol(e|\d+))$/.test(base)) return PIN_HOLE;
   if (/^(axle|axleend\d*|axles|axlesphe|axlebeam|axlecaph?\d*)$/.test(base)) return AXLE;
   if (/^(axlehol[2-9e]|axleho1[02]|axl\dhol[e\d]|axl\dho\d+|axl\dend)$/.test(base)) return AXLE_HOLE;
+  if (OPEN_STUDS.test(base)) return OPEN_STUD;
   return HINGES[base] ?? RODS[base];
 }
 
@@ -269,6 +275,7 @@ const JOIN_GAP: Readonly<Record<ConnectorKind, number | null>> = {
   hand: null,
   bar: 1,
   clip: null,
+  barhole: null,
 };
 /** Pieces of a connection lie on one line to within this, in LDU. */
 const ON_LINE = 0.5;

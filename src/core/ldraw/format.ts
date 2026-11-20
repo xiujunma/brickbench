@@ -46,7 +46,8 @@ export type SideStudEntry = readonly [number, number, number, number];
  * forks of two; minifigures' joints, each with its partner: a torso's
  * neck and a head, its waist and the hips' studs, the hips' axle and a leg,
  * a shoulder and an arm, a wrist and a hand; and bars, and the clips that
- * hold them (a minifigure's hand among them).
+ * hold them (a minifigure's hand among them) and the open studs they stand
+ * in.
  */
 export const CONNECTOR_KINDS = [
   'pin',
@@ -67,6 +68,7 @@ export const CONNECTOR_KINDS = [
   'hand',
   'bar',
   'clip',
+  'barhole',
 ] as const;
 
 /**
@@ -129,12 +131,13 @@ export interface LDrawIndexEntry {
  * version 5 printed and stickered parts, version 6 the studs of jumper
  * plates, version 7 studs on parts' sides, version 8 Technic and
  * click-hinge connections, version 9 minifigures' joints, version 10 bars
- * and clips, and the extent of parts' shapes.
+ * and clips, and the extent of parts' shapes, version 11 the open studs
+ * bars stand in.
  */
-export const LDRAW_INDEX_VERSION = 10;
+export const LDRAW_INDEX_VERSION = 11;
 
 /** Index formats the app reads: in a version 1 library every part fills its whole box. */
-export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 
 /** Most side studs an index entry lists: a brick with studs all round its sides has a few dozen. */
 export const MAX_SIDE_STUDS = 128;

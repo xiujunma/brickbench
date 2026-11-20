@@ -75,7 +75,27 @@ export const BAR = {
 /** A 1 × 1 plate with a clip on its front, holding a bar across, as LDraw 61252. */
 export const CLIP_PLATE = part('clip-plate', 1, 2, 1, [{ kind: 'clip', at: { x: 0, y: 0.3, z: 0.5 }, axis: X, length: 0.4 }]);
 
-const TECHNIC = new Map([PIN, BEAM, TECHNIC_BRICK, AXLE, BUSH, FINGER, FORK, TORSO, HIPS, HEAD, ARM, BAR, CLIP_PLATE].map((p) => [p.id, p]));
+/** A 1 × 2 plate with a handle along its front, as LDraw 48336: a bar, but at the edge of a part that stacks. */
+export const HANDLE_PLATE = part('handle-plate', 2, 2, 1, [{ kind: 'bar', at: { x: 0, y: 0.3, z: 0.8 }, axis: X, length: 2 }]);
+
+/** An antenna: a mast, a bar, standing on a 1 × 1 base, so only its top end is free. */
+export const ANTENNA = {
+  ...part('antenna', 1, 1, 10, [{ kind: 'bar', at: { x: 0, y: 2.4, z: 0 }, axis: Y, length: 3.2 }]),
+  extent: { min: { x: -0.5, y: 0, z: -0.5 }, max: { x: 0.5, y: 4, z: 0.5 } },
+};
+
+/** A sword, hilt down: its hilt a bar free at the bottom, its blade above, half a stud to either side. */
+export const SWORD = {
+  ...part('sword', 1, 1, 9, [{ kind: 'bar', at: { x: 0, y: 0.5, z: 0 }, axis: { x: 0, y: -1, z: 0 }, length: 1 }]),
+  extent: { min: { x: -0.5, y: 0, z: -0.1 }, max: { x: 0.5, y: 3.5, z: 0.1 } },
+};
+
+/** A 1 × 1 round brick with an open stud, as LDraw 3062b: a bar-sized hole down its stud. */
+export const ROUND_BRICK = part('round-brick', 1, 1, 3, [{ kind: 'barhole', at: { x: 0, y: 1.3, z: 0 }, axis: Y, length: 0.2 }]);
+
+const TECHNIC = new Map(
+  [PIN, BEAM, TECHNIC_BRICK, AXLE, BUSH, FINGER, FORK, TORSO, HIPS, HEAD, ARM, BAR, CLIP_PLATE, HANDLE_PLATE, ANTENNA, SWORD, ROUND_BRICK].map((p) => [p.id, p]),
+);
 
 /** The test parts, and the built-in catalogue's. */
 export const connectorLookup: PartLookup = (id) => TECHNIC.get(id) ?? getPart(id);

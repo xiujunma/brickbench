@@ -57,7 +57,8 @@ function isPair(a: ConnectorKind, b: ConnectorKind, p: ConnectorKind, q: Connect
  * What plugs into what: a pin into a pin hole, an axle into either kind of
  * hole, a hinge's single finger into a fork, and a minifigure's head on its
  * neck, hips under its waist, legs on the hips, arms at its shoulders and
- * hands at its wrists, and a bar in a clip or a minifigure's hand.
+ * hands at its wrists, and a bar in a clip, a minifigure's hand or an open
+ * stud.
  */
 export function mates(a: ConnectorKind, b: ConnectorKind): boolean {
   const pairs: readonly (readonly [ConnectorKind, ConnectorKind])[] = [
@@ -71,6 +72,7 @@ export function mates(a: ConnectorKind, b: ConnectorKind): boolean {
     ['shoulder', 'arm'],
     ['wrist', 'hand'],
     ['bar', 'clip'],
+    ['bar', 'barhole'],
   ];
   return pairs.some(([p, q]) => isPair(a, b, p, q));
 }
@@ -82,7 +84,7 @@ export function turnsFreely(a: ConnectorKind, b: ConnectorKind): boolean {
 
 /** Round connections, whose own turn about their axis means nothing to what plugs into them. */
 export function isRound(kind: ConnectorKind): boolean {
-  return kind === 'pin' || kind === 'pinhole' || kind === 'axle' || kind === 'axlehole' || kind === 'bar';
+  return ['pin', 'pinhole', 'axle', 'axlehole', 'bar', 'barhole'].includes(kind);
 }
 
 /** How far a point lies from a connection's line. */
@@ -123,14 +125,15 @@ function stacked(a: Brick, b: Brick, lookup: PartLookup): boolean {
  * How `group` hangs on the other bricks (`others`, which may include the
  * group's own, skipped by id): the line it swings about when everything
  * plugging it to them turns freely about that one line, and no studs hold
- * it to them too.
+ * it too: another brick's, or the baseplate's, for a brick on the grid at
+ * ground level, which turns on the grid as it always has.
  */
 export function holdOf(group: readonly Brick[], others: Iterable<Brick>, lookup: PartLookup): Hold {
   const ids = new Set(group.map((brick) => brick.id));
   const own = group.flatMap((brick) => brickConnectors(brick, lookup).map((connector) => ({ connector, box: brickCellBox(brick, lookup) })));
   if (own.length === 0) return { kind: 'none' };
   const pairs: { readonly mine: WorldConnector; readonly theirs: WorldConnector }[] = [];
-  let studded = false;
+  let studded = group.some((brick) => isOnGrid(brick) && brick.y === 0);
   for (const other of others) {
     if (ids.has(other.id)) continue;
     studded ||= group.some((brick) => stacked(brick, other, lookup));

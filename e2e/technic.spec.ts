@@ -120,4 +120,27 @@ test.describe('Technic, hinges and minifigures', () => {
     // lying level: its own up, along the bar, runs across
     expect(Math.abs(bar?.m?.[4] ?? 1)).toBeLessThan(1e-6);
   });
+
+  test('stands a bar in a round plate’s open stud', async ({ page }) => {
+    // starts the editor and searches the library twice
+    test.slow();
+    await freshEditor(page);
+    await page.getByRole('button', { name: 'Library', exact: true }).click();
+    await expect(page.locator('#library-category')).toBeVisible();
+
+    // a 1 × 1 round plate with an open stud, on the baseplate (a library part: the built-in round parts have no connections)
+    await chooseLibraryPart(page, '85861');
+    const centre = await viewportCentre(page);
+    await page.mouse.click(centre.x, centre.y);
+    await expect(counts(page)).toHaveText('1 brick');
+    expect((await savedBricks(page, 1))[0]?.partId).toBe('ldraw:85861');
+
+    // a bar goes down its stud, standing up from the stud's base on the plate's top, a plate up
+    await chooseLibraryPart(page, '87994');
+    const inStud = await plugNear(page, centre, /Y\s*1(?![\d.])/, 1);
+    expect(inStud).not.toBeNull();
+    const bar = (await savedBricks(page, 2))[1];
+    expect(bar?.y).toBeCloseTo(1, 6);
+    expect(Math.abs(bar?.m?.[4] ?? 0)).toBeCloseTo(1, 6);
+  });
 });

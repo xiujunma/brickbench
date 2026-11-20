@@ -75,7 +75,9 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     };
     const kinds = (file: string) => connectorsOf(file).map(([kind]) => ['pin', 'pinhole', 'axle', 'axlehole', 'finger', 'fork'][kind ?? 0]);
     // a Technic brick's one hole runs through it from front to back, 0.7 studs (14 LDU) up from its bottom
-    expect(connectorsOf('3700.dat')).toEqual([[1, 0, 0.7, 0, 0, 0, 1, 1]]);
+    expect(connectorsOf('3700.dat')[0]).toEqual([1, 0, 0.7, 0, 0, 0, 1, 1]);
+    // and its studs are open: a bar stands in each
+    expect(connectorsOf('3700.dat').slice(1).map(([kind]) => kind)).toEqual([18, 18]);
     // a beam's three holes, upright, a stud apart
     expect(
       connectorsOf('32523.dat')
@@ -102,8 +104,9 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(kinds('44301.dat')).toEqual(['finger']);
     expect(kinds('44302.dat')).toEqual(['fork']);
     expect(connectorsOf('44301.dat')[0]?.slice(1, 4)).toEqual(connectorsOf('44302.dat')[0]?.slice(1, 4));
-    // plain bricks and plates have none
-    for (const file of ['3001.dat', '3024.dat', '87087.dat']) expect(connectorsOf(file)).toEqual([]);
+    // plain bricks and plates have none; a brick's open side stud holds a bar, facing out of its side
+    for (const file of ['3001.dat', '3024.dat']) expect(connectorsOf(file)).toEqual([]);
+    expect(connectorsOf('87087.dat')).toEqual([[18, 0, 0.7, 0.6, 0, 0, 1, 0.2]]);
   });
 
   it('turns each click hinge about where its round surfaces are centred', () => {
@@ -176,7 +179,8 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(Math.max(...head.triangles.flatMap((t) => [t.a[1], t.b[1], t.c[1]]))).toBeCloseTo(joinsOf('3626b.dat')[0]?.at[1] ?? NaN, 1);
     // printed variants carry their part's joints: a printed torso, a head with the other hollow stud, a right leg
     expect(joinsOf('973p01.dat').map((j) => j.kind)).toEqual(['neck', 'waist', 'waist', 'shoulder', 'shoulder']);
-    expect(joinsOf('3626c.dat').map((j) => j.kind)).toEqual(['head']);
+    // (its hollow stud holds a bar)
+    expect(joinsOf('3626c.dat').map((j) => j.kind)).toEqual(['head', 'barhole']);
     expect(joinsOf('3816c.dat').map((j) => j.kind)).toEqual(['leg']);
   });
 
@@ -190,8 +194,32 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(kindsOf('61252.dat').map(([kind]) => kind)).toEqual(['clip']);
     expect(kindsOf('63868.dat').map(([kind]) => kind)).toEqual(['clip']);
     expect(kindsOf('3820.dat').map(([kind]) => kind)).toEqual(['hand', 'clip']);
+    // a round brick's open stud holds a bar; a plain brick's stud does not
+    expect(kindsOf('3062b.dat').map(([kind]) => kind)).toEqual(['barhole']);
+    expect(kindsOf('3005.dat')).toEqual([]);
     // the cylinders studs and minifigure torsos are drawn with are not bars
     for (const file of ['3001.dat', '3024.dat', '3023.dat', '973.dat', '3062b.dat']) expect(kindsOf(file).filter(([kind]) => kind === 'bar')).toEqual([]);
+  });
+
+  it('takes for open studs the stud primitives with a bar-sized hole right down their middle', () => {
+    const flattener = new Flattener(directorySource(LDRAW_DIR ?? ''));
+    /** How near its own axis a primitive is drawn: 4 LDU, a bar's radius, for an open stud; 0 for one with a top across it. */
+    const bore = (file: string): number => Math.min(...flattener.flatten(file).triangles.flatMap((t) => [t.a, t.b, t.c].map(([x, , z]) => Math.hypot(x, z))));
+    for (const name of ['stud2', 'stud2a', 'stud6', 'stud6a', 'stud17', 'stud17a']) {
+      expect(`${name} ${bore(`${name}.dat`).toFixed(2)}`).toBe(`${name} 4.00`);
+      const [hole] = finishConnectors(flattener.flatten(`${name}.dat`).connectors);
+      // from the stud's base to its top, 4 LDU up, its axis pointing out of it
+      expect([hole?.kind, hole?.at, hole?.axis, hole?.length]).toEqual(['barhole', [0, -2, 0], [0, -1, 0], 4]);
+    }
+    // a solid stud, and one with small holes, hold no bar
+    for (const name of ['stud', 'stud9', 'stud10', 'stud15']) {
+      expect(bore(`${name}.dat`)).toBeLessThan(3.9);
+      expect(finishConnectors(flattener.flatten(`${name}.dat`).connectors)).toEqual([]);
+    }
+    // an inverted dome's four open studs, drawn with stud6a for its round top, hold bars too
+    expect(finishConnectors(flattener.flatten('24947.dat').connectors).filter((c) => c.kind === 'barhole')).toHaveLength(4);
+    // a round 2 × 2 brick's studs are solid ones cut to its curve: none
+    expect(finishConnectors(flattener.flatten('3941.dat').connectors).filter((c) => c.kind === 'barhole')).toEqual([]);
   });
 
   it('holds bars on the line each clip primitive’s bar-sized round surfaces run round', () => {

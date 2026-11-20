@@ -144,6 +144,8 @@ test.describe('files', () => {
   });
 
   test('shares a model by link, which opens a copy in another browser', async ({ page, browser }) => {
+    // starts the editor twice, the second time in another browser
+    test.slow();
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await freshEditor(page);
     const centre = await viewportCentre(page);

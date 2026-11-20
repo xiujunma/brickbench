@@ -183,6 +183,46 @@ describe('bars and clips', () => {
     expect(brickFloor(bar, lookup)).toBeCloseTo(0.25, 9);
   });
 
+  it('stands a bar in an open stud, down to the stud’s base', () => {
+    const round = makeBrick({ id: 'round', partId: 'round-brick' });
+    const bar = plug(round, 'bar', { x: 0.55, y: 1.4, z: 0.5 }, UP);
+    if (!bar) throw new Error('no bar');
+    // upright, from the stud's base, 1.2 up, three studs on up
+    const [standing] = brickConnectors(bar, lookup);
+    expect(Math.abs(standing?.axis.y ?? 0)).toBeCloseTo(1, 9);
+    expect((standing?.at.y ?? 0) - (standing?.length ?? 0) / 2).toBeCloseTo(1.2, 9);
+    expect(pluggedInto(bar, round)).toBe(true);
+  });
+
+  it('leaves a part that only has a bar on it, and a part with an open stud at a bar, to stack as ever', () => {
+    const round = makeBrick({ id: 'round', partId: 'round-brick' });
+    // a plate with a handle is no bar: at the round brick's stud it stacks
+    expect(plug(round, 'handle-plate', { x: 0.55, y: 1.4, z: 0.5 }, UP)).toBeNull();
+    // though its handle still goes into a clip
+    const clip = makeBrick({ id: 'plate', partId: 'clip-plate' });
+    expect(plug(clip, 'handle-plate', { x: 0.55, y: 0.35, z: 2 }, { x: 0, y: 0, z: 1 })).not.toBeNull();
+    // an open stud is somewhere to put a bar, not a way onto one
+    const upright = makeBrick({ id: 'bar', partId: 'bar' });
+    expect(plug(upright, 'round-brick', { x: 0.8, y: 2.1, z: 0.5 }, { x: 1, y: 0, z: 0 })).toBeNull();
+  });
+
+  it('stands a part in an open stud only by the free bottom end of its bar', () => {
+    const round = makeBrick({ id: 'round', partId: 'round-brick' });
+    const top = { x: 0.55, y: 1.4, z: 0.5 };
+    // a sword goes in hilt first, blade up
+    const sword = plug(round, 'sword', top, UP);
+    if (!sword?.m) throw new Error('no sword');
+    expect(sword.m[4]).toBeCloseTo(1, 9);
+    expect(box(sword).y[0]).toBeCloseTo(1.2, 9);
+    // T can't turn it over there: an open stud is open only at its top
+    expect(plug(round, 'sword', top, UP, { spin: 0, flipped: true })?.m?.[4]).toBeCloseTo(1, 9);
+    // an antenna's mast is free only at its top: it stacks by its base, not upside down in the stud
+    expect(plug(round, 'antenna', top, UP)).toBeNull();
+    // under a stud facing down it still goes in hilt first, and hangs blade down
+    const hanging = { ...round, id: 'hanging', y: 12, r: 4 };
+    expect(plug(hanging, 'sword', { x: 0.5, y: 4.7, z: 0.5 }, { x: 0, y: -1, z: 0 })?.m?.[4]).toBeCloseTo(-1, 9);
+  });
+
   it('slides a clip along a bar, half a stud at a time', () => {
     const upright = makeBrick({ id: 'bar', partId: 'bar' });
     const clip = plug(upright, 'clip-plate', { x: 0.8, y: 2.1, z: 0.5 }, { x: 1, y: 0, z: 0 });

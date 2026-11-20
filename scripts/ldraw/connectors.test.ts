@@ -177,5 +177,8 @@ describe('bars and clips', () => {
     expect(connectorPrimitive('clip1.dat')?.kind).toBe('clip');
     expect(connectorPrimitive('phandle1.dat')?.kind).toBe('bar');
     expect(connectorPrimitive('clip4.dat')).toBeUndefined();
+    // an open stud holds a bar, whichever part it is shaped for and with its logo or without; a solid one, or one with small holes, does not
+    for (const name of ['stud2.dat', 'stud2a.dat', 'stud6.dat', 'stud6a.dat', 'stud17a.dat', '8/stud2-logo4.dat']) expect(connectorPrimitive(name)?.kind).toBe('barhole');
+    for (const name of ['stud.dat', 'stud9.dat', 'stud2s.dat', 'studp01.dat', 'stud3.dat']) expect(connectorPrimitive(name)).toBeUndefined();
   });
 });
