@@ -1,7 +1,18 @@
 import { z } from 'zod';
 import { FACINGS } from '../orientation';
-import type { CellBox, PartDef } from '../parts/types';
-import { MAX_ALIASES, MAX_SIDE_STUDS, MAX_SOLIDS, READABLE_INDEX_VERSIONS, type LDrawIndex, type LDrawIndexEntry, type SolidBox } from './format';
+import type { CellBox, Connector, PartDef } from '../parts/types';
+import {
+  CONNECTOR_KINDS,
+  MAX_ALIASES,
+  MAX_CONNECTORS,
+  MAX_SIDE_STUDS,
+  MAX_SOLIDS,
+  READABLE_INDEX_VERSIONS,
+  type ConnectorEntry,
+  type LDrawIndex,
+  type LDrawIndexEntry,
+  type SolidBox,
+} from './format';
 
 /** Prefix that marks library parts in model files, e.g. "ldraw:3001". */
 export const LDRAW_PREFIX = 'ldraw:';
@@ -17,6 +28,12 @@ const studOffset = z.union([z.literal(0), z.literal(0.5)]);
 function fitsPart([x0, y0, z0, x1, y1, z1]: SolidBox, { w, d, h }: { readonly w: number; readonly d: number; readonly h: number }): boolean {
   return x0 < x1 && x1 <= w && y0 < y1 && y1 <= h && z0 < z1 && z1 <= d;
 }
+
+const finite = z.number().finite();
+/** A connection: its kind, middle, unit axis (to within rounding) and length (see ConnectorEntry). */
+const connector = z
+  .tuple([z.number().int().min(0).max(CONNECTOR_KINDS.length - 1), finite, finite, finite, finite, finite, finite, finite.positive().max(1000)])
+  .refine(([, , , , ax, ay, az]) => Math.abs(Math.hypot(ax, ay, az) - 1) < 0.01, { message: 'a connection runs along no axis' });
 
 const entrySchema = z
   .object({
@@ -38,6 +55,7 @@ const entrySchema = z
       .array(z.tuple([z.number().finite(), z.number().finite(), z.number().finite(), z.number().int().min(1).max(FACINGS.length - 1)]))
       .max(MAX_SIDE_STUDS)
       .optional(),
+    connectors: z.array(connector).max(MAX_CONNECTORS).optional(),
   })
   .refine((entry) => (entry.solids ?? []).every((box) => fitsPart(box, entry)), {
     message: 'a part fills cells outside its own box',
@@ -64,6 +82,12 @@ export function isLDrawPartId(partId: string): boolean {
 
 const toCellBox = ([x0, y0, z0, x1, y1, z1]: SolidBox): CellBox => ({ x0, y0, z0, x1, y1, z1 });
 
+/** A connection as the editor uses it, its axis made exactly unit again after rounding. */
+function toConnector([kind, x, y, z, ax, ay, az, length]: ConnectorEntry): Connector {
+  const size = Math.hypot(ax, ay, az);
+  return { kind: CONNECTOR_KINDS[kind] ?? 'pinhole', at: { x, y, z }, axis: { x: ax / size, y: ay / size, z: az / size }, length };
+}
+
 /** A library part as the editor sees it: the cells it fills (its whole box unless the index says less), drawn from its own mesh. */
 export function toPartDef(entry: LDrawIndexEntry): PartDef {
   return {
@@ -81,5 +105,6 @@ export function toPartDef(entry: LDrawIndexEntry): PartDef {
     ...(entry.printed ? { printed: true } : {}),
     ...(entry.studOffset ? { studOffset: entry.studOffset } : {}),
     ...(entry.sideStuds ? { sideStuds: entry.sideStuds.map(([x, y, z, facing]) => ({ at: { x, y, z }, facing: FACINGS[facing] ?? '-y' })) } : {}),
+    ...(entry.connectors ? { connectors: entry.connectors.map(toConnector) } : {}),
   };
 }

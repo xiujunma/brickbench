@@ -11,9 +11,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import { decodePartMesh, encodePartMesh } from '../../src/core/ldraw/format.ts';
 import { readColourTable } from './colours.ts';
+import { HINGE_PRIMITIVES } from './connectors.ts';
 import { convertPart } from './convert.ts';
 import { Flattener } from './flatten.ts';
 import { directorySource } from './library.ts';
+import { parseLDraw, type Transform } from './parse.ts';
 
 const LDRAW_DIR = process.env['LDRAW_DIR'];
 
@@ -62,6 +64,80 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(sideOf('99207.dat')).toHaveLength(4);
     expect(sideOf('99207.dat').every(([, , z, facing]) => z === 0.7 && facing === 4)).toBe(true);
     for (const file of ['3001.dat', '3024.dat', '3794b.dat']) expect(sideOf(file)).toEqual([]);
+  });
+
+  it('finds the Technic and click-hinge connections of real parts', () => {
+    const connectorsOf = (file: string) => {
+      const result = convertPart(file, flattener);
+      if (!result.ok) throw new Error(`${file} was skipped: ${result.reason}`);
+      // [kind, x, y, z, ax, ay, az, length], to two places, with axes as they lie
+      return result.connectors.map((entry) => entry.map((v) => Math.round(v * 100) / 100 + 0));
+    };
+    const kinds = (file: string) => connectorsOf(file).map(([kind]) => ['pin', 'pinhole', 'axle', 'axlehole', 'finger', 'fork'][kind ?? 0]);
+    // a Technic brick's one hole runs through it from front to back, 0.7 studs (14 LDU) up from its bottom
+    expect(connectorsOf('3700.dat')).toEqual([[1, 0, 0.7, 0, 0, 0, 1, 1]]);
+    // a beam's three holes, upright, a stud apart
+    expect(
+      connectorsOf('32523.dat')
+        .map(([, x, , z, , ay]) => [x, z, Math.abs(ay ?? 0)])
+        .sort((a, b) => (a[1] ?? 0) - (b[1] ?? 0)),
+    ).toEqual([
+      [0, -1, 1],
+      [0, 0, 1],
+      [0, 1, 1],
+    ]);
+    // a pin's two ends, each a stud long, pointing away from its middle; a long pin's three sections
+    expect(connectorsOf('3673.dat').map(([kind, x, , , ax, , , length]) => [kind, x, ax, length])).toEqual([
+      [0, -0.5, -1, 1],
+      [0, 0.5, 1, 1],
+    ]);
+    expect(kinds('6558.dat')).toEqual(['pin', 'pin', 'pin']);
+    // an axle 4 is four studs long, near enough (its bevelled ends are drawn a little short)
+    expect(kinds('3705.dat')).toEqual(['axle']);
+    expect(connectorsOf('3705.dat')[0]?.[7]).toBeCloseTo(4, 1);
+    // a bush, a gear and a half bush take an axle; an axle pin is a pin at one end and an axle at the other
+    for (const file of ['3713.dat', '3647.dat', '4265c.dat']) expect(kinds(file)).toEqual(['axlehole']);
+    expect(kinds('43093.dat')).toEqual(['pin', 'axle']);
+    // click hinges: one finger on a plate, and the fork of two it fits
+    expect(kinds('44301.dat')).toEqual(['finger']);
+    expect(kinds('44302.dat')).toEqual(['fork']);
+    expect(connectorsOf('44301.dat')[0]?.slice(1, 4)).toEqual(connectorsOf('44302.dat')[0]?.slice(1, 4));
+    // plain bricks and plates have none
+    for (const file of ['3001.dat', '3024.dat', '87087.dat']) expect(connectorsOf(file)).toEqual([]);
+  });
+
+  it('turns each click hinge about where its round surfaces are centred', () => {
+    const circle = /^(?:48\\|8\\)?\d+-\d+(?:edge|cyli|cylc|cylo|disc|ndis|con\d+|ring\d*|chrd|tndis|sphe)\.dat$/i;
+    const compose = (p: Transform, c: Transform): Transform => {
+      const [a, b, cc, d, e, f, g, h, i] = p.m;
+      const [A, B, C, D, E, F, G, H, I] = c.m;
+      const [x, y, z] = c.t;
+      return {
+        t: [p.t[0] + a * x + b * y + cc * z, p.t[1] + d * x + e * y + f * z, p.t[2] + g * x + h * y + i * z],
+        m: [a * A + b * D + cc * G, a * B + b * E + cc * H, a * C + b * F + cc * I, d * A + e * D + f * G, d * B + e * E + f * H, d * C + e * F + f * I, g * A + h * D + i * G, g * B + h * E + i * H, g * C + h * F + i * I],
+      };
+    };
+    // the centres, as "y,z", of the circles drawn about the primitive's X axis
+    const centres = (file: string, at: Transform, found: Map<string, number>): void => {
+      for (const line of parseLDraw(readFileSync(join(LDRAW_DIR ?? '', 'p', file.replace(/\\/g, '/').toLowerCase()), 'utf8'))) {
+        if (line.kind !== 'ref') continue;
+        const placed = compose(at, line.matrix);
+        if (!circle.test(line.file)) {
+          centres(line.file, placed, found);
+          continue;
+        }
+        const [, b, , , e, , , h] = placed.m;
+        if (Math.abs(b) / Math.hypot(b, e, h) < 0.999) continue;
+        const key = `${Math.round(placed.t[1] * 100) / 100 + 0},${Math.round(placed.t[2] * 100) / 100 + 0}`;
+        found.set(key, (found.get(key) ?? 0) + 1);
+      }
+    };
+    for (const [name, primitive] of Object.entries(HINGE_PRIMITIVES)) {
+      const found = new Map<string, number>();
+      centres(`${name}.dat`, { m: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0] }, found);
+      const [most] = [...found.entries()].sort((p, q) => q[1] - p[1]);
+      expect(`${name} ${most?.[0]}`).toBe(`${name} ${primitive.through[1]},${primitive.through[2]}`);
+    }
   });
 
   it('says which way a jumper plate’s stud sits between cells, and that a plain plate’s do not', () => {

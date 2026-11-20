@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 import { DEFAULT_SCENE } from '../core/io/modelFile';
 import { allBricks, modelFromBricks } from '../core/model/model';
+import { brickConnectors } from '../core/model/connections';
+import { brickCellBox } from '../core/model/geometry';
+import { technicLookup } from '../core/model/technicTestParts';
 import { makeBrick } from '../core/model/testUtils';
+import type { Brick } from '../core/model/types';
+import { turnAbout } from '../core/orientation';
 import { getPart } from '../core/parts/catalog';
 import { createEditorStore } from './store';
 import type { EditorState } from './types';
@@ -107,6 +112,40 @@ describe('selection', () => {
     state().select(['a'], 'replace');
     expect(state().rotateSelection(1)).toBe(true);
     expect(bricks()[0]).toMatchObject({ r: 1, x: 5, z: 3 });
+  });
+
+  it('swings a selection hanging on a pin about the pin, 15° at a time', () => {
+    let n = 0;
+    const store = createEditorStore({ lookup: technicLookup, nextId: () => `id${n++}` });
+    const beam = makeBrick({ id: 'beam', partId: 'beam' });
+    const pin = { id: 'pin', partId: 'pin', colorId: 4, x: 0.1, y: 0, z: 1, r: 0, m: turnAbout({ x: 0, y: 0, z: 1 }, Math.PI / 2) };
+    const top = makeBrick({ id: 'top', partId: 'beam', y: 2.5, z: 1 });
+    store.getState().loadDocument({ name: 'technic', settings: DEFAULT_SCENE, model: modelFromBricks([beam, pin, top]) });
+    store.getState().select(['top'], 'replace');
+    expect(store.getState().rotateSelection(1)).toBe(true);
+    const swung = store.getState().history.present.bricks.get('top');
+    // turned 15° about the upright pin, at the beam's end hole: loose, and still on the pin
+    expect(swung?.m?.[0]).toBeCloseTo(Math.cos(Math.PI / 12), 9);
+    expect(swung?.y).toBeCloseTo(2.5, 9);
+    const [hole] = brickConnectors(swung as Brick, technicLookup);
+    expect(hole?.at.x).toBeCloseTo(0.5, 9);
+    expect(hole?.at.z).toBeCloseTo(1.5, 9);
+  });
+
+  it('won’t swing a part on a hinge down through the ground', () => {
+    let n = 0;
+    const store = createEditorStore({ lookup: technicLookup, nextId: () => `id${n++}` });
+    // a hinge brick on the ground, the other half of the hinge flat beside it
+    const fork = makeBrick({ id: 'fork', partId: 'fork' });
+    const finger = { id: 'finger', partId: 'finger', colorId: 4, x: 2, y: 0, z: 0, r: 2, m: turnAbout({ x: 0, y: 1, z: 0 }, Math.PI) };
+    store.getState().loadDocument({ name: 'hinge', settings: DEFAULT_SCENE, model: modelFromBricks([fork, finger]) });
+    store.getState().select(['finger'], 'replace');
+    const before = store.getState().history.present;
+    const down = [store.getState().rotateSelection(1), store.getState().rotateSelection(-1)].indexOf(false);
+    expect(down).not.toBe(-1);
+    // whichever way is down was refused, and left the model as it was
+    if (down === 0) expect(store.getState().history.present).toBe(before);
+    for (const brick of store.getState().history.present.bricks.values()) expect(brickCellBox(brick, technicLookup).y0).toBeGreaterThanOrEqual(0);
   });
 
   it('deletes the selection and keeps selections valid through undo and redo', () => {

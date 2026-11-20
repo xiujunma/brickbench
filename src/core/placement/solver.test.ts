@@ -4,7 +4,10 @@ import { PLATE_HEIGHT } from '../grid';
 import { makeBrick } from '../model/testUtils';
 import type { Hit } from './ray';
 import { materialize, payloadFromBricks, payloadFromPart, reuseIds, rotatePayload } from './payload';
-import { ON_STUDS, gridsOf, offsetPhase, phaseOf } from './grids';
+import { GROUND_GRIDS, ON_STUDS, gridsOf, offsetPhase, phaseOf } from './grids';
+import { placeLoose } from '../model/geometry';
+import { turnAbout } from '../orientation';
+import { LDU_PER_STUD_STEP, onLduLattice } from '../grid';
 import { solvePlacement } from './solver';
 
 function part(id: string) {
@@ -187,5 +190,27 @@ describe('half a stud over', () => {
     expect(offsetPhase(turned, ON_STUDS)).toEqual({ x: 0.5, z: 0 });
     const placed = materialize(turned, { x: 3.5, y: 0, z: 0 }, reuseIds(['p', 'q']));
     expect(placed.map((b) => b.x)).toEqual([4, 3.5]);
+  });
+});
+
+describe('grids beside loose parts', () => {
+  // a 2 × 4 brick swung 15° about the vertical, its corner off the LDraw-unit lattice
+  const swung = placeLoose(makeBrick({ id: 'swung' }), getPart, { x: 0, y: 0, z: 0 }, turnAbout({ x: 0, y: 1, z: 0 }, Math.PI / 12));
+
+  it('lends no grid of its own to what is built against it', () => {
+    expect(gridsOf(swung, getPart)).toEqual(GROUND_GRIDS);
+  });
+
+  it('anchors a payload on a brick on the lattice, so dragging a loose part with others keeps those on it', () => {
+    // the loose plate is the payload's lowest brick
+    const plate = placeLoose(makeBrick({ id: 'plate', partId: 'plate-2x4' }), getPart, { x: 100, y: 0, z: 60 }, turnAbout({ x: 0, y: 1, z: 0 }, Math.PI / 12));
+    const payload = payloadFromBricks([plate, makeBrick({ id: 'a', partId: 'brick-1x1', x: 6, y: 3, z: 1 })], getPart, { x: 6.5, y: 0.5, z: 1.5 });
+    const phase = { stack: offsetPhase(payload, GROUND_GRIDS.top), side: offsetPhase(payload, GROUND_GRIDS.body) };
+    const result = solvePlacement({ ...hit([10.3, 0, 10.6], [0, 1, 0]), kind: 'ground', brickId: null }, payload, alwaysFree, { phase });
+    const [, upright] = materialize(payload, result.offset, reuseIds(['plate', 'a']));
+    expect(onLduLattice(upright?.x ?? NaN, LDU_PER_STUD_STEP)).toBe(true);
+    expect(onLduLattice(upright?.z ?? NaN, LDU_PER_STUD_STEP)).toBe(true);
+    // all loose, any offset will do
+    expect(offsetPhase(payloadFromBricks([plate], getPart), ON_STUDS)).toEqual(ON_STUDS);
   });
 });

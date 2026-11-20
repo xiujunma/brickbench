@@ -6,7 +6,8 @@ import { createHistory, pushHistory, redo, squashSince, undo } from '../core/his
 import { clampRef } from '../core/instructions/plan';
 import { DEFAULT_STEP_OPTIONS } from '../core/instructions/steps';
 import { DEFAULT_SCENE } from '../core/io/modelFile';
-import { rotateGroup } from '../core/model/geometry';
+import { holdOf } from '../core/model/connections';
+import { rotateGroup, turnBricksAbout } from '../core/model/geometry';
 import type { IdFactory } from '../core/model/ids';
 import { addBricks, emptyModel, recolorBricks, removeBricks, replaceBricks } from '../core/model/model';
 import type { Model } from '../core/model/types';
@@ -16,6 +17,15 @@ import { materialize, payloadFromBricks, payloadFromPart, rotatePayload, type Pa
 import { bricksFit, selectedBricks } from './selectors';
 import { planContext, resolvedPlan, selectionOnShow } from './stepEditor';
 import type { DialogId, EditorData, EditorState, SelectMode, ToastTone } from './types';
+
+/** How far R swings parts on a hinge, pin or axle: 15°, so quarter turns and eighths come round. */
+const JOINT_STEP = Math.PI / 12;
+
+/** An axis pointing the way of its largest part, so R swings parts about an upright one the way it turns them on the grid. */
+function canonicalAxis(axis: Vec3): Vec3 {
+  const largest = [axis.x, axis.y, axis.z].reduce((a, b) => (Math.abs(b) > Math.abs(a) + 1e-9 ? b : a));
+  return largest < 0 ? { x: -axis.x, y: -axis.y, z: -axis.z } : axis;
+}
 
 export const DEFAULT_NAME = 'Untitled model';
 const MAX_NAME_LENGTH = 120;
@@ -224,6 +234,15 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
         const state = get();
         const selected = selectedBricks(state);
         if (selected.length === 0) return false;
+        // hanging on a hinge, pin or axle, the selection swings about it
+        const hold = holdOf(selected, model().bricks.values(), lookup);
+        if (hold.kind === 'joint') {
+          const swung = turnBricksAbout(selected, lookup, canonicalAxis(hold.axis), dir * JOINT_STEP, hold.pivot);
+          // not down through the ground, nor off the edge of the build area
+          if (!bricksFit(model(), swung, lookup, state.selection)) return false;
+          commit(replaceBricks(model(), swung));
+          return true;
+        }
         const turned = rotateGroup(selected, lookup, dir);
         if (!bricksFit(model(), turned, lookup, state.selection)) return false;
         commit(replaceBricks(model(), turned));

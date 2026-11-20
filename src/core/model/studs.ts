@@ -1,7 +1,7 @@
 import { LDU_PER_UNIT, type Vec3 } from '../grid';
-import { facingOf, facingVector, rotateVector, type Orientation } from '../orientation';
+import { facingOf, facingVector, rotateBy, type Orientation, type Turn } from '../orientation';
 import type { PartLookup } from '../parts/types';
-import { LDU_PER_PLATE, LDU_PER_STUD, brickOriginLdu, requirePart } from './geometry';
+import { LDU_PER_PLATE, LDU_PER_STUD, brickOriginLdu, brickTurn, requirePart } from './geometry';
 import type { SpatialIndex } from './spatial';
 import type { Brick } from './types';
 
@@ -16,6 +16,8 @@ export interface StudInstance {
   readonly z: number;
   /** The orientation of its brick: 0 to 3 stand up. */
   readonly r: Orientation;
+  /** Its brick's exact rotation, when the brick is loose (at an angle). */
+  readonly m?: Turn | undefined;
   readonly colorId: number;
 }
 
@@ -27,8 +29,9 @@ export function allStuds(bricks: Iterable<Brick>, lookup: PartLookup): StudInsta
   return visibleStuds(bricks, null, lookup);
 }
 
-/** The brick a stud is pressed into, if one is: whatever fills the space just out from its base. */
+/** The brick a stud is pressed into, if one is: whatever fills the space just out from its base. A loose part's studs stay in view. */
 export function studCover(stud: StudInstance, index: SpatialIndex): string | undefined {
+  if (stud.m) return undefined;
   const out = facingVector(facingOf(stud.r));
   return index.ownerAtPoint({ x: stud.x + out.x * INSIDE_STUD, y: stud.y + out.y * INSIDE_STUD, z: stud.z + out.z * INSIDE_STUD });
 }
@@ -41,7 +44,7 @@ function studsOf(brick: Brick, lookup: PartLookup): Vec3[] {
   const top = part.h * LDU_PER_PLATE;
   return part.studs.map(([lx, lz]) => {
     const local = { x: (lx + 0.5) * LDU_PER_STUD - (part.w * LDU_PER_STUD) / 2, y: top, z: (lz + 0.5) * LDU_PER_STUD - (part.d * LDU_PER_STUD) / 2 };
-    const turned = rotateVector(brick.r, local);
+    const turned = rotateBy(brickTurn(brick), local);
     return { x: (origin.x + turned.x) / LDU_PER_UNIT + 0, y: (origin.y + turned.y) / LDU_PER_UNIT + 0, z: (origin.z + turned.z) / LDU_PER_UNIT + 0 };
   });
 }
@@ -64,7 +67,7 @@ export function visibleStuds(
   for (const brick of bricks) {
     if (exclude.has(brick.id)) continue;
     for (const at of studsOf(brick, lookup)) {
-      const stud: StudInstance = { x: at.x, y: at.y, z: at.z, r: brick.r, colorId: brick.colorId };
+      const stud: StudInstance = { x: at.x, y: at.y, z: at.z, r: brick.r, ...(brick.m ? { m: brick.m } : {}), colorId: brick.colorId };
       const cover = index ? studCover(stud, index) : undefined;
       const hidden = cover !== undefined && !exclude.has(cover) && (isOpaqueOwner?.(cover) ?? true);
       if (!hidden) studs.push(stud);

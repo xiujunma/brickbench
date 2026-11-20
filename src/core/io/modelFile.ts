@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { DEFAULT_COLOR_ID, getColor } from '../colors';
 import { GRID_LIMIT, LDU_PER_PLATE_STEP, LDU_PER_STUD_STEP, MAX_LAYER, onLduLattice, snapToLdu } from '../grid';
-import { ORIENTATIONS } from '../orientation';
+import { isRotation, ORIENTATIONS, orthonormalize, turnOf } from '../orientation';
 import type { IdFactory } from '../model/ids';
 import { createOccupancy, isOutOfBounds } from '../model/spatial';
 import { allBricks, modelFromBricks } from '../model/model';
@@ -36,31 +36,32 @@ export const DEFAULT_SCENE: SceneSettings = { baseplateSize: 32, baseplateColor:
  * Studs along x and z, plates along y. Upright bricks mostly stand on whole
  * or half studs and whole plates; parts on their sides, and parts built on
  * them, may stand on any whole LDraw unit (a twentieth of a stud, an eighth
- * of a plate).
+ * of a plate); loose parts (at an angle, or plugged into others) anywhere.
  */
-const coord = z
-  .number()
-  .min(-GRID_LIMIT)
-  .max(GRID_LIMIT)
-  .refine((value) => onLduLattice(value, LDU_PER_STUD_STEP), 'not on a whole LDraw unit');
+const coord = z.number().min(-GRID_LIMIT).max(GRID_LIMIT);
+const onLattice = (value: number, ldu: number): boolean => onLduLattice(value, ldu);
+const LATTICE = 'not on a whole LDraw unit';
 
-const brickSchema = z.object({
-  part: z.string().min(1).max(64),
-  color: z.number().int().min(0).max(100_000),
-  x: coord,
-  y: z
-    .number()
-    .min(0)
-    .max(MAX_LAYER)
-    .refine((value) => onLduLattice(value, LDU_PER_PLATE_STEP), 'not on a whole LDraw unit'),
-  z: coord,
-  /** 0 to 3 upright, turned that many quarter turns; 4 to 23 on a side or upside down (see ../orientation). */
-  r: z
-    .number()
-    .int()
-    .min(0)
-    .max(ORIENTATIONS - 1),
-});
+const brickSchema = z
+  .object({
+    part: z.string().min(1).max(64),
+    color: z.number().int().min(0).max(100_000),
+    x: coord,
+    y: z.number().min(0).max(MAX_LAYER),
+    z: coord,
+    /** 0 to 3 upright, turned that many quarter turns; 4 to 23 on a side or upside down (see ../orientation). */
+    r: z
+      .number()
+      .int()
+      .min(0)
+      .max(ORIENTATIONS - 1),
+    /** A loose part's exact rotation, row by row (see Brick.m). */
+    m: z.array(z.number().finite()).length(9).refine((m) => isRotation(m, 1e-3), 'not a rotation').optional(),
+  })
+  // only loose parts stand off the LDraw unit lattice
+  .refine((b) => b.m !== undefined || onLattice(b.x, LDU_PER_STUD_STEP), { message: LATTICE, path: ['x'] })
+  .refine((b) => b.m !== undefined || onLattice(b.y, LDU_PER_PLATE_STEP), { message: LATTICE, path: ['y'] })
+  .refine((b) => b.m !== undefined || onLattice(b.z, LDU_PER_STUD_STEP), { message: LATTICE, path: ['z'] });
 
 const settingsSchema = z.object({
   baseplateSize: z.union(BASEPLATE_SIZES.map((size) => z.literal(size))),
@@ -88,6 +89,11 @@ export interface ParsedDocument {
   readonly skippedBricks: number;
 }
 
+/** A loose part's rotation entry, to the millionth: plenty, and tidy in a file. */
+function tidy(value: number): number {
+  return Math.round(value * 1e6) / 1e6 + 0;
+}
+
 export function serializeDocument(doc: ModelDocument): string {
   const bricks = allBricks(doc.model);
   const instructions = doc.model.plan ? planToRecord(doc.model.plan, bricks.map((b) => b.id)) : null;
@@ -96,7 +102,7 @@ export function serializeDocument(doc: ModelDocument): string {
     version: FILE_VERSION,
     name: doc.name,
     settings: { ...doc.settings },
-    bricks: bricks.map((b) => ({ part: b.partId, color: b.colorId, x: b.x, y: b.y, z: b.z, r: b.r })),
+    bricks: bricks.map((b) => ({ part: b.partId, color: b.colorId, x: b.x, y: b.y, z: b.z, r: b.r, ...(b.m ? { m: b.m.map(tidy) } : {}) })),
     ...(instructions ? { instructions } : {}),
   };
   return JSON.stringify(file);
@@ -133,11 +139,25 @@ export interface CollectedBricks {
   readonly rejected: readonly RejectedRecord[];
 }
 
+export interface CollectOptions {
+  /**
+   * What becomes of a brick that overlaps one already in: left out, as a
+   * model file's mistake; or let in loose, as parts fitting into each other
+   * in an opened LDraw model (a pin in its beam, a tyre on its wheel).
+   */
+  readonly overlapping: 'skip' | 'loose';
+}
+
 /**
  * Turns validated records into bricks, dropping what the editor could not
  * handle: unknown parts, bricks off the grid and bricks overlapping others.
  */
-export function collectBricks(records: readonly BrickRecord[], lookup: PartLookup, nextId: IdFactory): Result<CollectedBricks> {
+export function collectBricks(
+  records: readonly BrickRecord[],
+  lookup: PartLookup,
+  nextId: IdFactory,
+  { overlapping }: CollectOptions = { overlapping: 'skip' },
+): Result<CollectedBricks> {
   const unknownParts = new Set<string>();
   const skipped = { unknown: 0, outside: 0, overlapping: 0 };
   const rejected: RejectedRecord[] = [];
@@ -156,25 +176,31 @@ export function collectBricks(records: readonly BrickRecord[], lookup: PartLooku
       continue;
     }
     const knownColor = getColor(record.color) !== undefined;
+    const loose = record.m !== undefined;
+    // exactly on the lattice, without the floating-point noise a file may carry; loose parts where they are
     const candidate: Brick = {
       id: '',
       partId: record.part,
       colorId: knownColor ? record.color : DEFAULT_COLOR_ID,
-      // exactly on the lattice, without the floating-point noise a file may carry
-      x: snapToLdu(record.x, LDU_PER_STUD_STEP),
-      y: snapToLdu(record.y, LDU_PER_PLATE_STEP),
-      z: snapToLdu(record.z, LDU_PER_STUD_STEP),
+      x: loose ? record.x : snapToLdu(record.x, LDU_PER_STUD_STEP),
+      y: loose ? record.y : snapToLdu(record.y, LDU_PER_PLATE_STEP),
+      z: loose ? record.z : snapToLdu(record.z, LDU_PER_STUD_STEP),
       r: record.r,
+      ...(record.m ? { m: orthonormalize(record.m) } : {}),
     };
     if (isOutOfBounds(candidate, lookup)) {
       skipped.outside += 1;
       rejected.push({ record, reason: 'outside' });
       continue;
     }
+    let brick = candidate;
     if (!occupancy.tryAdd(candidate)) {
-      skipped.overlapping += 1;
-      rejected.push({ record, reason: 'overlapping' });
-      continue;
+      if (overlapping === 'skip') {
+        skipped.overlapping += 1;
+        rejected.push({ record, reason: 'overlapping' });
+        continue;
+      }
+      brick = { ...candidate, m: turnOf(candidate.r) };
     }
     if (occupancy.cells > MAX_CELLS) {
       return { ok: false, error: `This model is too big to open: it fills more than ${MAX_CELLS.toLocaleString('en')} grid cells.` };
@@ -182,7 +208,7 @@ export function collectBricks(records: readonly BrickRecord[], lookup: PartLooku
     if (!knownColor) recolored += 1;
     const id = nextId();
     ids[ids.length - 1] = id;
-    bricks.push({ ...candidate, id });
+    bricks.push({ ...brick, id });
   }
 
   const warnings: string[] = [];

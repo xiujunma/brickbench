@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { getPart } from '../parts/catalog';
-import { PLATE_HEIGHT } from '../grid';
-import { facingOf } from '../orientation';
+import { LDU_PER_STUD_STEP, PLATE_HEIGHT, onLduLattice } from '../grid';
+import { facingOf, orientationFacing, turnAbout } from '../orientation';
 import type { PartDef } from '../parts/types';
 import {
   WHOLE_CELL,
@@ -12,8 +12,11 @@ import {
   brickOrigin,
   brickWorldBoxes,
   groupCellBox,
+  isLoose,
   isOnGrid,
+  placeLoose,
   rotateGroup,
+  turnBricksAbout,
   turnedSize,
 } from './geometry';
 import { makeBrick } from './testUtils';
@@ -181,5 +184,74 @@ describe('bricks on their sides', () => {
     for (let i = 0; i < 4; i++) turned = rotateGroup(turned, lookup, 1);
     expect(turned).toEqual(group);
     expect(rotateGroup(rotateGroup(group, lookup, -1), lookup, 1)).toEqual(group);
+  });
+});
+
+describe('loose parts', () => {
+  const eighth = [Math.SQRT1_2, 0, Math.SQRT1_2, 0, 1, 0, -Math.SQRT1_2, 0, Math.SQRT1_2] as const;
+
+  it('fill the box around them once turned, and stand exactly where they are', () => {
+    const loose = makeBrick({ partId: 'plate-1x1', x: 0.3, y: 0.25, z: 0.1, m: eighth });
+    expect(isLoose(loose)).toBe(true);
+    expect(isOnGrid(loose)).toBe(false);
+    const box = brickCellBox(loose, lookup);
+    // a 1 × 1 cell turned an eighth spans √2 studs
+    expect(box.x1 - box.x0).toBeCloseTo(Math.SQRT2);
+    expect([box.x0, box.y0, box.z0]).toEqual([0.3, 0.25, 0.1]);
+    expect(brickOrigin(loose, lookup).x).toBeCloseTo(0.3 + Math.SQRT1_2);
+  });
+
+  it('turn with their group about the vertical, keeping their angle', () => {
+    const group = [makeBrick({ id: 'a', partId: 'brick-2x2' }), makeBrick({ id: 'b', partId: 'plate-1x1', x: 3, m: eighth })];
+    let turned: readonly Brick[] = group;
+    for (let i = 0; i < 4; i++) turned = rotateGroup(turned, lookup, 1);
+    turned[1]?.m?.forEach((v, i) => expect(v).toBeCloseTo(eighth[i] ?? 0, 12));
+    expect(turned[1]?.x).toBeCloseTo(3, 9);
+  });
+});
+
+describe('swinging parts about a line', () => {
+  it('turns them about it, loose, and brings them round again', () => {
+    const plate = makeBrick({ partId: 'plate-1x2', x: 2, y: 3 });
+    const axis = { x: 0, y: 0, z: 1 };
+    // about a line along Z through the plate's left end, at its bottom
+    const pivot = { x: 2, y: 3 * PLATE_HEIGHT, z: 0.5 };
+    const [up] = turnBricksAbout([plate], lookup, axis, Math.PI / 2, pivot);
+    if (!up) throw new Error('turned');
+    expect(isLoose(up)).toBe(true);
+    // stood up on that end, a plate thick to the left of the line, two studs high
+    expect(up.x).toBeCloseTo(2 - 0.4, 9);
+    expect(up.y).toBeCloseTo(3, 9);
+    expect(brickCellBox(up, lookup).y1 * PLATE_HEIGHT).toBeCloseTo(3 * PLATE_HEIGHT + 2, 9);
+    // 24 steps of 15° bring it back
+    let turned: Brick = plate;
+    for (let i = 0; i < 24; i++) turned = turnBricksAbout([turned], lookup, axis, Math.PI / 12, pivot)[0] ?? turned;
+    expect(turned.x).toBeCloseTo(2, 9);
+    expect(turned.y).toBeCloseTo(3, 9);
+    expect(turned.r).toBe(0);
+    turned.m?.forEach((v, i) => expect(v).toBeCloseTo([1, 0, 0, 0, 1, 0, 0, 0, 1][i] ?? 0, 9));
+  });
+
+  it('places a loose part by where its origin goes, its orientation the nearest square one', () => {
+    const quarter = [0, 0, 1, 0, 1, 0, -1, 0, 0] as const;
+    const placed = placeLoose(makeBrick({ partId: 'brick-2x4' }), lookup, { x: 0, y: 0, z: 0 }, quarter);
+    // turned a quarter, its 4-stud side runs along Z, centred on the origin
+    expect([placed.x, placed.y, placed.z]).toEqual([-1, 0, -2]);
+    expect(placed.r).toBe(1);
+  });
+});
+
+describe('turning a group of loose and square parts', () => {
+  it('keeps the square parts on the LDraw-unit lattice, and brings them back turned back', () => {
+    const side = makeBrick({ id: 'side', partId: 'brick-2x4', x: 3, y: 0, z: 2, r: orientationFacing('+x', 0) });
+    const tilt = placeLoose(makeBrick({ id: 'tilt', partId: 'plate-1x2' }), lookup, { x: 100, y: 8, z: 60 }, turnAbout({ x: 0, y: 1, z: 0 }, Math.PI / 12));
+    for (const dir of [1, -1] as const) {
+      const [turned] = rotateGroup([side, tilt], lookup, dir);
+      expect(onLduLattice(turned?.x ?? NaN, LDU_PER_STUD_STEP)).toBe(true);
+      expect(onLduLattice(turned?.z ?? NaN, LDU_PER_STUD_STEP)).toBe(true);
+      const [back] = rotateGroup(rotateGroup([side, tilt], lookup, dir), lookup, dir === 1 ? -1 : 1);
+      expect(back?.x).toBeCloseTo(side.x, 9);
+      expect(back?.z).toBeCloseTo(side.z, 9);
+    }
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
-import { brickCellBox } from '../model/geometry';
+import { brickCellBox, turnBricksAbout } from '../model/geometry';
 import { makeBrick } from '../model/testUtils';
-import { facingOf, quarterTurn } from '../orientation';
+import { facingOf, quarterTurn, turnAbout } from '../orientation';
 import { getPart } from '../parts/catalog';
 import type { PartDef, PartLookup } from '../parts/types';
 import { attachToStuds, brickStudPoints, turnPayload, turnTowards } from './attach';
@@ -117,5 +117,34 @@ describe('turnPayload', () => {
     ]);
     expect(payload.size).toEqual({ w: 1, h: 2.5, d: 1.6 });
     expect(socket).toEqual({ x: 10, y: 10, z: 0 });
+  });
+});
+
+describe('building on a loose part', () => {
+  // a 1 × 2 plate stood on its end about a line along Z, its top facing -X
+  const [standing] = turnBricksAbout([makeBrick({ id: 'base', partId: 'plate-1x2', x: 2, y: 3 })], lookup, { x: 0, y: 0, z: 1 }, Math.PI / 2, { x: 2, y: 1.2, z: 0.5 });
+
+  it('puts the part on its stud as on the part standing square, turned with it, loose', () => {
+    if (!standing) throw new Error('standing');
+    const plate = payloadFromPart(lookup('plate-1x1') as PartDef, 4, 0);
+    // at its upper stud, on the face its top now is
+    const on = attachToStuds(hit({ x: 1.6, y: 2.65, z: 0.45 }, { x: -1, y: 0, z: 0 }), standing, plate, lookup);
+    const [brick] = on?.payload.bricks ?? [];
+    if (!on || !brick?.m) throw new Error('not on it');
+    turnAbout({ x: 0, y: 0, z: 1 }, Math.PI / 2).forEach((v, i) => expect(brick.m?.[i]).toBeCloseTo(v, 9));
+    // standing out a plate from the stud, a stud wide either side of it
+    expect(on.offset.x).toBeCloseTo(1.2, 9);
+    expect(on.offset.y).toBeCloseTo(5.5, 9);
+    expect(on.offset.z).toBeCloseTo(0, 9);
+  });
+
+  it('keeps the exact turns of loose parts in payloads, and turns them with the payload', () => {
+    if (!standing) throw new Error('standing');
+    const payload = payloadFromBricks([standing], lookup);
+    expect(payload.bricks[0]?.m).toEqual(standing.m);
+    const { payload: over } = turnPayload(payload, quarterTurn('y', 1), { x: 0, y: 0, z: 0 }, lookup);
+    // turned a quarter about the vertical too, the plate's length still stands upright
+    expect(over.bricks[0]?.m?.[4]).toBeCloseTo(0, 9);
+    expect(over.size.h).toBeCloseTo(5, 9);
   });
 });

@@ -8,6 +8,7 @@ The grid
 - x runs left to right and z from back to front, in studs. y is height, in plates: a brick is 3 plates tall, a plate or tile 1.
 - A part's position (x, y, z) is the corner of its footprint with the smallest x and z, at its bottom layer. A part w studs wide (x) and d deep (z) fills x to x+w-1 and z to z+d-1 at rotation 0; rotation 1 or 3 (quarter turns) swaps w and d.
 - In get_model, r from 4 to 23 marks a part someone placed on its side or upside down, which may sit between studs and plates; you place upright parts (rotation 0 to 3), and can build on and around those.
+- A brick with loose: true is at an angle or plugged into another part (a Technic pin in its hole, a part on a swung hinge): it stands exactly where x, y and z say, r is only the nearest square turn, and it takes no part in collisions.
 - x and z are whole studs, or half a stud over (2.5) for a part on the stud of a jumper plate, whose one stud stands between two cells; y is always whole.
 - y = 0 stands on the ground or baseplate. To stack, add the height of what is below: on a brick at y 0 the next layer is y 3; on a plate at y 0 it is y 1.
 - Whole parts must fit within x and z from -${GRID_LIMIT} to ${GRID_LIMIT - 1} and y from 0 to ${MAX_LAYER - 1}. Parts never overlap: one that would is refused, with the brick in the way.

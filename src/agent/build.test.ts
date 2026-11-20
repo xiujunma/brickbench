@@ -290,6 +290,13 @@ describe('describing the model', () => {
     expect(limited.truncated).toBe(true);
     expect(describeModel(emptyModel(), 'Empty', input('get_model', {}), getPart).bounds).toBeNull();
   });
+
+  it('marks loose parts, at an angle or plugged in', () => {
+    const tilted = { ...brick('t', 'plate-1x1', 3, 0, 3), m: [1, 0, 0, 0, Math.SQRT1_2, -Math.SQRT1_2, 0, Math.SQRT1_2, Math.SQRT1_2] as const };
+    const [plain, loose] = describeModel(modelOf(brick('p', 'plate-1x1', 0, 0, 0), tilted), 'Tilt', input('get_model', {}), getPart).bricks;
+    expect(plain).not.toHaveProperty('loose');
+    expect(loose).toMatchObject({ id: 't', loose: true });
+  });
 });
 
 describe('building half a stud over', () => {

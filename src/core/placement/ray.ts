@@ -1,5 +1,6 @@
 import { PLATE_HEIGHT, type Vec3 } from '../grid';
-import { brickWorldBoxes, type Aabb } from '../model/geometry';
+import { brickOrigin, brickTurn, brickWorldBoxes, isLoose, partLocalBoxes, requirePart, type Aabb } from '../model/geometry';
+import { rotateBy, transposeTurn } from '../orientation';
 import type { Brick } from '../model/types';
 import type { PartLookup } from '../parts/types';
 
@@ -92,6 +93,31 @@ function insideBounds(point: Vec3, bounds: GroundBounds | null | undefined): boo
   return point.x >= bounds.minX && point.x <= bounds.maxX && point.z >= bounds.minZ && point.z <= bounds.maxZ;
 }
 
+/** The axis a vector points most along, as a unit vector: a turned face's normal, squared up for placing against. */
+function nearestAxis(v: Vec3): Vec3 {
+  const [ax, ay, az] = [Math.abs(v.x), Math.abs(v.y), Math.abs(v.z)];
+  if (ay >= ax && ay >= az) return { x: 0, y: Math.sign(v.y) || 1, z: 0 };
+  if (ax >= az) return { x: Math.sign(v.x) || 1, y: 0, z: 0 };
+  return { x: 0, y: 0, z: Math.sign(v.z) || 1 };
+}
+
+/** Where a ray first meets a loose part, by the boxes it fills turned with it: the distance, and the face's normal, squared up. */
+function rayLoose(ray: Ray, brick: Brick, lookup: PartLookup): { t: number; normal: Vec3 } | null {
+  const turn = brickTurn(brick);
+  const back = transposeTurn(turn);
+  const origin = brickOrigin(brick, lookup);
+  const local: Ray = {
+    origin: rotateBy(back, { x: ray.origin.x - origin.x, y: ray.origin.y - origin.y, z: ray.origin.z - origin.z }),
+    dir: rotateBy(back, ray.dir),
+  };
+  let best: { t: number; normal: Vec3 } | null = null;
+  for (const box of partLocalBoxes(requirePart(lookup, brick.partId))) {
+    const hit = rayAabb(local, box);
+    if (hit && (best === null || hit.t < best.t)) best = { t: hit.t, normal: nearestAxis(rotateBy(turn, hit.normal)) };
+  }
+  return best;
+}
+
 /** Finds the closest brick face (or the ground) under a ray. */
 export function pickBricks(
   ray: Ray,
@@ -102,6 +128,14 @@ export function pickBricks(
   let best: Hit | null = null;
   for (const brick of bricks) {
     if (options.exclude?.has(brick.id)) continue;
+    if (isLoose(brick)) {
+      const hit = rayLoose(ray, brick, lookup);
+      if (hit && (best === null || hit.t < best.t)) {
+        const point = pointAt(ray, hit.t);
+        best = { kind: 'brick', brickId: brick.id, t: hit.t, normal: hit.normal, point, base: Math.round(point.y / PLATE_HEIGHT) };
+      }
+      continue;
+    }
     for (const box of brickWorldBoxes(brick, lookup)) {
       const hit = rayAabb(ray, box);
       if (hit && (best === null || hit.t < best.t)) {

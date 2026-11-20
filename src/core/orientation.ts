@@ -40,6 +40,11 @@ const FACING_TURNS: Readonly<Record<Facing, Turn>> = {
   '-z': [1, 0, 0, 0, 0, 1, 0, -1, 0],
 };
 
+/** `a` after `b`: the rotation that turns by `b`, then by `a`. */
+export function multiplyTurns(a: Turn, b: Turn): Turn {
+  return multiply(a, b);
+}
+
 function multiply(a: Turn, b: Turn): Turn {
   const at = (m: Turn, row: number, col: number): number => m[row * 3 + col] ?? 0;
   const entry = (row: number, col: number): number => at(a, row, 0) * at(b, 0, col) + at(a, row, 1) * at(b, 1, col) + at(a, row, 2) * at(b, 2, col);
@@ -89,8 +94,69 @@ export function orientationFacing(facing: Facing, spin = 0): Orientation {
 
 /** Applies an orientation's rotation to a vector. */
 export function rotateVector(orientation: Orientation, v: Vec3): Vec3 {
-  const [a, b, c, d, e, f, g, h, i] = turnOf(orientation);
+  return rotateBy(turnOf(orientation), v);
+}
+
+/** Applies a rotation, given row by row, to a vector. */
+export function rotateBy([a, b, c, d, e, f, g, h, i]: Turn, v: Vec3): Vec3 {
   return { x: a * v.x + b * v.y + c * v.z, y: d * v.x + e * v.y + f * v.z, z: g * v.x + h * v.y + i * v.z };
+}
+
+/** The rotation that undoes another: its transpose. */
+export function transposeTurn([a, b, c, d, e, f, g, h, i]: Turn): Turn {
+  return [a, d, g, b, e, h, c, f, i];
+}
+
+/** Whether nine numbers, row by row, make a rotation: rows of length 1, at right angles, not mirrored. */
+export function isRotation(m: ArrayLike<number>, tolerance = 1e-3): boolean {
+  if (m.length !== 9) return false;
+  const row = (r: number): Vec3 => ({ x: m[r * 3] ?? NaN, y: m[r * 3 + 1] ?? NaN, z: m[r * 3 + 2] ?? NaN });
+  const dot = (p: Vec3, q: Vec3): number => p.x * q.x + p.y * q.y + p.z * q.z;
+  const [x, y, z] = [row(0), row(1), row(2)];
+  const lengths = [dot(x, x), dot(y, y), dot(z, z)].every((l) => Math.abs(l - 1) <= tolerance);
+  const square = [dot(x, y), dot(y, z), dot(x, z)].every((d) => Math.abs(d) <= tolerance);
+  const cross = { x: x.y * y.z - x.z * y.y, y: x.z * y.x - x.x * y.z, z: x.x * y.y - x.y * y.x };
+  return lengths && square && dot(cross, z) > 0;
+}
+
+/** A rotation squared up again (Gram-Schmidt on its rows), so rounding in files and repeated turns does not build up. */
+export function orthonormalize(m: ArrayLike<number>): Turn {
+  const unit = (v: Vec3): Vec3 => {
+    const length = Math.hypot(v.x, v.y, v.z) || 1;
+    return { x: v.x / length, y: v.y / length, z: v.z / length };
+  };
+  const x = unit({ x: m[0] ?? 1, y: m[1] ?? 0, z: m[2] ?? 0 });
+  const raw = { x: m[3] ?? 0, y: m[4] ?? 1, z: m[5] ?? 0 };
+  const along = x.x * raw.x + x.y * raw.y + x.z * raw.z;
+  const y = unit({ x: raw.x - along * x.x, y: raw.y - along * x.y, z: raw.z - along * x.z });
+  const z = { x: x.y * y.z - x.z * y.y, y: x.z * y.x - x.x * y.z, z: x.x * y.y - x.y * y.x };
+  // + 0 turns -0 into 0
+  return [x.x + 0, x.y + 0, x.z + 0, y.x + 0, y.y + 0, y.z + 0, z.x + 0, z.y + 0, z.z + 0];
+}
+
+/** A turn by `angle` radians about a unit axis, counter-clockwise looking down the axis from its tip. */
+export function turnAbout(axis: Vec3, angle: number): Turn {
+  const { x, y, z } = axis;
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const t = 1 - c;
+  return [t * x * x + c, t * x * y - s * z, t * x * z + s * y, t * x * y + s * z, t * y * y + c, t * y * z - s * x, t * x * z - s * y, t * y * z + s * x, t * z * z + c];
+}
+
+/** The one of the 24 orientations closest to a rotation: the one that turns least from it. */
+export function nearestOrientation(turn: Turn): Orientation {
+  let best: Orientation = 0;
+  let bestTrace = -Infinity;
+  for (const [orientation, candidate] of TURNS.entries()) {
+    // trace(candidateᵀ · turn): the larger, the smaller the turn between them
+    let trace = 0;
+    for (let i = 0; i < 9; i++) trace += (candidate[i] ?? 0) * (turn[i] ?? 0);
+    if (trace > bestTrace + 1e-9) {
+      bestTrace = trace;
+      best = orientation;
+    }
+  }
+  return best;
 }
 
 /** `outer` after `inner`: the orientation of a part turned by `inner`, then by `outer`. */

@@ -36,6 +36,9 @@ describe('converting a part', () => {
     'stud.dat': STUD,
     'twotone.dat': `${BRICK}\n3 4 0 0 0 1 0 0 0 0 1`,
     'empty.dat': '0 Nothing to see\n0 BFC CERTIFY CCW',
+    // a hole from LDraw's -z face to its +z face, 10 LDU under the top: a peg-hole end at each face
+    'holed.dat': `${BRICK}\n1 16 0 10 -8 1 0 0 0 0 1 0 -1 0 peghole.dat\n1 16 0 10 8 1 0 0 0 0 -1 0 1 0 peghole.dat`,
+    'peghole.dat': ['0 Peg Hole End', '0 BFC CERTIFY CCW', '3 16 -8 0 0 8 0 0 0 2 8'].join('\n'),
   });
   const flattener = new Flattener(source);
 
@@ -46,6 +49,15 @@ describe('converting a part', () => {
     expect(result.sideStuds).toEqual([[0, 0.7, 0.5, 4]]);
     const plain = convertPart('brick.dat', flattener);
     expect(plain.ok && plain.sideStuds).toEqual([]);
+  });
+
+  it('keeps its Technic holes, where they run on the placed part', () => {
+    const result = convertPart('holed.dat', flattener);
+    if (!result.ok) throw new Error(result.reason);
+    // [pin hole, its middle 0.7 studs up, running front to back, a stud long]
+    expect(result.connectors.map((entry) => entry.map((v) => Math.round(v * 1000) / 1000 + 0))).toEqual([[1, 0, 0.7, 0, 0, 0, 1, 1]]);
+    const plain = convertPart('brick.dat', flattener);
+    expect(plain.ok && plain.connectors).toEqual([]);
   });
 
   it('turns LDraw coordinates into studs with y up', () => {

@@ -1,4 +1,5 @@
 import type { Vec3 } from '../grid';
+import type { CONNECTOR_KINDS } from '../ldraw/format';
 import type { Facing } from '../orientation';
 /** Built-in categories, plus 'library' for parts from the shipped LDraw library. */
 export type PartCategory = 'bricks' | 'plates' | 'tiles' | 'slopes' | 'round' | 'arches' | 'library';
@@ -63,6 +64,21 @@ export interface PartDef {
   readonly studOffset?: readonly [number, number] | undefined;
   /** Studs facing sideways or down, on which parts build facing out (library parts that have them). */
   readonly sideStuds?: readonly SideStud[] | undefined;
+  /** Technic pins, holes and axles, and click hinges, where parts plug in (library parts that have them). */
+  readonly connectors?: readonly Connector[] | undefined;
+}
+
+export type ConnectorKind = (typeof CONNECTOR_KINDS)[number];
+
+/** A Technic or click-hinge connection of a part, before the part turns. */
+export interface Connector {
+  readonly kind: ConnectorKind;
+  /** Its middle, in world units from the part's origin. */
+  readonly at: Vec3;
+  /** The unit axis it runs along: a pin's from its base to its tip. */
+  readonly axis: Vec3;
+  /** Its length along the axis, in world units. */
+  readonly length: number;
 }
 
 /** A stud on a part's side or underside: where its base sits, in world units from the part's origin, and which way it faces, both before the part turns. */

@@ -10,8 +10,8 @@ import {
 } from 'three';
 import type { ColorFinish } from '../core/colors';
 import type { Vec3 } from '../core/grid';
-import { brickOrigin } from '../core/model/geometry';
-import { turnOf, type Orientation } from '../core/orientation';
+import { brickOrigin, brickTurn } from '../core/model/geometry';
+import { turnOf, type Turn } from '../core/orientation';
 import type { StudInstance } from '../core/model/studs';
 import type { Brick } from '../core/model/types';
 import type { PartLookup } from '../core/parts/types';
@@ -29,15 +29,15 @@ import {
 
 const WHITE = new Color('#ffffff');
 
-/** World matrix for something built around `at`, turned to an orientation. */
-export function orientedMatrix(at: Vec3, orientation: Orientation, target = new Matrix4()): Matrix4 {
-  const [a, b, c, d, e, f, g, h, i] = turnOf(orientation);
+/** World matrix for something built around `at`, turned by a rotation. */
+export function orientedMatrix(at: Vec3, turn: Turn, target = new Matrix4()): Matrix4 {
+  const [a, b, c, d, e, f, g, h, i] = turn;
   return target.set(a, b, c, at.x, d, e, f, at.y, g, h, i, at.z, 0, 0, 0, 1);
 }
 
 /** World matrix for a brick mesh built around its bottom-centre. */
 export function brickMatrix(brick: Brick, lookup: PartLookup, target = new Matrix4()): Matrix4 {
-  return orientedMatrix(brickOrigin(brick, lookup), brick.r, target);
+  return orientedMatrix(brickOrigin(brick, lookup), brickTurn(brick), target);
 }
 
 function capacityFor(count: number): number {
@@ -143,7 +143,7 @@ export class BrickBatches {
     for (const [finish, list] of studsByFinish) {
       const mesh = this.ensure(this.studs, finish, list.length, this.geometries.stud(), finish as ColorFinish);
       list.forEach((stud, i) => {
-        mesh.setMatrixAt(i, orientedMatrix(stud, stud.r, this.scratch));
+        mesh.setMatrixAt(i, orientedMatrix(stud, stud.m ?? turnOf(stud.r), this.scratch));
         mesh.setColorAt(i, this.color(stud.colorId));
       });
       finishBatch(mesh, list.length);

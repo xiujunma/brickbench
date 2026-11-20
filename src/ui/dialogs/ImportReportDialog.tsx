@@ -14,9 +14,9 @@ const LEFT_OUT: Readonly<Record<LeftOutReason, { readonly title: string; readonl
     why: 'The model takes these from other files. Open the .mpd or Studio file that holds the whole model.',
   },
   shapes: { title: 'Drawing shapes', why: 'Shapes the model draws itself, such as strings and wires. They aren’t LEGO parts.' },
-  turned: {
-    title: 'At an angle',
-    why: 'BrickBench builds parts square to the grid, upright, on their sides or upside down, so parts turned at an angle, as on hinges, stay out.',
+  mirrored: {
+    title: 'Mirrored',
+    why: 'These are mirror images of parts: LDraw files can hold them, but no real part is made that way.',
   },
   overlapping: { title: 'Overlapping', why: 'On the grid these would overlap parts already in, which BrickBench doesn’t allow.' },
   outside: { title: 'Outside the building area', why: 'These lie beyond the building area.' },

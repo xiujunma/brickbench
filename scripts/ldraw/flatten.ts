@@ -1,3 +1,4 @@
+import { connectorOf, connectorPrimitive, placeConnector, type FlatConnector } from './connectors.ts';
 import { normalizeName, type LibrarySource } from './library.ts';
 import { parseLDraw, type Transform, type V3 } from './parse.ts';
 
@@ -29,6 +30,8 @@ export interface FlatPart {
   readonly topStuds: readonly V3[];
   /** Studs facing sideways or down, square to the axes, as on bricks with studs on their sides and on brackets. */
   readonly sideStuds: readonly DirectedStud[];
+  /** The pieces of its Technic and hinge connections (see connectors.ts), not yet joined up. */
+  readonly connectors: readonly FlatConnector[];
 }
 
 /** Every stud primitive, top or underside. */
@@ -152,6 +155,7 @@ export class Flattener {
     const triangles: FlatTriangle[] = [];
     const topStuds: V3[] = TOP_STUD.test(key) ? [[0, 0, 0]] : [];
     const sideStuds: DirectedStud[] = [];
+    const connectors: FlatConnector[] = [];
     const state: BfcState = { certified: false, clockwise: false, invertNext: false, noClip: false };
 
     const push = (p0: V3, p1: V3, p2: V3, color: number): void => {
@@ -170,7 +174,9 @@ export class Flattener {
         push(a, c, d, line.color);
       } else {
         const child = this.flatten(line.file);
-        const flip = state.invertNext !== determinant(line.matrix) < 0;
+        // a mirrored reference keeps its surfaces facing out once its winding is turned back; INVERTNEXT turns them inside out
+        const inverted = state.invertNext;
+        const flip = inverted !== determinant(line.matrix) < 0;
         state.invertNext = false;
         for (const t of child.triangles) {
           const a = apply(line.matrix, t.a);
@@ -196,9 +202,16 @@ export class Flattener {
           const dir = axisOf(turn(line.matrix, stud.dir));
           if (dir && !isUp(dir)) sideStuds.push({ at: apply(line.matrix, stud.at), dir });
         }
+        for (const connector of child.connectors) {
+          const placed = placeConnector(connector, line.matrix, inverted);
+          if (placed) connectors.push(placed);
+        }
       }
     }
-    return { triangles, topStuds: dedupe(topStuds), sideStuds: dedupeDirected(sideStuds) };
+    const primitive = connectorPrimitive(key);
+    // a connection primitive is one piece of a connection, whatever smaller ones it is drawn from
+    const own = primitive ? connectorOf(primitive, triangles) : null;
+    return { triangles, topStuds: dedupe(topStuds), sideStuds: dedupeDirected(sideStuds), connectors: own ? [own] : connectors };
   }
 }
 

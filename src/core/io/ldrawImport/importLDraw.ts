@@ -1,8 +1,9 @@
 /**
  * Opens an LDraw model (.ldr, .mpd, or the model inside a Studio .io file)
  * as a BrickBench model, and reports what could not come in: parts
- * BrickBench lacks, parts at an angle, and parts that collide once placed.
- * Parts on their sides or upside down come in turned, where they stand. Parts come in in the model's own order, so its
+ * BrickBench lacks, and mirrored ones. Parts on their sides or upside down
+ * come in turned, where they stand; parts at an angle, and parts that fit
+ * into others (a pin in its beam, a tyre on its wheel), come in loose. Parts come in in the model's own order, so its
  * building steps become the order a time-lapse builds it in, and its steps
  * and submodels those of its instructions (see seedPlan).
  */
@@ -10,7 +11,8 @@ import { getColor } from '../../colors';
 import { GRID_LIMIT, MAX_LAYER, STUD_STEP, cleanZero } from '../../grid';
 import type { PartNumbers } from '../../inventory/match';
 import { groupCellBox, turnedSize } from '../../model/geometry';
-import { isUpright, type Orientation } from '../../orientation';
+import { isRotation, isUpright, orthonormalize, type Orientation, type Turn } from '../../orientation';
+import { fromLDrawTurn } from '../ldraw';
 import type { IdFactory } from '../../model/ids';
 import { modelFromBricks } from '../../model/model';
 import type { Brick } from '../../model/types';
@@ -26,10 +28,11 @@ import { gridSpotOf, latticeOf, orientationOf, snapExactly, snapToLattice, type 
 /**
  * Why a part stayed out: BrickBench has no such part · the model keeps it
  * in another file · it is one of LDraw's drawing shapes, not a part · it is
- * at an angle (or mirrored), not square to the grid · it overlaps a part
- * already in · it is beyond the building area.
+ * mirrored, as no real part is · it overlaps a part already in (no longer
+ * for opened models, whose overlapping parts come in loose) · it is beyond
+ * the building area.
  */
-export type LeftOutReason = 'missing' | 'missing-file' | 'shapes' | 'turned' | 'overlapping' | 'outside';
+export type LeftOutReason = 'missing' | 'missing-file' | 'shapes' | 'mirrored' | 'overlapping' | 'outside';
 
 export interface PartTally {
   readonly label: string;
@@ -85,7 +88,7 @@ export interface ImportContext {
   readonly nextId: IdFactory;
 }
 
-const REASONS: readonly LeftOutReason[] = ['missing', 'missing-file', 'shapes', 'turned', 'overlapping', 'outside'];
+const REASONS: readonly LeftOutReason[] = ['missing', 'missing-file', 'shapes', 'mirrored', 'overlapping', 'outside'];
 /** Lines followed in all before giving up on a model that nests submodels endlessly. */
 const MAX_REFERENCES = MAX_BRICKS * 20;
 const MAX_NAME = 120;
@@ -93,12 +96,14 @@ const OPENABLE_EXTENSION = /\.(?:ldr|mpd|l3b|dat|io)$/i;
 /** Titles editors and the LDraw model repository give a model's main file. */
 const NO_TITLE = /^(?:untitled(?: model)?|new model|main(?: model)?|model)$/i;
 
-/** A placement matched to a part, turned one of the 24 ways a part can face, and ready to place. */
+/** A placement matched to a part, turned one of the 24 ways a part can face, or at an angle, and ready to place. */
 interface Candidate {
   readonly part: PartDef;
   readonly resolved: ResolvedPart;
   readonly label: string;
   readonly r: Orientation;
+  /** Its exact rotation, for a part at an angle: it comes in loose. */
+  readonly m?: Turn;
   readonly spot: GridSpot;
   readonly colour: PaletteMatch;
   /** The use of a submodel it came with, and the submodel turned square around it (see Placement). */
@@ -164,12 +169,16 @@ function toCandidate(placement: Placement, resolver: PartResolver, lookup: PartL
     return { reason, label: fileLabel(placement.file) };
   }
   const label = `${part.name} (${numberOfFile(placement.file)})`;
-  const r = orientationOf(placement.matrix);
-  if (r === null) return { reason: 'turned', label };
-  const spot = gridSpotOf(part, placement.position, r);
+  const square = orientationOf(placement.matrix);
+  // at an angle, a part comes in loose, turned exactly; mirrored, it cannot come in at all
+  const ours = fromLDrawTurn(placement.matrix);
+  if (square === null && !isRotation(ours, 1e-2)) return { reason: 'mirrored', label };
+  const m = square === null ? orthonormalize(ours) : undefined;
+  const r = square ?? 0;
+  const spot = gridSpotOf(part, placement.position, m ?? r);
   if (!spot) return { reason: 'missing', label };
   const { group, groupName, squared, submodels, steps } = placement;
-  return { part, resolved, label, r, spot, colour: toPalette(placement.colour), group, groupName, squared, submodels, steps };
+  return { part, resolved, label, r, ...(m ? { m } : {}), spot, colour: toPalette(placement.colour), group, groupName, squared, submodels, steps };
 }
 
 /**
@@ -191,7 +200,8 @@ function nearestTo(own: Lattice, model: Lattice): Lattice {
  * nearest whole LDraw unit.
  */
 function fitToGrid(candidates: readonly Candidate[]): OnGrid[] {
-  const upright = (parts: readonly Candidate[]): GridSpot[] => parts.filter((c) => isUpright(c.r)).map((c) => c.spot);
+  const onCells = (c: Candidate): boolean => isUpright(c.r) && !c.m;
+  const upright = (parts: readonly Candidate[]): GridSpot[] => parts.filter(onCells).map((c) => c.spot);
   const model = latticeOf(upright(candidates));
   const members = new Map<string, Candidate[]>();
   for (const candidate of candidates) {
@@ -203,14 +213,19 @@ function fitToGrid(candidates: readonly Candidate[]): OnGrid[] {
   const lattices = new Map<string, { readonly lattice: Lattice; readonly moved: boolean }>();
   for (const [group, parts] of members) {
     const own = nearestTo(latticeOf(upright(parts)), model);
-    const fitting = (lattice: Lattice): number => parts.filter((c) => isUpright(c.r) && snapToLattice(c.spot, lattice) !== null).length;
+    const fitting = (lattice: Lattice): number => parts.filter((c) => onCells(c) && snapToLattice(c.spot, lattice) !== null).length;
     const moved = fitting(own) > fitting(model);
     lattices.set(group, { lattice: moved ? own : model, moved });
   }
 
   return candidates.map((candidate) => {
     const fit = lattices.get(candidate.group) ?? { lattice: model, moved: false };
-    const cell = (isUpright(candidate.r) ? snapToLattice(candidate.spot, fit.lattice) : null) ?? snapExactly(candidate.spot, fit.lattice);
+    const { spot } = candidate;
+    const { lattice } = fit;
+    // loose parts exactly where they are, along the same grid as the rest
+    const cell = candidate.m
+      ? { x: spot.x - lattice.x, y: spot.y - lattice.y, z: spot.z - lattice.z }
+      : ((onCells(candidate) ? snapToLattice(spot, lattice) : null) ?? snapExactly(spot, lattice));
     return { candidate, cell, moved: fit.moved };
   });
 }
@@ -246,7 +261,7 @@ function modelSpan(spans: readonly Span[], limit: number): Span {
 
 /** Records for the parts on the grid, moved so the model stands on the ground in the middle of the scene. */
 function settle(placed: readonly OnGrid[]): Settled[] {
-  const sizes = placed.map(({ candidate }) => turnedSize(candidate.part, candidate.r));
+  const sizes = placed.map(({ candidate }) => turnedSize(candidate.part, candidate.m ?? candidate.r));
   const x = modelSpan(placed.map(({ cell }, i) => ({ lo: cell.x, hi: cell.x + (sizes[i]?.w ?? 1) })), 2 * GRID_LIMIT);
   const z = modelSpan(placed.map(({ cell }, i) => ({ lo: cell.z, hi: cell.z + (sizes[i]?.d ?? 1) })), 2 * GRID_LIMIT);
   const y = modelSpan(placed.map(({ cell }, i) => ({ lo: cell.y, hi: cell.y + (sizes[i]?.h ?? 1) })), MAX_LAYER);
@@ -263,6 +278,7 @@ function settle(placed: readonly OnGrid[]): Settled[] {
       y: cleanZero(on.cell.y + dy),
       z: cleanZero(on.cell.z + dz),
       r: on.candidate.r,
+      ...(on.candidate.m ? { m: [...on.candidate.m] } : {}),
     },
   }));
 }
@@ -346,7 +362,8 @@ export function importLDraw(text: string, fileName: string, context: ImportConte
     return [];
   });
   const settled = settle(fitToGrid(candidates));
-  const collected = collectBricks(settled.map((s) => s.record), context.lookup, context.nextId);
+  // parts that fit into others come in loose
+  const collected = collectBricks(settled.map((s) => s.record), context.lookup, context.nextId, { overlapping: 'loose' });
   if (!collected.ok) return collected;
   const rejected = new Map(collected.value.rejected.map(({ record, reason }) => [record, reason]));
   for (const { record, on } of settled) {

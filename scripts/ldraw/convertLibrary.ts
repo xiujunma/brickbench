@@ -1,7 +1,17 @@
 import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { encodePartMesh, LDRAW_INDEX_VERSION, MAX_ALIASES, MAX_SIDE_STUDS, type LDrawIndex, type LDrawIndexEntry, type SideStudEntry } from '../../src/core/ldraw/format.ts';
+import {
+  encodePartMesh,
+  LDRAW_INDEX_VERSION,
+  MAX_ALIASES,
+  MAX_CONNECTORS,
+  MAX_SIDE_STUDS,
+  type ConnectorEntry,
+  type LDrawIndex,
+  type LDrawIndexEntry,
+  type SideStudEntry,
+} from '../../src/core/ldraw/format.ts';
 import { plainNumberOf } from '../../src/core/ldraw/prints.ts';
 import { readColourTable, type ColourTable } from './colours.ts';
 import { convertPart, type Conversion } from './convert.ts';
@@ -70,7 +80,7 @@ function round(n: number): number {
 }
 
 function toEntry(id: string, header: PartHeader, conversion: Extract<Conversion, { ok: true }>): LDrawIndexEntry {
-  const { fit, solids, sideStuds } = conversion;
+  const { fit, solids, sideStuds, connectors } = conversion;
   const keywords = header.keywords.slice(0, MAX_KEYWORDS).map((k) => k.slice(0, 80));
   return {
     id,
@@ -87,6 +97,13 @@ function toEntry(id: string, header: PartHeader, conversion: Extract<Conversion,
     ...(solids ? { solids } : {}),
     ...(sideStuds.length > 0
       ? { sideStuds: sideStuds.slice(0, MAX_SIDE_STUDS).map(([x, y, z, facing]): SideStudEntry => [round(x), round(y), round(z), facing]) }
+      : {}),
+    ...(connectors.length > 0
+      ? {
+          connectors: connectors
+            .slice(0, MAX_CONNECTORS)
+            .map(([kind, x, y, z, ax, ay, az, length]): ConnectorEntry => [kind, round(x), round(y), round(z), round(ax), round(ay), round(az), round(length)]),
+        }
       : {}),
     ...(isPrintedPart(header) ? { printed: true as const } : {}),
   };

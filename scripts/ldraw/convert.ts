@@ -1,7 +1,8 @@
-import { MAIN_COLOUR, type SideStudEntry, type SolidBox } from '../../src/core/ldraw/format.ts';
+import { CONNECTOR_KINDS, MAIN_COLOUR, type ConnectorEntry, type SideStudEntry, type SolidBox } from '../../src/core/ldraw/format.ts';
 import { FACINGS, facingOfVector } from '../../src/core/orientation.ts';
 import { filledCells } from './cells.ts';
 import { colourFor, type ColourTable } from './colours.ts';
+import { finishConnectors } from './connectors.ts';
 import type { Flattener, FlatTriangle } from './flatten.ts';
 import { fitPart, type PartFit } from './fit.ts';
 import { buildMesh, joinColourMeshes, type LayeredMeshData, type MeshTriangle } from './mesh.ts';
@@ -21,6 +22,8 @@ export type Conversion =
       readonly solids: readonly SolidBox[] | null;
       /** Its studs that face sideways or down, where they stand on the placed part (see SideStudEntry). */
       readonly sideStuds: readonly SideStudEntry[];
+      /** Its Technic and click-hinge connections, in the placed part's frame (see ConnectorEntry). */
+      readonly connectors: readonly ConnectorEntry[];
       readonly triangles: number;
     }
   | { readonly ok: false; readonly reason: 'empty' | 'too detailed' };
@@ -117,5 +120,11 @@ export function convertPart(file: string, flattener: Flattener, colours: ColourT
     const facing = facingOfVector({ x: dx ?? 0, y: dy ?? 0, z: dz ?? 0 });
     return facing && facing !== '+y' ? [[x, y, z, FACINGS.indexOf(facing)]] : [];
   });
-  return { ok: true, mesh, fit, solids: filledCells(placed, fit), sideStuds, triangles: part.triangles.length };
+  const connectors = finishConnectors(part.connectors).map((connector): ConnectorEntry => {
+    const [x, y, z] = place(connector.at);
+    const [ax, ay, az] = toEditor(connector.axis);
+    const size = Math.hypot(ax, ay, az);
+    return [CONNECTOR_KINDS.indexOf(connector.kind), x, y, z, ax / size, ay / size, az / size, connector.length / LDU];
+  });
+  return { ok: true, mesh, fit, solids: filledCells(placed, fit), sideStuds, connectors, triangles: part.triangles.length };
 }

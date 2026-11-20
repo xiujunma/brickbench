@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import {
   compose,
+  isRotation,
+  multiplyTurns,
+  nearestOrientation,
+  orthonormalize,
+  rotateBy,
+  transposeTurn,
+  turnAbout,
   FACINGS,
   facingOf,
   facingOfVector,
@@ -88,5 +95,44 @@ describe('orientations', () => {
     expect(isOrientation(23)).toBe(true);
     expect(isOrientation(24)).toBe(false);
     expect(isOrientation(1.5)).toBe(false);
+  });
+});
+
+describe('rotations at any angle', () => {
+  it('turn about an axis, undo by their transpose, and stay rotations', () => {
+    const eighth = turnAbout({ x: 0, y: 1, z: 0 }, Math.PI / 4);
+    expect(isRotation(eighth)).toBe(true);
+    const v = rotateBy(eighth, { x: 1, y: 0, z: 0 });
+    expect(v.x).toBeCloseTo(Math.SQRT1_2);
+    expect(v.z).toBeCloseTo(-Math.SQRT1_2);
+    const back = rotateBy(transposeTurn(eighth), v);
+    expect(back.x).toBeCloseTo(1);
+    expect(back.z).toBeCloseTo(0);
+    // two eighths make a quarter turn, as orientation 1 is
+    const quarter = multiplyTurns(eighth, eighth);
+    expect(orientationOfTurn(quarter, 1e-9)).toBe(1);
+  });
+
+  it('tell rotations from mirror images and other matrices', () => {
+    expect(isRotation([1, 0, 0, 0, 1, 0, 0, 0, 1])).toBe(true);
+    expect(isRotation([-1, 0, 0, 0, 1, 0, 0, 0, 1])).toBe(false);
+    expect(isRotation([2, 0, 0, 0, 1, 0, 0, 0, 1])).toBe(false);
+    expect(isRotation([1, 0.1, 0, 0, 1, 0, 0, 0, 1])).toBe(false);
+    expect(isRotation([1, 0, 0])).toBe(false);
+  });
+
+  it('find the square orientation nearest any rotation', () => {
+    for (const o of [0, 1, 6, 13, 22]) expect(nearestOrientation(turnOf(o))).toBe(o);
+    // a little past a quarter turn about the vertical is nearest a quarter turn
+    expect(nearestOrientation(turnAbout({ x: 0, y: 1, z: 0 }, Math.PI / 2 + 0.2))).toBe(1);
+    expect(isUpright(nearestOrientation(turnAbout({ x: 1, y: 0, z: 0 }, 0.3)))).toBe(true);
+  });
+
+  it('square up rotations rounded in files', () => {
+    const rounded = [0.7071, 0, 0.7071, 0, 1, 0, -0.7071, 0, 0.7071];
+    const squared = orthonormalize(rounded);
+    expect(isRotation(squared, 1e-12)).toBe(true);
+    expect(squared[0]).toBeCloseTo(Math.SQRT1_2, 9);
+    expect(Object.is(squared[1], -0)).toBe(false);
   });
 });

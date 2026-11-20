@@ -36,6 +36,11 @@ function Hint() {
   return <span className="status-hint">{HINTS[tool]}</span>;
 }
 
+/** A coordinate as the status bar shows it: to a thousandth, enough for an LDraw unit, without a loose part's rounding noise. */
+function shown(value: number): string {
+  return String(Math.round(value * 1000) / 1000 + 0);
+}
+
 export function StatusBar() {
   const cursor = useEditor((s) => s.cursor);
   const count = useEditor((s) => s.history.present.bricks.size);
@@ -48,9 +53,9 @@ export function StatusBar() {
         {cursor ? (
           <>
             <span>X</span>
-            {cursor.x} <span>Y</span>
-            {cursor.y} <span>Z</span>
-            {cursor.z}
+            {shown(cursor.x)} <span>Y</span>
+            {shown(cursor.y)} <span>Z</span>
+            {shown(cursor.z)}
           </>
         ) : (
           '—'

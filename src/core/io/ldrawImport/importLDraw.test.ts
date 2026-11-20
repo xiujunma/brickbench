@@ -7,6 +7,7 @@ import type { Brick } from '../../model/types';
 import { PARTS, getPart } from '../../parts/catalog';
 import type { PartDef, PartLookup } from '../../parts/types';
 import { toLDraw } from '../ldraw';
+import { parseDocument, serializeDocument } from '../modelFile';
 import { importLDraw, modelName, type ImportContext, type ImportedModel } from './importLDraw';
 
 const NUMBERS = partNumbersOf(PARTS, [], new Map());
@@ -94,18 +95,39 @@ describe('importLDraw', () => {
       line(4, 0, -48, 0, '71427c01.dat'),
       line(4, 0, -48, 0, '71427c01.dat'),
       line(4, 0, -48, 0, 'wheels.ldr'),
-      // at an angle: square to nothing
-      line(4, 80, -24, 0, '3001.dat', '0.7071 0 0.7071 0 1 0 -0.7071 0 0.7071'),
-      line(4, 0, -24, 0, '3001.dat'),
+      // mirrored, as no real part is
+      line(4, 80, -24, 0, '3001.dat', '-1 0 0 0 1 0 0 0 1'),
     ]);
-    expect(report.parts).toBe(6);
+    expect(report.parts).toBe(5);
     expect(report.placed).toBe(1);
     expect(report.leftOut).toEqual([
       { reason: 'missing', count: 2, parts: [{ label: '71427c01', count: 2 }] },
       { reason: 'missing-file', count: 1, parts: [{ label: 'wheels.ldr', count: 1 }] },
-      { reason: 'turned', count: 1, parts: [{ label: 'Brick 2 × 4 (3001)', count: 1 }] },
-      { reason: 'overlapping', count: 1, parts: [{ label: 'Brick 2 × 4 (3001)', count: 1 }] },
+      { reason: 'mirrored', count: 1, parts: [{ label: 'Brick 2 × 4 (3001)', count: 1 }] },
     ]);
+  });
+
+  it('brings parts in at an angle, and parts that fit into others, loose, and gives them back to LDraw as they were', () => {
+    const angle = '0.7071 0 0.7071 0 1 0 -0.7071 0 0.7071';
+    const { doc, report } = imported([
+      line(4, 0, -24, 0, '3001.dat'),
+      // turned an eighth about the vertical
+      line(1, 120, -24, 0, '3001.dat', angle),
+      // right in the first, as a pin sits in its beam
+      line(2, 0, -24, 0, '3001.dat'),
+    ]);
+    expect(report.leftOut).toEqual([]);
+    expect(report.placed).toBe(3);
+    const [square, angled, inside] = allBricks(doc.model);
+    expect(square?.m).toBeUndefined();
+    expect(angled?.m?.map((v) => Math.round(v * 1e4) / 1e4)).toEqual([0.7071, 0, -0.7071, 0, 1, 0, 0.7071, 0, 0.7071]);
+    expect(inside?.m).toEqual([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+    const lines = toLDraw('loose', doc.model, getPart).text.split('\r\n').filter((l) => l.startsWith('1 '));
+    expect(lines[1]).toEndWith(` ${angle} 3001.dat`);
+    // and a file saved with them opens with them, in place
+    const again = parseDocument(serializeDocument(doc), getPart, createIdFactory('a'));
+    if (!again.ok) throw new Error(again.error);
+    expect(allBricks(again.value.doc.model).map((b) => [b.x, b.y, b.z, b.m !== undefined])).toEqual(allBricks(doc.model).map((b) => [b.x, b.y, b.z, b.m !== undefined]));
   });
 
   it('brings parts in upside down and on their sides, and parts between studs, where they stand', () => {

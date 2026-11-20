@@ -4,6 +4,7 @@
  * half a stud off, and the studs on its top on another, half a stud
  * further along a jumper plate's axes.
  */
+import { isLoose } from '../model/geometry';
 import type { Brick } from '../model/types';
 import { isUpright } from '../orientation';
 import type { PartLookup } from '../parts/types';
@@ -37,6 +38,8 @@ export function phaseOf(value: number): number {
  * top grid of its own here: its studs take what goes on them (see attach).
  */
 export function gridsOf(brick: Brick, lookup: PartLookup): BrickGrids {
+  // a loose part stands off every grid: what is built against it goes on the ground's
+  if (isLoose(brick)) return GROUND_GRIDS;
   const [ox, oz] = isUpright(brick.r) ? (lookup(brick.partId)?.studOffset ?? [0, 0]) : [0, 0];
   // turned a quarter, its own x lies along z
   const [wx, wz] = brick.r % 2 === 0 ? [ox, oz] : [oz, ox];
@@ -46,8 +49,14 @@ export function gridsOf(brick: Brick, lookup: PartLookup): BrickGrids {
   };
 }
 
-/** Where a payload's offset must sit for its lowest brick, which meets the surface, to stand on `grid`. */
+/**
+ * Where a payload's offset must sit for its lowest brick, which meets the
+ * surface, to stand on `grid`. Loose bricks stand off every grid, so the
+ * lowest of the rest sets it, and they all stay on the lattice.
+ */
 export function offsetPhase(payload: Payload, grid: StudPhase): StudPhase {
-  const lowest = payload.bricks.reduce<Payload['bricks'][number] | undefined>((low, brick) => (low && low.y <= brick.y ? low : brick), undefined);
+  const lowest = payload.bricks
+    .filter((brick) => !isLoose(brick))
+    .reduce<Payload['bricks'][number] | undefined>((low, brick) => (low && low.y <= brick.y ? low : brick), undefined);
   return { x: phaseOf(grid.x - (lowest?.x ?? 0)), z: phaseOf(grid.z - (lowest?.z ?? 0)) };
 }

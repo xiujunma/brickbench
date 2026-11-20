@@ -10,6 +10,8 @@ import { materialize, payloadFromPart, reuseIds, type Payload } from '../core/pl
 import { pickBricks, type Hit } from '../core/placement/ray';
 import { GROUND_GRIDS, gridsOf, offsetPhase } from '../core/placement/grids';
 import { attachToStuds } from '../core/placement/attach';
+import { attachToConnector, type ConnectTurn } from '../core/placement/connect';
+import { facingOf, spinOf } from '../core/orientation';
 import { solvePlacement, type PlacementResult } from '../core/placement/solver';
 import { BrickBatches } from '../engine/brickBatches';
 import { exportGlb } from '../engine/exporters';
@@ -276,6 +278,13 @@ export class EditorController {
     const model = this.state.history.present;
     const ray = ids ? this.viewport.rayFromClient(clientX, clientY) : undefined;
     const under = hit.brickId === null ? undefined : model.bricks.get(hit.brickId);
+    // at a pin, hole, axle or hinge under the cursor, a part with one to match plugs into it
+    const turned: ConnectTurn = ids ? { spin: 0, flipped: false } : { spin: spinOf(this.state.buildRotation), flipped: facingOf(this.state.buildRotation) !== '+y' };
+    const plugged = under ? attachToConnector(hit, under, payload, turned, this.lookup) : null;
+    if (plugged) {
+      const bricks = materialize(plugged.payload, plugged.offset, ids ? reuseIds(ids) : ghostIds());
+      return { offset: plugged.offset, payload: plugged.payload, valid: bricksFit(model, bricks, this.lookup, moving) };
+    }
     // on studs facing out of the face under the cursor, sideways or down, the payload turns to meet them
     const attached = under ? attachToStuds(hit, under, payload, this.lookup) : null;
     if (attached) {

@@ -40,6 +40,18 @@ export const MAX_SOLIDS = 2048;
  */
 export type SideStudEntry = readonly [number, number, number, number];
 
+/** Kinds of connection, in the order ConnectorEntry numbers them: Technic pins, pin holes, axles and axle holes, and click hinges' single fingers and forks of two. */
+export const CONNECTOR_KINDS = ['pin', 'pinhole', 'axle', 'axlehole', 'finger', 'fork'] as const;
+
+/**
+ * A Technic or click-hinge connection, [kind, x, y, z, ax, ay, az, length]:
+ * its kind (an index into CONNECTOR_KINDS), its middle in the part's frame
+ * (studs, from the middle of its footprint at its bottom, y up), the unit
+ * axis it runs along (a pin's from its base to its tip) and its length along
+ * that axis, in studs.
+ */
+export type ConnectorEntry = readonly [number, number, number, number, number, number, number, number];
+
 export interface LDrawIndexEntry {
   /** LDraw part number, e.g. "3001" or "3040b". */
   readonly id: string;
@@ -74,21 +86,27 @@ export interface LDrawIndexEntry {
   readonly studOffset?: readonly [number, number];
   /** Studs on its sides or underside, where more can be built facing out from it. */
   readonly sideStuds?: readonly SideStudEntry[];
+  /** Its Technic and click-hinge connections, where parts plug in. */
+  readonly connectors?: readonly ConnectorEntry[];
 }
 
 /**
  * The index format written now. Version 2 added solids, version 3 parts
  * drawn in several colours, version 4 the part numbers LDraw renamed,
  * version 5 printed and stickered parts, version 6 the studs of jumper
- * plates, version 7 studs on parts' sides.
+ * plates, version 7 studs on parts' sides, version 8 Technic and
+ * click-hinge connections.
  */
-export const LDRAW_INDEX_VERSION = 7;
+export const LDRAW_INDEX_VERSION = 8;
 
 /** Index formats the app reads: in a version 1 library every part fills its whole box. */
-export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7] as const;
+export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 
 /** Most side studs an index entry lists: a brick with studs all round its sides has a few dozen. */
 export const MAX_SIDE_STUDS = 128;
+
+/** Most connections an index entry lists: a long Technic beam has a few dozen holes, the largest Technic plates a couple of hundred. */
+export const MAX_CONNECTORS = 256;
 
 export interface LDrawIndex {
   readonly version: (typeof READABLE_INDEX_VERSIONS)[number];

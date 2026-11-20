@@ -1,5 +1,18 @@
-import { LDU_PER_UNIT, PLATE_HEIGHT, cleanZero, isStudPosition, type Vec3 } from '../grid';
-import { compose, isUpright, quarterTurn, rotateVector, type Orientation } from '../orientation';
+import { LDU_PER_STUD_STEP, LDU_PER_UNIT, PLATE_HEIGHT, cleanZero, isStudPosition, snapToLdu, type Vec3 } from '../grid';
+import {
+  compose,
+  isUpright,
+  multiplyTurns,
+  nearestOrientation,
+  orthonormalize,
+  quarterTurn,
+  rotateBy,
+  rotateVector,
+  turnAbout,
+  turnOf,
+  type Orientation,
+  type Turn,
+} from '../orientation';
 import type { CellBox, PartDef, PartLookup } from '../parts/types';
 import type { Brick } from './types';
 
@@ -28,18 +41,32 @@ export interface LduBox {
   readonly z1: number;
 }
 
+/** What places a part: which part, where its box starts, and how it is turned. */
+export type PlacedPart = Pick<Brick, 'partId' | 'x' | 'y' | 'z' | 'r' | 'm'>;
+
+/** A loose part: at an angle, or plugged into another, placed exactly and taking no part in collisions. */
+export function isLoose(brick: Pick<Brick, 'm'>): boolean {
+  return brick.m !== undefined;
+}
+
+/** The rotation a brick makes: its exact one when loose, its orientation's otherwise. */
+export function brickTurn(brick: Pick<Brick, 'r' | 'm'>): Turn {
+  return brick.m ?? turnOf(brick.r);
+}
+
 /**
  * Whether a brick stands on the cell grid: upright, on whole or half studs
  * and whole plates, as every brick did before parts could turn on their
  * sides. Others (turned, or placed between) collide by exact boxes.
  */
-export function isOnGrid(brick: Pick<Brick, 'x' | 'y' | 'z' | 'r'>): boolean {
-  return isUpright(brick.r) && isStudPosition(brick.x) && isStudPosition(brick.z) && Number.isInteger(brick.y);
+export function isOnGrid(brick: Pick<Brick, 'x' | 'y' | 'z' | 'r' | 'm'>): boolean {
+  return !isLoose(brick) && isUpright(brick.r) && isStudPosition(brick.x) && Number.isInteger(brick.y) && isStudPosition(brick.z);
 }
 
-/** A brick's position (its box's minimum corner) in LDraw units. */
-export function lduPosition(brick: Pick<Brick, 'x' | 'y' | 'z'>): Vec3 {
-  return { x: Math.round(brick.x * LDU_PER_STUD), y: Math.round(brick.y * LDU_PER_PLATE), z: Math.round(brick.z * LDU_PER_STUD) };
+/** A brick's position (its box's minimum corner) in LDraw units: on whole units, unless the brick is loose. */
+export function lduPosition(brick: Pick<Brick, 'x' | 'y' | 'z' | 'm'>): Vec3 {
+  const at = { x: brick.x * LDU_PER_STUD, y: brick.y * LDU_PER_PLATE, z: brick.z * LDU_PER_STUD };
+  return isLoose(brick) ? at : { x: Math.round(at.x), y: Math.round(at.y), z: Math.round(at.z) };
 }
 
 /** A part's box, or one of its solids, in LDraw units around the part's origin: the middle of its footprint, at its bottom. */
@@ -60,19 +87,29 @@ function wholeBox(part: PartDef): CellBox {
   return { x0: 0, y0: 0, z0: 0, x1: part.w, y1: part.h, z1: part.d };
 }
 
-/** The box a local box fills once turned, around the same origin. */
-function turnBox(orientation: Orientation, box: LduBox): LduBox {
-  const a = rotateVector(orientation, { x: box.x0, y: box.y0, z: box.z0 });
-  const b = rotateVector(orientation, { x: box.x1, y: box.y1, z: box.z1 });
+/** The box a local box fills once turned, around the same origin: exactly, square to the grid; the box around it, at an angle. */
+function turnBox(turn: Turn, box: LduBox): LduBox {
+  let [x0, y0, z0, x1, y1, z1] = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  for (const x of [box.x0, box.x1]) {
+    for (const y of [box.y0, box.y1]) {
+      for (const z of [box.z0, box.z1]) {
+        const p = rotateBy(turn, { x, y, z });
+        x0 = Math.min(x0, p.x);
+        y0 = Math.min(y0, p.y);
+        z0 = Math.min(z0, p.z);
+        x1 = Math.max(x1, p.x);
+        y1 = Math.max(y1, p.y);
+        z1 = Math.max(z1, p.z);
+      }
+    }
+  }
   // + 0 turns -0 into 0
-  return {
-    x0: Math.min(a.x, b.x) + 0,
-    y0: Math.min(a.y, b.y) + 0,
-    z0: Math.min(a.z, b.z) + 0,
-    x1: Math.max(a.x, b.x) + 0,
-    y1: Math.max(a.y, b.y) + 0,
-    z1: Math.max(a.z, b.z) + 0,
-  };
+  return { x0: x0 + 0, y0: y0 + 0, z0: z0 + 0, x1: x1 + 0, y1: y1 + 0, z1: z1 + 0 };
+}
+
+/** An orientation's rotation, or a rotation as it is. */
+function asTurn(turn: Orientation | Turn): Turn {
+  return typeof turn === 'number' ? turnOf(turn) : turn;
 }
 
 function shift(box: LduBox, by: Vec3): LduBox {
@@ -80,12 +117,12 @@ function shift(box: LduBox, by: Vec3): LduBox {
 }
 
 /** Where a brick's part origin sits in the world, in LDraw units: its position, less where its turned box starts. */
-export function brickOriginLdu(brick: Brick, lookup: PartLookup): Vec3 {
+export function brickOriginLdu(brick: PlacedPart, lookup: PartLookup): Vec3 {
   return originLdu(brick, requirePart(lookup, brick.partId));
 }
 
-function originLdu(brick: Brick, part: PartDef): Vec3 {
-  const turned = turnBox(brick.r, localBox(part, wholeBox(part)));
+function originLdu(brick: PlacedPart, part: PartDef): Vec3 {
+  const turned = turnBox(brickTurn(brick), localBox(part, wholeBox(part)));
   const at = lduPosition(brick);
   return { x: at.x - turned.x0, y: at.y - turned.y0, z: at.z - turned.z0 };
 }
@@ -102,14 +139,14 @@ function toCells(box: LduBox): CellBox {
 }
 
 /** Where a part's box starts once turned, from its origin, in world units (studs, on every axis). */
-export function turnedCorner(part: PartDef, orientation: Orientation): Vec3 {
-  const box = turnBox(orientation, localBox(part, wholeBox(part)));
+export function turnedCorner(part: PartDef, turn: Orientation | Turn): Vec3 {
+  const box = turnBox(asTurn(turn), localBox(part, wholeBox(part)));
   return { x: box.x0 / LDU_PER_UNIT + 0, y: box.y0 / LDU_PER_UNIT + 0, z: box.z0 / LDU_PER_UNIT + 0 };
 }
 
 /** The size a part's box takes in the world once turned: x and z in studs, y in plates. */
-export function turnedSize(part: PartDef, orientation: Orientation): { readonly w: number; readonly h: number; readonly d: number } {
-  const box = toCells(turnBox(orientation, localBox(part, wholeBox(part))));
+export function turnedSize(part: PartDef, turn: Orientation | Turn): { readonly w: number; readonly h: number; readonly d: number } {
+  const box = toCells(turnBox(asTurn(turn), localBox(part, wholeBox(part))));
   return { w: box.x1 - box.x0, h: box.y1 - box.y0, d: box.z1 - box.z0 };
 }
 
@@ -117,13 +154,25 @@ export function turnedSize(part: PartDef, orientation: Orientation): { readonly 
 export function brickLduSolids(brick: Brick, lookup: PartLookup): LduBox[] {
   const part = requirePart(lookup, brick.partId);
   const origin = originLdu(brick, part);
-  return part.solids.map((solid) => shift(turnBox(brick.r, localBox(part, solid)), origin));
+  const turn = brickTurn(brick);
+  return part.solids.map((solid) => shift(turnBox(turn, localBox(part, solid)), origin));
+}
+
+/** The boxes a part fills in its own frame, around its origin, in world units: what a loose part is picked by, once turned. */
+export function partLocalBoxes(part: PartDef): Aabb[] {
+  return part.solids.map((solid) => {
+    const box = localBox(part, solid);
+    return {
+      min: { x: box.x0 / LDU_PER_UNIT, y: box.y0 / LDU_PER_UNIT, z: box.z0 / LDU_PER_UNIT },
+      max: { x: box.x1 / LDU_PER_UNIT, y: box.y1 / LDU_PER_UNIT, z: box.z1 / LDU_PER_UNIT },
+    };
+  });
 }
 
 /** World-grid box covering a brick's whole footprint and height (x and z in studs, y in plates). */
-export function brickCellBox(brick: Brick, lookup: PartLookup): CellBox {
+export function brickCellBox(brick: PlacedPart, lookup: PartLookup): CellBox {
   const part = requirePart(lookup, brick.partId);
-  return toCells(shift(turnBox(brick.r, localBox(part, wholeBox(part))), originLdu(brick, part)));
+  return toCells(shift(turnBox(brickTurn(brick), localBox(part, wholeBox(part))), originLdu(brick, part)));
 }
 
 /** World-grid boxes of the cells a brick actually fills (arches leave their opening out). */
@@ -185,9 +234,44 @@ export function brickWorldBoxes(brick: Brick, lookup: PartLookup): Aabb[] {
  * is in the world, in world units: part meshes are built around it, then
  * turned by the brick's orientation.
  */
-export function brickOrigin(brick: Brick, lookup: PartLookup): Vec3 {
+export function brickOrigin(brick: PlacedPart, lookup: PartLookup): Vec3 {
   const origin = originLdu(brick, requirePart(lookup, brick.partId));
   return { x: origin.x / LDU_PER_UNIT + 0, y: origin.y / LDU_PER_UNIT + 0, z: origin.z / LDU_PER_UNIT + 0 };
+}
+
+/**
+ * A brick made loose: its part's origin at `origin` (LDraw units, in the
+ * world) and turned by `turn` exactly, its position the corner of the box
+ * that leaves it, its orientation the nearest of the 24 (as a hint; its
+ * exact turn is what counts).
+ */
+export function placeLoose<B extends PlacedPart>(brick: B, lookup: PartLookup, origin: Vec3, turn: Turn): B {
+  const part = requirePart(lookup, brick.partId);
+  const m = orthonormalize(turn);
+  const box = turnBox(m, localBox(part, wholeBox(part)));
+  return {
+    ...brick,
+    x: (origin.x + box.x0) / LDU_PER_STUD + 0,
+    y: (origin.y + box.y0) / LDU_PER_PLATE + 0,
+    z: (origin.z + box.z0) / LDU_PER_STUD + 0,
+    r: nearestOrientation(m),
+    m,
+  };
+}
+
+/**
+ * Turns bricks by `angle` radians about a line through `pivot` (world
+ * units) along the unit `axis`, as parts swing on a hinge or about a pin:
+ * each comes out loose, at its exact place and turn.
+ */
+export function turnBricksAbout(bricks: readonly Brick[], lookup: PartLookup, axis: Vec3, angle: number, pivot: Vec3): Brick[] {
+  const turn = turnAbout(axis, angle);
+  const at = { x: pivot.x * LDU_PER_UNIT, y: pivot.y * LDU_PER_UNIT, z: pivot.z * LDU_PER_UNIT };
+  return bricks.map((brick) => {
+    const origin = brickOriginLdu(brick, lookup);
+    const moved = rotateBy(turn, { x: origin.x - at.x, y: origin.y - at.y, z: origin.z - at.z });
+    return placeLoose(brick, lookup, { x: at.x + moved.x, y: at.y + moved.y, z: at.z + moved.z }, multiplyTurns(turn, brickTurn(brick)));
+  });
 }
 
 export function groupCellBox(bricks: readonly Brick[], lookup: PartLookup): CellBox {
@@ -225,15 +309,25 @@ function liesAlongX(orientation: Orientation): boolean {
  * start and a turn followed by its opposite is a no-op.
  */
 export function rotateGroup(bricks: readonly Brick[], lookup: PartLookup, dir: 1 | -1): Brick[] {
-  const first = bricks[0];
-  if (!first) return [];
-  const bounds = groupCellBox(bricks, lookup);
+  if (bricks.length === 0) return [];
+  // the bricks on the grid set the frame, so they stay on whole (or half) studs; failing those, the
+  // bricks square to it, on whole LDraw units; loose ones turn exactly within it
+  const square = bricks.filter((brick) => !isLoose(brick));
+  const onGrid = square.filter(isOnGrid);
+  const framing = onGrid.length > 0 ? onGrid : square;
+  const [first] = framing;
+  const bounds = groupCellBox(first ? framing : bricks, lookup);
   const w = bounds.x1 - bounds.x0;
   const d = bounds.z1 - bounds.z0;
-  const phaseEven = liesAlongX(dir === 1 ? first.r : compose(quarterTurn('y', -1), first.r));
-  const round = (dir === 1) === phaseEven ? Math.floor : Math.ceil;
-  const x0 = bounds.x0 + round((w - d) / 2);
-  const z0 = bounds.z0 + round((d - w) / 2);
+  let x0 = bounds.x0 + (w - d) / 2;
+  let z0 = bounds.z0 + (d - w) / 2;
+  if (first) {
+    const step = onGrid.length > 0 ? 1 : 1 / LDU_PER_STUD;
+    const phaseEven = liesAlongX(dir === 1 ? first.r : compose(quarterTurn('y', -1), first.r));
+    const round = (dir === 1) === phaseEven ? Math.floor : Math.ceil;
+    x0 = bounds.x0 + round((w - d) / 2 / step + 1e-9 * (round === Math.floor ? 1 : -1)) * step;
+    z0 = bounds.z0 + round((d - w) / 2 / step + 1e-9 * (round === Math.floor ? 1 : -1)) * step;
+  }
 
   return bricks.map((brick) => {
     const box = brickCellBox(brick, lookup);
@@ -243,11 +337,14 @@ export function rotateGroup(bricks: readonly Brick[], lookup: PartLookup, dir: 1
     const rz1 = box.z1 - bounds.z0;
     const x = dir === 1 ? rz0 : d - rz1;
     const z = dir === 1 ? w - rx1 : rx0;
+    // square bricks stay on whole LDraw units, without floating-point noise; loose ones keep their exact places
+    const place = (value: number): number => (brick.m ? cleanZero(value) : snapToLdu(value, LDU_PER_STUD_STEP));
     return {
       ...brick,
-      x: cleanZero(x0 + x),
-      z: cleanZero(z0 + z),
+      x: place(x0 + x),
+      z: place(z0 + z),
       r: compose(quarterTurn('y', dir), brick.r),
+      ...(brick.m ? { m: multiplyTurns(turnOf(quarterTurn('y', dir)), brick.m) } : {}),
     };
   });
 }

@@ -20,6 +20,8 @@ export interface BrickView {
   readonly y: number;
   readonly z: number;
   readonly r: number;
+  /** At an angle or plugged into another part: placed exactly, r only the nearest square turn. */
+  readonly loose?: true;
 }
 
 export interface ModelView {
@@ -80,7 +82,7 @@ export function describeModel(model: Model, name: string, input: ToolInput<'get_
     bounds: boundsOf(bricks, lookup),
     parts,
     colors: countBy(bricks, (b) => b.colorId).map(([id, count]) => ({ id, name: colourName(id), count })),
-    bricks: matching.slice(0, input.limit).map((b) => ({ id: b.id, part: b.partId, color: b.colorId, x: b.x, y: b.y, z: b.z, r: b.r })),
+    bricks: matching.slice(0, input.limit).map((b) => ({ id: b.id, part: b.partId, color: b.colorId, x: b.x, y: b.y, z: b.z, r: b.r, ...(b.m ? { loose: true as const } : {}) })),
     matching: matching.length,
     truncated: matching.length > input.limit,
   };

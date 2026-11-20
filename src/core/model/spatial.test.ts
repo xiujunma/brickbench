@@ -150,3 +150,23 @@ describe('bricks off the grid', () => {
     expect(visibleStuds([turned], buildSpatialIndex([turned], lookup), lookup)).toHaveLength(1);
   });
 });
+
+describe('loose parts', () => {
+  // a 1 × 1 plate turned an eighth about the vertical, at the origin: drawn there, but filling no space
+  const eighth = [Math.SQRT1_2, 0, Math.SQRT1_2, 0, 1, 0, -Math.SQRT1_2, 0, Math.SQRT1_2] as const;
+  const loose = makeBrick({ id: 'loose', partId: 'plate-1x1', m: eighth });
+
+  it('take no part in collisions, either way', () => {
+    const index = buildSpatialIndex([loose], lookup);
+    expect(index.owner(0, 0, 0)).toBeUndefined();
+    expect(collides(index, [makeBrick({ id: 'n', partId: 'plate-1x1' })], lookup)).toBe(false);
+    const occupancy = createOccupancy(lookup);
+    expect(occupancy.tryAdd(makeBrick({ id: 'n', partId: 'plate-1x1' }))).toBe(true);
+    expect(occupancy.tryAdd(loose)).toBe(true);
+  });
+
+  it('keep their studs in view, turned with them', () => {
+    const [stud] = visibleStuds([loose], buildSpatialIndex([loose, makeBrick({ id: 'over', partId: 'plate-1x1', y: 1 })], lookup), lookup);
+    expect(stud?.m).toEqual(eighth);
+  });
+});

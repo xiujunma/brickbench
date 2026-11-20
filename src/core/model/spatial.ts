@@ -1,6 +1,6 @@
 import { GRID_LIMIT, LDU_PER_UNIT, MAX_LAYER, type Vec3 } from '../grid';
 import type { PartLookup } from '../parts/types';
-import { LDU_PER_PLATE, LDU_PER_STUD, WHOLE_CELL, brickCellBox, brickCellQuarters, brickLduSolids, isOnGrid, type LduBox } from './geometry';
+import { LDU_PER_PLATE, LDU_PER_STUD, WHOLE_CELL, brickCellBox, brickCellQuarters, brickLduSolids, isLoose, isOnGrid, type LduBox } from './geometry';
 import type { Brick } from './types';
 
 /**
@@ -8,7 +8,8 @@ import type { Brick } from './types';
  * filled whole by one brick; along the edges of a brick half a stud over,
  * a cell's quarters may hold different bricks, or none. Bricks off the cell
  * grid (on their sides, or placed between) are kept as exact boxes, in
- * LDraw units, in each cell they reach into.
+ * LDraw units, in each cell they reach into. Loose parts (at an angle, or
+ * plugged into others) are left out: they fill no space here.
  */
 export interface SpatialIndex {
   /** A brick filling any of the cell (x, y, z), x and z in whole studs. */
@@ -133,6 +134,7 @@ class Space {
   }
 
   add(brick: Brick): void {
+    if (isLoose(brick)) return;
     if (isOnGrid(brick)) {
       for (const [x, y, z, mask] of brickCellQuarters(brick, this.lookup)) {
         if (inRange(x, y, z)) this.grid.fill(cellKey(x, y, z), mask, brick.id);
@@ -198,8 +200,9 @@ class Space {
     return this.exact.get(key)?.find((entry) => contains(entry.box, x, y, z))?.id;
   }
 
-  /** True when the brick would share space with one not in `ignore`. */
+  /** True when the brick would share space with one not in `ignore`; never, for a loose part. */
   blocks(brick: Brick, ignore: ReadonlySet<string>): boolean {
+    if (isLoose(brick)) return false;
     const outside = (owners: readonly string[]): boolean => owners.some((owner) => !ignore.has(owner));
     if (isOnGrid(brick)) {
       for (const [x, y, z, mask] of brickCellQuarters(brick, this.lookup)) if (outside(this.ownersIn(x, y, z, mask))) return true;
@@ -248,8 +251,9 @@ export function createOccupancy(lookup: PartLookup): Occupancy {
   };
 }
 
-/** The first brick outside `ignore` a brick would share space with, if any. */
+/** The first brick outside `ignore` a brick would share space with, if any; none, for a loose part. */
 export function firstOverlap(index: SpatialIndex, brick: Brick, lookup: PartLookup, ignore: ReadonlySet<string> = new Set()): string | undefined {
+  if (isLoose(brick)) return undefined;
   const outside = (owners: readonly string[]): string | undefined => owners.find((owner) => !ignore.has(owner));
   if (isOnGrid(brick)) {
     for (const [x, y, z, mask] of brickCellQuarters(brick, lookup)) {

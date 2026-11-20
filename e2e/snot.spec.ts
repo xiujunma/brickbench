@@ -1,25 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { expect, test, type Page } from './fixtures';
-import { autosaved, counts, freshEditor, viewportCentre } from './helpers';
-
-/** The model as the autosave holds it, once it holds `bricks` of them under `name`. */
-async function saved(page: Page, bricks: number, name = 'Untitled model'): Promise<{ partId: string; x: number; y: number; z: number; r: number }[]> {
-  await autosaved(page, bricks);
-  const handle = await page.waitForFunction((wanted) => {
-    const model = JSON.parse(window.localStorage.getItem('brickbench:autosave:v1') ?? '{}') as { name?: string; bricks?: { part: string; x: number; y: number; z: number; r: number }[] };
-    return model.name === wanted ? model.bricks?.map((b) => ({ partId: b.part, x: b.x, y: b.y, z: b.z, r: b.r })) : undefined;
-  }, name);
-  return (await handle.jsonValue()) as { partId: string; x: number; y: number; z: number; r: number }[];
-}
-
-/** Picks a library part by number from the Library tab. */
-async function choose(page: Page, number: string): Promise<void> {
-  const search = page.getByRole('searchbox').first();
-  await search.fill(number);
-  const tile = page.locator('.part-tile').first();
-  await expect(tile).toHaveAttribute('title', new RegExp(`LDraw ${number}\\b`));
-  await tile.click();
-}
+import { expect, test } from './fixtures';
+import { chooseLibraryPart as choose, counts, freshEditor, savedBricks as saved, viewportCentre } from './helpers';
 
 /** The six ways a part can face, as orientations count them (src/core/orientation.ts). */
 const FACINGS = ['+y', '-y', '+x', '-x', '+z', '-z'] as const;

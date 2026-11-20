@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { getPart } from '../parts/catalog';
 import { makeBrick } from '../model/testUtils';
+import { turnAbout } from '../orientation';
 import { pickBricks, rayAabb, rayGround, type Ray } from './ray';
 
 const box = { min: { x: 0, y: 0, z: 0 }, max: { x: 2, y: 1, z: 2 } };
@@ -92,5 +93,25 @@ describe('pickBricks', () => {
     expect(pickBricks(ray, [arch], getPart, { groundY: null })).toBeNull();
     const leg: Ray = { origin: { x: 0.5, y: 0.2, z: -5 }, dir: { x: 0, y: 0, z: 1 } };
     expect(pickBricks(leg, [arch], getPart, { groundY: null })?.brickId).toBe('arch');
+  });
+});
+
+describe('picking loose parts', () => {
+  // a 2 × 2 plate turned an eighth about the vertical, its middle at (1, 0, 1): it reaches √2 studs from there along X
+  const eighth = turnAbout({ x: 0, y: 1, z: 0 }, Math.PI / 4);
+  const loose = makeBrick({ id: 'loose', partId: 'plate-2x2', x: 1 - Math.SQRT2, y: 0, z: 1 - Math.SQRT2, m: eighth });
+
+  it('finds them by the boxes they fill, turned with them, and squares the face up', () => {
+    const down: Ray = { origin: { x: 1, y: 5, z: 1 }, dir: { x: 0, y: -1, z: 0 } };
+    const top = pickBricks(down, [loose], getPart, { groundY: null });
+    expect(top?.brickId).toBe('loose');
+    expect(top?.point.y).toBeCloseTo(0.4, 9);
+    expect(top?.normal).toEqual({ x: 0, y: 1, z: 0 });
+    // from the side, along X: the corner of the turned plate sticks out to x = 1 + √2
+    const side = pickBricks({ origin: { x: 9, y: 0.2, z: 1 }, dir: { x: -1, y: 0, z: 0 } }, [loose], getPart, { groundY: null });
+    expect(side?.point.x).toBeCloseTo(1 + Math.SQRT2, 9);
+    expect(Math.abs(side?.normal.x ?? 0) + Math.abs(side?.normal.z ?? 0)).toBe(1);
+    // its box's corner, outside the turned plate, is empty
+    expect(pickBricks({ origin: { x: 2.3, y: 5, z: 2.3 }, dir: { x: 0, y: -1, z: 0 } }, [loose], getPart, { groundY: null })).toBeNull();
   });
 });

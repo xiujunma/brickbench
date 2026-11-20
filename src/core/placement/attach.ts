@@ -5,22 +5,37 @@
  * its spin, and lands exactly where the stud puts it, on the LDraw unit
  * lattice, rather than on the cell grid.
  */
-import { LDU_PER_PLATE_STEP, LDU_PER_STUD_STEP, LDU_PER_UNIT, snapToLdu, type Vec3 } from '../grid';
-import { LDU_PER_PLATE, LDU_PER_STUD, brickCellBox, brickOriginLdu, isOnGrid, requirePart } from '../model/geometry';
+import { LDU_PER_PLATE_STEP, LDU_PER_STUD_STEP, LDU_PER_UNIT, PLATE_HEIGHT, snapToLdu, type Vec3 } from '../grid';
+import {
+  LDU_PER_PLATE,
+  LDU_PER_STUD,
+  brickCellBox,
+  brickOrigin,
+  brickOriginLdu,
+  brickTurn,
+  groupCellBox,
+  isLoose,
+  isOnGrid,
+  placeLoose,
+  requirePart,
+} from '../model/geometry';
 import type { Brick } from '../model/types';
 import {
   compose,
   facingOf,
   facingOfVector,
   facingVector,
+  multiplyTurns,
   ORIENTATIONS,
+  rotateBy,
   rotateVector,
+  transposeTurn,
   turnOf,
   type Facing,
   type Orientation,
 } from '../orientation';
 import type { PartLookup } from '../parts/types';
-import type { Payload, PayloadBrick } from './payload';
+import { materialize, payloadFromBricks, type Payload, type PayloadBrick } from './payload';
 import type { Hit } from './ray';
 
 /** A stud of a placed brick: where its base sits, in world units, and the way it faces. */
@@ -88,7 +103,7 @@ function payloadUp(payload: Payload): Facing {
 }
 
 function lduBox(brick: PayloadBrick, lookup: PartLookup): { readonly min: Vec3; readonly max: Vec3 } {
-  const box = brickCellBox({ ...brick, id: '' }, lookup);
+  const box = brickCellBox(brick, lookup);
   return {
     min: { x: box.x0 * LDU_PER_STUD, y: box.y0 * LDU_PER_PLATE, z: box.z0 * LDU_PER_STUD },
     max: { x: box.x1 * LDU_PER_STUD, y: box.y1 * LDU_PER_PLATE, z: box.z1 * LDU_PER_STUD },
@@ -108,7 +123,7 @@ export function turnPayload(payload: Payload, turn: Orientation, socket: Vec3, l
     const b = rotateVector(turn, max);
     const corner = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), z: Math.min(a.z, b.z) };
     const far = { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y), z: Math.max(a.z, b.z) };
-    return { brick, corner, far, r: compose(turn, brick.r) };
+    return { brick, corner, far, r: compose(turn, brick.r), m: brick.m ? multiplyTurns(turnOf(turn), brick.m) : undefined };
   });
   // plain loops: spreading thousands of values into Math.min overflows the call stack in some engines
   const lo = { x: Infinity, y: Infinity, z: Infinity };
@@ -125,13 +140,18 @@ export function turnPayload(payload: Payload, turn: Orientation, socket: Vec3, l
   const size = { w: (hi.x - lo.x) / LDU_PER_STUD, h: (hi.y - lo.y) / LDU_PER_PLATE, d: (hi.z - lo.z) / LDU_PER_STUD };
   return {
     payload: {
-      bricks: turned.map(({ brick, corner, r }) => ({
-        ...brick,
-        r,
-        x: snapToLdu((corner.x - lo.x) / LDU_PER_STUD, LDU_PER_STUD_STEP),
-        y: snapToLdu((corner.y - lo.y) / LDU_PER_PLATE, LDU_PER_PLATE_STEP),
-        z: snapToLdu((corner.z - lo.z) / LDU_PER_STUD, LDU_PER_STUD_STEP),
-      })),
+      bricks: turned.map(({ brick, corner, r, m }) => {
+        // loose parts keep their exact places; the rest stay on the lattice
+        const snap = m ? (value: number) => value : snapToLdu;
+        return {
+          ...brick,
+          r,
+          ...(m ? { m } : {}),
+          x: snap((corner.x - lo.x) / LDU_PER_STUD, LDU_PER_STUD_STEP),
+          y: snap((corner.y - lo.y) / LDU_PER_PLATE, LDU_PER_PLATE_STEP),
+          z: snap((corner.z - lo.z) / LDU_PER_STUD, LDU_PER_STUD_STEP),
+        };
+      }),
       size,
       grab: { x: size.w / 2, y: size.h / 2, z: size.d / 2 },
     },
@@ -163,8 +183,13 @@ export interface Attachment {
  * payloads by the cell grid instead.
  */
 export function attachToStuds(hit: Hit, brick: Brick, payload: Payload, lookup: PartLookup): Attachment | null {
+  return isLoose(brick) ? attachToLooseStuds(hit, brick, payload, lookup) : attachOnStuds(hit, brick, payload, lookup, false);
+}
+
+/** As attachToStuds; with `top`, on the top studs of a brick on the grid too. */
+function attachOnStuds(hit: Hit, brick: Brick, payload: Payload, lookup: PartLookup, top: boolean): Attachment | null {
   const facing = facingOfVector(hit.normal);
-  if (!facing || (facing === '+y' && isOnGrid(brick))) return null;
+  if (!facing || (!top && facing === '+y' && isOnGrid(brick))) return null;
   const studs = brickStudPoints(brick, lookup).filter((stud) => stud.facing === facing);
   if (studs.length === 0) return null;
   const distance = (stud: StudPoint): number => Math.hypot(stud.at.x - hit.point.x, stud.at.y - hit.point.y, stud.at.z - hit.point.z);
@@ -179,4 +204,42 @@ export function attachToStuds(hit: Hit, brick: Brick, payload: Payload, lookup: 
       z: snapToLdu((at.z - turned.socket.z) / LDU_PER_STUD, LDU_PER_STUD_STEP),
     },
   };
+}
+
+/** The face of a box a point on it lies on, as its outward unit normal: the nearest. */
+function faceUnder(point: Vec3, min: Vec3, max: Vec3): Vec3 {
+  const faces: [number, Vec3][] = [
+    [Math.abs(point.y - max.y), { x: 0, y: 1, z: 0 }],
+    [Math.abs(point.y - min.y), { x: 0, y: -1, z: 0 }],
+    [Math.abs(point.x - max.x), { x: 1, y: 0, z: 0 }],
+    [Math.abs(point.x - min.x), { x: -1, y: 0, z: 0 }],
+    [Math.abs(point.z - max.z), { x: 0, y: 0, z: 1 }],
+    [Math.abs(point.z - min.z), { x: 0, y: 0, z: -1 }],
+  ];
+  return faces.reduce((near, face) => (face[0] < near[0] ? face : near))[1];
+}
+
+/**
+ * Where a payload goes on the studs of a loose part, at whatever angle it
+ * stands: where it would go on that part standing upright, unturned, then
+ * turned and moved with it. What goes on it is loose too.
+ */
+function attachToLooseStuds(hit: Hit, brick: Brick, payload: Payload, lookup: PartLookup): Attachment | null {
+  const part = requirePart(lookup, brick.partId);
+  const turn = brickTurn(brick);
+  const origin = brickOrigin(brick, lookup);
+  const point = rotateBy(transposeTurn(turn), { x: hit.point.x - origin.x, y: hit.point.y - origin.y, z: hit.point.z - origin.z });
+  // the part as it stands in its own frame: upright, its origin at the world's
+  const home: Brick = { id: brick.id, partId: brick.partId, colorId: brick.colorId, x: -part.w / 2, y: 0, z: -part.d / 2, r: 0 };
+  const normal = faceUnder(point, { x: -part.w / 2, y: 0, z: -part.d / 2 }, { x: part.w / 2, y: part.h * PLATE_HEIGHT, z: part.d / 2 });
+  const attached = attachOnStuds({ ...hit, point, normal }, home, payload, lookup, true);
+  if (!attached) return null;
+  const at = { x: origin.x * LDU_PER_UNIT, y: origin.y * LDU_PER_UNIT, z: origin.z * LDU_PER_UNIT };
+  let n = 0;
+  const placed = materialize(attached.payload, attached.offset, () => `loose-${n++}`).map((local) => {
+    const moved = rotateBy(turn, brickOriginLdu(local, lookup));
+    return placeLoose(local, lookup, { x: at.x + moved.x, y: at.y + moved.y, z: at.z + moved.z }, multiplyTurns(turn, brickTurn(local)));
+  });
+  const bounds = groupCellBox(placed, lookup);
+  return { payload: payloadFromBricks(placed, lookup), offset: { x: bounds.x0, y: bounds.y0, z: bounds.z0 } };
 }

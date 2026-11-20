@@ -6,7 +6,7 @@
  */
 import { LDU_PER_PLATE_STEP, LDU_PER_STUD_STEP, LDU_PER_UNIT, PLATE_HEIGHT, STUD_STEP, cleanZero, snapToLdu, type Rotation } from '../../grid';
 import { turnedCorner } from '../../model/geometry';
-import { orientationOfTurn, rotateVector, type Orientation } from '../../orientation';
+import { orientationOfTurn, rotateBy, turnOf, type Orientation, type Turn } from '../../orientation';
 import type { PartDef } from '../../parts/types';
 import type { M3, V3 } from './read';
 
@@ -52,12 +52,12 @@ export interface GridSpot {
  * about X: (x, y, z) → (x, -y, -z), at 20 LDU to the stud. Null for parts
  * without an LDraw origin.
  */
-export function gridSpotOf(part: PartDef, position: V3, r: Orientation): GridSpot | null {
+export function gridSpotOf(part: PartDef, position: V3, r: Orientation | Turn): GridSpot | null {
   const origin = part.ldraw?.origin;
   if (!origin) return null;
   const [ox, oy, oz] = origin;
   // where the LDraw origin sits from the part's own (the middle of its footprint, at its bottom), once turned
-  const offset = rotateVector(r, { x: ox, y: oy, z: oz });
+  const offset = rotateBy(typeof r === 'number' ? turnOf(r) : r, { x: ox, y: oy, z: oz });
   const corner = turnedCorner(part, r);
   const x = position[0] / LDU_PER_UNIT;
   const y = -position[1] / LDU_PER_UNIT;

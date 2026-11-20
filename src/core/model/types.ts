@@ -1,5 +1,5 @@
 import type { InstructionPlan } from '../instructions/plan';
-import type { Orientation } from '../orientation';
+import type { Orientation, Turn } from '../orientation';
 
 /**
  * A placed part. (x, y, z) is the minimum corner of the box it fills, x and
@@ -16,6 +16,12 @@ export interface Brick {
   readonly y: number;
   readonly z: number;
   readonly r: Orientation;
+  /**
+   * A part at an angle, or plugged into another (a pin in a hole, a wheel
+   * on its axle): its exact rotation, row by row, which r then gives way
+   * to. Such loose parts stand anywhere and take no part in collisions.
+   */
+  readonly m?: Turn | undefined;
 }
 
 export interface Model {

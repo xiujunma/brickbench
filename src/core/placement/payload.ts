@@ -43,13 +43,14 @@ export function payloadFromBricks(bricks: readonly Brick[], lookup: PartLookup, 
     ? { x: grabWorld.x - bounds.x0, y: grabWorld.y / PLATE_HEIGHT - bounds.y0, z: grabWorld.z - bounds.z0 }
     : centreGrab(size);
   return {
-    bricks: bricks.map(({ partId, colorId, x, y, z, r }) => ({
+    bricks: bricks.map(({ partId, colorId, x, y, z, r, m }) => ({
       partId,
       colorId,
       x: x - bounds.x0,
       y: y - bounds.y0,
       z: z - bounds.z0,
       r,
+      ...(m ? { m } : {}),
     })),
     size,
     grab,
