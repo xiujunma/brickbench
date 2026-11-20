@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import { getPart } from '../parts/catalog';
 import { PLATE_HEIGHT } from '../grid';
+import type { PartDef } from '../parts/types';
 import {
+  WHOLE_CELL,
   brickCellBox,
+  brickCellQuarters,
   brickCells,
   brickWorldBoxes,
   groupCellBox,
@@ -109,5 +112,36 @@ describe('rotateGroup', () => {
     const group = [makeBrick({ partId: 'brick-2x3', x: 5, z: 7, r: 2 })];
     expect(rotateGroup(rotateGroup(group, lookup, 1), lookup, -1)).toEqual(group);
     expect(rotateGroup(rotateGroup(group, lookup, -1), lookup, 1)).toEqual(group);
+  });
+});
+
+describe('bricks half a stud over', () => {
+  const jumper = { ...(getPart('plate-1x2') as PartDef), id: 'jumper', studOffset: [0.5, 0] as const };
+  const lookupWithJumper = (id: string) => (id === 'jumper' ? jumper : getPart(id));
+
+  it('turn with their group, staying on the jumper plate’s stud', () => {
+    const group = [makeBrick({ id: 'j', partId: 'jumper', x: 0, y: 0, z: 0 }), makeBrick({ id: 'p', partId: 'plate-1x1', x: 0.5, y: 1, z: 0 })];
+    for (const dir of [1, -1] as const) {
+      const [j, p] = rotateGroup(group, lookupWithJumper, dir);
+      // the jumper now runs along z, its stud between its cells there; the plate sits on it
+      expect(j?.r).toBe(dir === 1 ? 1 : 3);
+      expect([p?.x, p?.z]).toEqual([j?.x, (j?.z ?? 0) + 0.5]);
+    }
+    // four turns bring both back
+    let turned = group;
+    for (let i = 0; i < 4; i++) turned = rotateGroup(turned, lookupWithJumper, 1);
+    expect(turned.map((b) => [b.x, b.z, b.r])).toEqual(group.map((b) => [b.x, b.z, b.r]));
+  });
+
+  it('fill the halves and quarters of the cells along their edges', () => {
+    const quarters = [...brickCellQuarters(makeBrick({ partId: 'plate-1x1', x: 0.5, z: -0.5 }), getPart)];
+    // a 1 × 1 plate half a stud over both ways: a quarter of each of four cells
+    expect(quarters).toEqual([
+      [0, 0, -1, 0b1000],
+      [1, 0, -1, 0b0100],
+      [0, 0, 0, 0b0010],
+      [1, 0, 0, 0b0001],
+    ]);
+    expect([...brickCellQuarters(makeBrick({ partId: 'plate-1x1' }), getPart)]).toEqual([[0, 0, 0, WHOLE_CELL]]);
   });
 });

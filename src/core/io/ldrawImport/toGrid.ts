@@ -2,9 +2,9 @@
  * Puts LDraw placements back on BrickBench's grid: the exact inverse of
  * the LDraw export (see ../ldraw.ts). LDraw places parts anywhere, turned
  * any way; BrickBench builds upright parts, turned in quarter turns, on
- * whole studs and plates.
+ * whole or half studs (as on a jumper plate) and whole plates.
  */
-import { LDU_PER_UNIT, PLATE_HEIGHT, cleanZero, rotatePoint, rotatedSize, type Rotation } from '../../grid';
+import { LDU_PER_UNIT, PLATE_HEIGHT, STUD_STEP, cleanZero, rotatePoint, rotatedSize, type Rotation } from '../../grid';
 import type { PartDef } from '../../parts/types';
 import type { M3, V3 } from './read';
 
@@ -66,13 +66,18 @@ export interface Lattice {
   readonly z: number;
 }
 
-/** The fraction of a cell most values sit at: where the grid they share starts. */
-function commonOffset(values: readonly number[], lduPerCell: number): number {
-  const steps = lduPerCell * STEPS_PER_LDU;
+/**
+ * The fraction of a step most values sit at: where the grid they share
+ * starts. Along x and z the step is half a stud, so parts on a jumper's
+ * stud share the grid of the rest.
+ */
+function commonOffset(values: readonly number[], lduPerCell: number, step = 1): number {
+  const steps = lduPerCell * STEPS_PER_LDU * step;
   const counts = new Map<number, number>();
   for (const value of values) {
-    const step = Math.round((value - Math.floor(value)) * steps) % steps;
-    counts.set(step, (counts.get(step) ?? 0) + 1);
+    const inSteps = value / step;
+    const at = Math.round((inSteps - Math.floor(inSteps)) * steps) % steps;
+    counts.set(at, (counts.get(at) ?? 0) + 1);
   }
   let best = 0;
   let most = 0;
@@ -82,7 +87,7 @@ function commonOffset(values: readonly number[], lduPerCell: number): number {
       most = count;
     }
   }
-  return best / steps;
+  return (best / steps) * step;
 }
 
 /**
@@ -91,22 +96,26 @@ function commonOffset(values: readonly number[], lduPerCell: number): number {
  */
 export function latticeOf(spots: readonly GridSpot[]): Lattice {
   return {
-    x: commonOffset(spots.map((s) => s.x), LDU_PER_UNIT),
+    x: commonOffset(spots.map((s) => s.x), LDU_PER_UNIT, STUD_STEP),
     y: commonOffset(spots.map((s) => s.y), LDU_PER_PLATE),
-    z: commonOffset(spots.map((s) => s.z), LDU_PER_UNIT),
+    z: commonOffset(spots.map((s) => s.z), LDU_PER_UNIT, STUD_STEP),
   };
 }
 
-function snapAxis(value: number, offset: number, lduPerCell: number): number | null {
+function snapAxis(value: number, offset: number, lduPerCell: number, step = 1): number | null {
   const shifted = value - offset;
-  const cell = Math.round(shifted);
-  return Math.abs(shifted - cell) * lduPerCell <= GRID_TOLERANCE_LDU ? cell : null;
+  const place = Math.round(shifted / step) * step;
+  return Math.abs(shifted - place) * lduPerCell <= GRID_TOLERANCE_LDU ? place : null;
 }
 
-/** The whole cell a spot sits on, counted along the lattice, or null when it sits between cells (half a stud over, say). */
+/**
+ * Where a spot sits, counted along the lattice: on whole or half studs,
+ * and whole plates; null when it sits off them (a quarter stud over, or
+ * half a plate up).
+ */
 export function snapToLattice(spot: GridSpot, lattice: Lattice): GridSpot | null {
-  const x = snapAxis(spot.x, lattice.x, LDU_PER_UNIT);
+  const x = snapAxis(spot.x, lattice.x, LDU_PER_UNIT, STUD_STEP);
   const y = snapAxis(spot.y, lattice.y, LDU_PER_PLATE);
-  const z = snapAxis(spot.z, lattice.z, LDU_PER_UNIT);
+  const z = snapAxis(spot.z, lattice.z, LDU_PER_UNIT, STUD_STEP);
   return x === null || y === null || z === null ? null : { x, y, z };
 }

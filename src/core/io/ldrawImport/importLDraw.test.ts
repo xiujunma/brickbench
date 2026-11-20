@@ -95,7 +95,8 @@ describe('importLDraw', () => {
       line(4, 0, -48, 0, '71427c01.dat'),
       line(4, 0, -48, 0, 'wheels.ldr'),
       line(4, 80, -24, 0, '3001.dat', '1 0 0 0 -1 0 0 0 -1'),
-      line(4, 170, -24, 0, '3001.dat'),
+      // a quarter stud over: on neither whole nor half studs
+      line(4, 165, -24, 0, '3001.dat'),
       line(4, 0, -24, 0, '3001.dat'),
     ]);
     expect(report.parts).toBe(7);
@@ -132,7 +133,7 @@ describe('importLDraw', () => {
         line(4, 0, -24, 0, '3001.dat'),
         line(4, 0, -48, 0, '3001.dat'),
         line(4, 0, -72, 0, '3001.dat'),
-        // the cab sits 1 LDU up and half a stud over: off the model's grid, but whole among itself
+        // the cab sits 1 LDU up, off the model's grid but whole among itself, and half a stud over, as it may
         '1 1 10 -97 0 1 0 0 0 1 0 0 0 1 Cab',
         '0 FILE Cab',
         line(16, 0, 0, 0, '3001.dat'),
@@ -144,8 +145,8 @@ describe('importLDraw', () => {
     expect(report.leftOut).toEqual([]);
     expect(report.moved).toEqual([{ label: 'Cab', count: 2 }]);
     expect(report.squared).toEqual([]);
-    // three plates to a brick: the cab's bricks still stand one on the other, on the body, half a stud along
-    expect(shape(allBricks(doc.model))).toEqual(['brick-2x4 1 1 12 0 r0', 'brick-2x4 1 1 9 0 r0', 'brick-2x4 4 0 0 0 r0', 'brick-2x4 4 0 3 0 r0', 'brick-2x4 4 0 6 0 r0']);
+    // three plates to a brick: the cab's bricks still stand one on the other, on the body, half a stud along it
+    expect(shape(allBricks(doc.model))).toEqual(['brick-2x4 1 0.5 12 0 r0', 'brick-2x4 1 0.5 9 0 r0', 'brick-2x4 4 0 0 0 r0', 'brick-2x4 4 0 3 0 r0', 'brick-2x4 4 0 6 0 r0']);
   });
 
   it('turns submodels stood at an angle square, and leaves drawing shapes out as shapes', () => {
@@ -159,9 +160,22 @@ describe('importLDraw', () => {
   });
 
   it('keeps a submodel where it is when more of its parts fit the model grid as they are', () => {
-    const { report } = imported(['0 FILE m.ldr', line(4, 0, -24, 0, '3001.dat'), '1 1 0 -48 0 1 0 0 0 1 0 0 0 1 Top', '0 FILE Top', line(16, 0, 0, 0, '3001.dat'), line(16, 0, -24, 0, '3001.dat'), line(16, 10, -48, 0, '3001.dat')]);
+    // its last part a quarter stud over, on neither whole nor half studs
+    const { report } = imported(['0 FILE m.ldr', line(4, 0, -24, 0, '3001.dat'), '1 1 0 -48 0 1 0 0 0 1 0 0 0 1 Top', '0 FILE Top', line(16, 0, 0, 0, '3001.dat'), line(16, 0, -24, 0, '3001.dat'), line(16, 5, -48, 0, '3001.dat')]);
     expect(report.moved).toEqual([]);
     expect(report.leftOut).toEqual([{ reason: 'off-grid', count: 1, parts: [{ label: 'Brick 2 × 4 (3001)', count: 1 }] }]);
+  });
+
+  it('keeps a part half a stud over where it is, as on a jumper plate, and gives it back to LDraw there', () => {
+    // a 1 × 1 plate on a 2 × 4 brick, centred on the line between two of its studs
+    const { doc, report } = imported([line(4, 0, -24, 0, '3001.dat'), line(1, 20, -32, 10, '3024.dat')]);
+    expect(report.leftOut).toEqual([]);
+    const [brick, plate] = allBricks(doc.model);
+    expect((plate?.x ?? 0) - (brick?.x ?? 0)).toBe(2.5);
+    expect(plate?.y).toBe(3);
+    const again = importLDraw(toLDraw('Again', doc.model, getPart).text, 'again.ldr', context());
+    if (!again.ok) throw new Error(again.error);
+    expect(shape(allBricks(again.value.doc.model))).toEqual(shape(allBricks(doc.model)));
   });
 
   it('counts lines it could not read, and submodels that contain themselves', () => {

@@ -58,17 +58,24 @@ export interface LDrawIndexEntry {
   readonly printed?: true;
   /** For a printed part, the plain part it decorates, when the library has it: "3068b" for "3068bp01". */
   readonly base?: string;
+  /**
+   * How far off the grid its top studs sit along X and Z, in studs: half a
+   * stud along a jumper plate, whose stud stands between cells. Absent, its
+   * studs stand on cells.
+   */
+  readonly studOffset?: readonly [number, number];
 }
 
 /**
  * The index format written now. Version 2 added solids, version 3 parts
  * drawn in several colours, version 4 the part numbers LDraw renamed,
- * version 5 printed and stickered parts.
+ * version 5 printed and stickered parts, version 6 the studs of jumper
+ * plates.
  */
-export const LDRAW_INDEX_VERSION = 5;
+export const LDRAW_INDEX_VERSION = 6;
 
 /** Index formats the app reads: in a version 1 library every part fills its whole box. */
-export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5] as const;
+export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6] as const;
 
 export interface LDrawIndex {
   readonly version: (typeof READABLE_INDEX_VERSIONS)[number];

@@ -21,11 +21,15 @@ export interface PartFit {
   readonly offset: V3;
   /** The body lands on whole studs and plates, so it sits flush with neighbours. */
   readonly snug: boolean;
+  /** How far off the grid its top studs sit along X and Z, in studs: half a stud along a jumper plate, else 0. */
+  readonly studOffset: readonly [number, number];
 }
 
 interface AxisFit {
   readonly size: number;
   readonly offset: number;
+  /** Its top studs sit between cells along this axis. */
+  readonly halfOffset: boolean;
 }
 
 /** Distance from x to the nearest half-integer (a cell centre when x is measured from a cell edge). */
@@ -57,13 +61,14 @@ function isHalfOffset(lo: number, hi: number, stud: number): boolean {
  */
 function fitAxis(lo: number, hi: number, stud: number | undefined): AxisFit {
   const size = Math.max(1, Math.ceil(hi - lo - 2 * OVERHANG - EPSILON));
-  if (stud !== undefined && !isHalfOffset(lo, hi, stud)) {
+  const halfOffset = stud !== undefined && isHalfOffset(lo, hi, stud);
+  if (stud !== undefined && !halfOffset) {
     for (const candidate of [size, size + 1]) {
       const start = alignedStart(lo, hi, candidate, stud);
-      if (start !== null) return { size: candidate, offset: -(start + candidate / 2) };
+      if (start !== null) return { size: candidate, offset: -(start + candidate / 2), halfOffset };
     }
   }
-  return { size, offset: -(lo + hi) / 2 };
+  return { size, offset: -(lo + hi) / 2, halfOffset };
 }
 
 const clean = (n: number): number => (Math.abs(n) < 1e-9 ? 0 : n);
@@ -83,5 +88,6 @@ export function fitPart(bodyMin: V3, bodyMax: V3, topStuds: readonly V3[]): Part
   const width = bodyMax[0] - bodyMin[0];
   const depth = bodyMax[2] - bodyMin[2];
   const snug = Math.abs(width - x.size) < SNUG && Math.abs(depth - z.size) < SNUG && Math.abs(plates - h) < SNUG / PLATE;
-  return { w: x.size, d: z.size, h, offset: [clean(x.offset), clean(-bodyMin[1]), clean(z.offset)], snug };
+  const studOffset: [number, number] = [x.halfOffset ? 0.5 : 0, z.halfOffset ? 0.5 : 0];
+  return { w: x.size, d: z.size, h, offset: [clean(x.offset), clean(-bodyMin[1]), clean(z.offset)], snug, studOffset };
 }

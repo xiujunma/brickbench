@@ -4,6 +4,7 @@ import { PLATE_HEIGHT } from '../grid';
 import { makeBrick } from '../model/testUtils';
 import type { Hit } from './ray';
 import { materialize, payloadFromBricks, payloadFromPart, reuseIds, rotatePayload } from './payload';
+import { ON_STUDS, gridsOf, offsetPhase, phaseOf } from './grids';
 import { solvePlacement } from './solver';
 
 function part(id: string) {
@@ -134,5 +135,57 @@ describe('solvePlacement', () => {
     expect(underground.valid).toBe(false);
     const blocked = solvePlacement(hit([4, 0.6, 1], [1, 0, 0]), brick2x4, () => false);
     expect(blocked.valid).toBe(false);
+  });
+});
+
+describe('half a stud over', () => {
+  // a jumper plate: a 1 × 2 plate whose one stud stands between its two cells, along its own x
+  const lookup = (id: string) => (id === 'jumper' ? { ...part('plate-1x2'), id: 'jumper', studOffset: [0.5, 0] as const } : getPart(id));
+  const plate1x1 = payloadFromPart(part('plate-1x1'), 4, 0);
+
+  it('knows the grids of a brick: its body on whole or half studs, and its studs half a stud further on a jumper', () => {
+    expect(gridsOf(makeBrick({ partId: 'plate-1x2', x: 2, z: 1 }), lookup)).toEqual({ body: ON_STUDS, top: ON_STUDS });
+    expect(gridsOf(makeBrick({ partId: 'jumper', x: 2, z: 1 }), lookup)).toEqual({ body: ON_STUDS, top: { x: 0.5, z: 0 } });
+    // turned a quarter, its studs sit between cells along z
+    expect(gridsOf(makeBrick({ partId: 'jumper', x: 2, z: 1, r: 1 }), lookup)).toEqual({ body: ON_STUDS, top: { x: 0, z: 0.5 } });
+    // a jumper on a jumper's stud: half and half again is back on whole studs
+    expect(gridsOf(makeBrick({ partId: 'jumper', x: 2.5, z: 1 }), lookup)).toEqual({ body: { x: 0.5, z: 0 }, top: ON_STUDS });
+    expect(phaseOf(-1.5)).toBe(0.5);
+    expect(phaseOf(-2)).toBe(0);
+  });
+
+  it('puts a part on a jumper plate’s stud half a stud over', () => {
+    const grids = gridsOf(makeBrick({ partId: 'jumper', x: 2, z: 1 }), lookup);
+    const phase = { stack: offsetPhase(plate1x1, grids.top), side: offsetPhase(plate1x1, grids.body) };
+    // the cursor on the jumper's top, near its stud at x = 3
+    const result = solvePlacement(hit([3.1, PLATE_HEIGHT, 1.5], [0, 1, 0]), plate1x1, alwaysFree, { phase });
+    expect(result.offset).toEqual({ x: 2.5, y: 1, z: 1 });
+    // without the jumper's grid it would sit on whole studs
+    expect(solvePlacement(hit([3.1, PLATE_HEIGHT, 1.5], [0, 1, 0]), plate1x1, alwaysFree).offset).toEqual({ x: 3, y: 1, z: 1 });
+  });
+
+  it('builds beside a brick half a stud over against its face, along its grid', () => {
+    const grids = gridsOf(makeBrick({ partId: 'plate-1x2', x: 2.5, z: 1 }), lookup);
+    const phase = { stack: offsetPhase(plate1x1, grids.top), side: offsetPhase(plate1x1, grids.body) };
+    // its +x face stands at 4.5; its -z face at z = 1
+    expect(solvePlacement(hit([4.5, 0.2, 1.4], [1, 0, 0]), plate1x1, alwaysFree, { phase }).offset).toEqual({ x: 4.5, y: 0, z: 1 });
+    expect(solvePlacement(hit([3.2, 0.2, 1], [0, 0, -1]), plate1x1, alwaysFree, { phase }).offset).toEqual({ x: 2.5, y: 0, z: 0 });
+  });
+
+  it('stands a group on a surface by its lowest brick', () => {
+    // a jumper with a plate on its stud: the plate half a stud over the jumper, both kept as they are
+    const group = payloadFromBricks(
+      [makeBrick({ id: 'j', partId: 'jumper', x: 0, y: 0, z: 0 }), makeBrick({ id: 'p', partId: 'plate-1x1', x: 0.5, y: 1, z: 0 })],
+      lookup,
+    );
+    expect(offsetPhase(group, ON_STUDS)).toEqual(ON_STUDS);
+    // lowest brick half a stud over within the group: the group's corner goes half a stud over on whole studs
+    const turned = payloadFromBricks(
+      [makeBrick({ id: 'p', partId: 'plate-1x1', x: 0, y: 0, z: 0 }), makeBrick({ id: 'q', partId: 'plate-1x1', x: -0.5, y: 1, z: 0 })],
+      lookup,
+    );
+    expect(offsetPhase(turned, ON_STUDS)).toEqual({ x: 0.5, z: 0 });
+    const placed = materialize(turned, { x: 3.5, y: 0, z: 0 }, reuseIds(['p', 'q']));
+    expect(placed.map((b) => b.x)).toEqual([4, 3.5]);
   });
 });

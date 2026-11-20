@@ -12,22 +12,21 @@ export interface StudInstance {
   readonly colorId: number;
 }
 
-const NOTHING: SpatialIndex = { owner: () => undefined };
-
 /** Every stud of the given bricks, covered or not (for selections and previews). */
 export function allStuds(bricks: Iterable<Brick>, lookup: PartLookup): StudInstance[] {
-  return visibleStuds(bricks, NOTHING, lookup);
+  return visibleStuds(bricks, null, lookup);
 }
 
 /**
  * Lists the studs worth drawing: studs pressed into an opaque brick above are
- * hidden, which removes most stud geometry from dense models. Without
- * `isOpaqueOwner` every brick above counts as opaque. Excluded bricks
+ * hidden, which removes most stud geometry from dense models. Without an
+ * index, every stud is listed; without `isOpaqueOwner` every brick above
+ * counts as opaque. Excluded bricks
  * neither contribute studs nor hide anyone else's.
  */
 export function visibleStuds(
   bricks: Iterable<Brick>,
-  index: SpatialIndex,
+  index: SpatialIndex | null,
   lookup: PartLookup,
   isOpaqueOwner?: (brickId: string) => boolean,
   exclude: ReadonlySet<string> = new Set(),
@@ -41,7 +40,8 @@ export function visibleStuds(
       const [dx, dz] = rotateCell(lx, lz, part.w, part.d, brick.r);
       const x = brick.x + dx;
       const z = brick.z + dz;
-      const cover = index.owner(x, top, z);
+      // what sits on the stud's centre, which may be half a stud over
+      const cover = index?.ownerAt(x + 0.5, top, z + 0.5);
       const hidden = cover !== undefined && !exclude.has(cover) && (isOpaqueOwner?.(cover) ?? true);
       if (!hidden) studs.push({ x, y: top, z, colorId: brick.colorId });
     }

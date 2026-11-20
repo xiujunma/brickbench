@@ -55,6 +55,22 @@ describe('model files', () => {
     JSON.stringify({ format: 'brickbench.model', version: 1, name: 'x', bricks, ...(settings ? { settings } : {}) });
   const record = (part: string, x: number, y: number, z: number) => ({ part, color: 4, x, y, z, r: 0 });
 
+  it('keeps bricks half a stud over, side by side, and refuses any other fraction of a stud', () => {
+    const halves = file([record('plate-1x2', 0.5, 0, -1.5), record('plate-1x2', 2.5, 0, -1.5), record('plate-1x2', 2, 0, -1.5)]);
+    const result = parseDocument(halves, getPart, ids());
+    if (!result.ok) throw new Error(result.error);
+    // the third overlaps both by half a stud
+    expect(allBricks(result.value.doc.model).map((b) => [b.x, b.z])).toEqual([
+      [0.5, -1.5],
+      [2.5, -1.5],
+    ]);
+    expect(result.value.warnings).toEqual(['Skipped 1 brick that overlapped another.']);
+    expect(JSON.parse(serializeDocument(result.value.doc)).bricks.map((b: { x: number }) => b.x)).toEqual([0.5, 2.5]);
+    for (const off of [0.25, 1 / 3]) expect(parseDocument(file([record('plate-1x2', off, 0, 0)]), getPart, ids()).ok).toBe(false);
+    // heights stay in whole plates
+    expect(parseDocument(file([record('plate-1x2', 0, 0.5, 0)]), getPart, ids()).ok).toBe(false);
+  });
+
   it('drops bricks that overlap earlier ones', () => {
     const result = parseDocument(file([record('brick-2x4', 0, 0, 0), record('brick-2x4', 1, 1, 0), record('brick-2x4', 0, 3, 0)]), getPart, ids());
     if (!result.ok) throw new Error(result.error);

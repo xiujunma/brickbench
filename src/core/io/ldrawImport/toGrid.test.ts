@@ -58,24 +58,29 @@ describe('gridSpotOf', () => {
 });
 
 describe('lattice', () => {
-  it('finds the grid most parts share, even half a stud and a few LDU over', () => {
+  it('finds the grid most parts share, a quarter stud and a few LDU over, half studs on it as well', () => {
     const spots = [
-      { x: 0.5, y: 0.005, z: 2 },
-      { x: 3.5, y: 3.005, z: -1 },
-      { x: -1.5000001, y: 1.005, z: 4.9999999 },
-      { x: 0.25, y: 0.5, z: 0.5 },
+      { x: 0.25, y: 0.005, z: 2 },
+      // half a stud along: the same grid, as on a jumper plate's stud
+      { x: 3.75, y: 3.005, z: -1 },
+      { x: -1.7500001, y: 1.005, z: 4.9999999 },
+      { x: 0.5, y: 0.5, z: 0.5 },
     ];
     const lattice = latticeOf(spots);
-    expect(lattice).toEqual({ x: 0.5, y: 0, z: 0 });
+    expect(lattice).toEqual({ x: 0.25, y: 0, z: 0 });
     expect(snapToLattice(spots[0]!, lattice)).toEqual({ x: 0, y: 0, z: 2 });
+    expect(snapToLattice(spots[1]!, lattice)).toEqual({ x: 3.5, y: 3, z: -1 });
     expect(snapToLattice(spots[2]!, lattice)).toEqual({ x: -2, y: 1, z: 5 });
+    // a quarter stud off the grid, and half a plate up
+    expect(snapToLattice(spots[3]!, lattice)).toBeNull();
   });
 
-  it('leaves parts between cells off the grid', () => {
+  it('keeps parts half a stud over, and leaves parts off whole and half studs, or half a plate up, off the grid', () => {
     const lattice = { x: 0, y: 0, z: 0 };
-    expect(snapToLattice({ x: 0.5, y: 0, z: 0 }, lattice)).toBeNull();
+    expect(snapToLattice({ x: 0.5, y: 0, z: -1.5 }, lattice)).toEqual({ x: 0.5, y: 0, z: -1.5 });
+    expect(snapToLattice({ x: 0.25, y: 0, z: 0 }, lattice)).toBeNull();
     expect(snapToLattice({ x: 0, y: 0.5, z: 0 }, lattice)).toBeNull();
-    expect(snapToLattice({ x: 0, y: 0, z: 0.03 }, lattice)).toBeNull();
+    expect(snapToLattice({ x: 0, y: 0, z: 0.53 }, lattice)).toBeNull();
     expect(snapToLattice({ x: 0, y: 0, z: 0.02 }, lattice)).toEqual({ x: 0, y: 0, z: 0 });
   });
 

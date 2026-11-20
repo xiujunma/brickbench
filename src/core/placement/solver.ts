@@ -1,4 +1,5 @@
-import { PLATE_HEIGHT, cleanZero, type Vec3 } from '../grid';
+import { PLATE_HEIGHT, STUD_STEP, cleanZero, type Vec3 } from '../grid';
+import { ON_STUDS, type StudPhase } from './grids';
 import type { Payload } from './payload';
 import type { Hit, Ray } from './ray';
 
@@ -16,6 +17,17 @@ export interface SolveOptions {
    * payload's bottom) under the cursor, so a dragged brick doesn't jump.
    */
   readonly ray?: Ray;
+  /**
+   * How far off whole studs the payload's offset sits: on a top face (the
+   * studs' grid there, half a stud over on a jumper plate), and beside or
+   * under a brick (its body's grid). Whole studs when absent; see offsetPhase.
+   */
+  readonly phase?: { readonly stack: StudPhase; readonly side: StudPhase };
+}
+
+/** The place on a grid `phase` off whole studs nearest to `value`. */
+function snap(value: number, phase: number): number {
+  return Math.round(value - phase) + phase;
 }
 
 /** Where the ray crosses the horizontal plane at height y, if it does. */
@@ -32,29 +44,30 @@ function offset(x: number, y: number, z: number): Vec3 {
 }
 
 /** Where the payload would go for a hit, before collision checks. */
-function candidate(hit: Hit, payload: Payload, ray: Ray | undefined): { offset: Vec3; stacking: boolean } {
+function candidate(hit: Hit, payload: Payload, options: SolveOptions): { offset: Vec3; stacking: boolean } {
   const { point: p, normal: n } = hit;
   const { size, grab } = payload;
-  const besideX = Math.round(p.x - grab.x);
-  const besideZ = Math.round(p.z - grab.z);
+  const { stack, side } = options.phase ?? { stack: ON_STUDS, side: ON_STUDS };
+  const besideX = snap(p.x - grab.x, side.x);
+  const besideZ = snap(p.z - grab.z, side.z);
   const layer = Math.round(p.y / PLATE_HEIGHT);
 
   if (n.y > 0.5) {
-    const held = ray ? crossAt(ray, (layer + grab.y) * PLATE_HEIGHT) : null;
-    const x = held ? Math.round(held.x - grab.x) : besideX;
-    const z = held ? Math.round(held.z - grab.z) : besideZ;
-    return { offset: offset(x, layer, z), stacking: true };
+    const held = (options.ray ? crossAt(options.ray, (layer + grab.y) * PLATE_HEIGHT) : null) ?? p;
+    return { offset: offset(snap(held.x - grab.x, stack.x), layer, snap(held.z - grab.z, stack.z)), stacking: true };
   }
   if (n.y < -0.5) return { offset: offset(besideX, layer - size.h, besideZ), stacking: false };
 
   // beside a brick, line up with its courses (counted in the payload's own height) so nothing floats half a brick up
   const courses = Math.max(0, Math.floor((p.y / PLATE_HEIGHT - hit.base + 1e-6) / size.h));
   const sideY = Math.max(0, hit.base + courses * size.h);
+  // faces stand on whole or half studs, as bricks do
+  const faceAt = (value: number): number => Math.round(value / STUD_STEP) * STUD_STEP;
   if (Math.abs(n.x) > 0.5) {
-    const face = Math.round(p.x);
+    const face = faceAt(p.x);
     return { offset: offset(n.x > 0 ? face : face - size.w, sideY, besideZ), stacking: false };
   }
-  const face = Math.round(p.z);
+  const face = faceAt(p.z);
   return { offset: offset(besideX, sideY, n.z > 0 ? face : face - size.d), stacking: false };
 }
 
@@ -69,7 +82,7 @@ export function solvePlacement(
   isFree: (offset: Vec3) => boolean,
   options: SolveOptions = {},
 ): PlacementResult {
-  const { offset: base, stacking } = candidate(hit, payload, options.ray);
+  const { offset: base, stacking } = candidate(hit, payload, options);
   if (base.y < 0) return { offset: base, valid: false };
   if (!stacking) return { offset: base, valid: isFree(base) };
 

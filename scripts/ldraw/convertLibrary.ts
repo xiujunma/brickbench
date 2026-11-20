@@ -83,6 +83,7 @@ function toEntry(id: string, header: PartHeader, conversion: Extract<Conversion,
     h: fit.h,
     origin: [round(fit.offset[0]), round(fit.offset[1]), round(fit.offset[2])],
     snug: fit.snug,
+    ...(fit.studOffset.some((offset) => offset !== 0) ? { studOffset: fit.studOffset } : {}),
     ...(solids ? { solids } : {}),
     ...(isPrintedPart(header) ? { printed: true as const } : {}),
   };

@@ -4,7 +4,7 @@
  * and chat. Imported by both sides, so it stays free of browser code.
  */
 import { z } from 'zod';
-import { GRID_LIMIT, MAX_LAYER } from '../core/grid';
+import { GRID_LIMIT, MAX_LAYER, isStudPosition } from '../core/grid';
 import { MAX_PATTERN_LENGTH } from '../core/parts/pattern';
 
 /** Most bricks one call may place, move, paint or name. */
@@ -19,6 +19,8 @@ export const MAX_OWNED_LIST = 2000;
 
 const int = z.number().int();
 const studs = int.min(-GRID_LIMIT).max(GRID_LIMIT);
+/** Where a part stands: on whole studs, or half a stud over, as on a jumper plate's stud. */
+const standing = z.number().min(-GRID_LIMIT).max(GRID_LIMIT).refine(isStudPosition, 'a whole or half stud');
 const layer = int.min(0).max(MAX_LAYER);
 /** An LDraw colour code (4 is red) or a colour name ("Dark Bluish Grey", "red"). */
 const colour = z.union([int.min(0).max(100_000), z.string().trim().min(1).max(40)]);
@@ -32,9 +34,9 @@ export type Region = z.infer<typeof regionSchema>;
 export const brickSpecSchema = z.object({
   part: z.string().trim().min(1).max(64),
   color: colour,
-  x: studs,
+  x: standing,
   y: layer,
-  z: studs,
+  z: standing,
   rotation: int.min(0).max(3).default(0),
 });
 export type BrickSpec = z.infer<typeof brickSpecSchema>;

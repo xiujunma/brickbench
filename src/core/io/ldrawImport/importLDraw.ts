@@ -7,7 +7,7 @@
  * and submodels those of its instructions (see seedPlan).
  */
 import { getColor } from '../../colors';
-import { GRID_LIMIT, MAX_LAYER, cleanZero, rotatedSize, type Rotation } from '../../grid';
+import { GRID_LIMIT, MAX_LAYER, STUD_STEP, cleanZero, rotatedSize, type Rotation } from '../../grid';
 import type { PartNumbers } from '../../inventory/match';
 import { groupCellBox } from '../../model/geometry';
 import type { IdFactory } from '../../model/ids';
@@ -59,7 +59,7 @@ export interface ImportReport {
   /** Printed and stickered parts that came in plain. */
   readonly plain: readonly PartTally[];
   /**
-   * Submodels moved up to half a stud or plate to line up with the rest,
+   * Submodels moved up to a quarter stud or half a plate to line up with the rest,
    * labelled by name, counting the parts that came in with them.
    */
   readonly moved: readonly PartTally[];
@@ -171,10 +171,13 @@ function toCandidate(placement: Placement, resolver: PartResolver, lookup: PartL
   return { part, resolved, label, r, spot, colour: toPalette(placement.colour), group, groupName, squared, submodels, steps };
 }
 
-/** `own` shifted by whole cells to lie as close to `model` as it can: at most half a cell off along each axis. */
+/**
+ * `own` shifted by whole steps (half studs along x and z, plates up) to lie
+ * as close to `model` as it can: at most a quarter stud, or half a plate, off.
+ */
 function nearestTo(own: Lattice, model: Lattice): Lattice {
-  const near = (a: number, b: number): number => a - Math.round(a - b);
-  return { x: near(own.x, model.x), y: near(own.y, model.y), z: near(own.z, model.z) };
+  const near = (a: number, b: number, step: number): number => a - step * Math.round((a - b) / step);
+  return { x: near(own.x, model.x, STUD_STEP), y: near(own.y, model.y, 1), z: near(own.z, model.z, STUD_STEP) };
 }
 
 /**

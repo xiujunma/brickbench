@@ -47,14 +47,41 @@ export function brickSolids(brick: Brick, lookup: PartLookup): CellBox[] {
   return part.solids.map((solid) => solidToWorld(brick, part, solid));
 }
 
-export function* brickCells(brick: Brick, lookup: PartLookup): Generator<readonly [number, number, number]> {
+/** All four quarters of a cell, as a mask of brickCellQuarters. */
+export const WHOLE_CELL = 0b1111;
+
+/** Which halves of cell `cell` the span [h0, h1) of half studs covers: bit 1 the lower half, bit 2 the upper. */
+function halvesOf(cell: number, h0: number, h1: number): number {
+  const lower = 2 * cell >= h0 && 2 * cell < h1 ? 1 : 0;
+  const upper = 2 * cell + 1 >= h0 && 2 * cell + 1 < h1 ? 2 : 0;
+  return lower | upper;
+}
+
+/**
+ * The cells a brick's solids reach into, each with a mask of the quarters
+ * it fills: bit qx + 2·qz for the quarter that is half qx along x and half
+ * qz along z. A brick on whole studs fills whole cells (WHOLE_CELL); one
+ * half a stud over fills halves or quarters of the cells along its edges.
+ */
+export function* brickCellQuarters(brick: Brick, lookup: PartLookup): Generator<readonly [number, number, number, number]> {
   for (const box of brickSolids(brick, lookup)) {
+    // in half studs, which positions always come in
+    const [hx0, hx1, hz0, hz1] = [box.x0, box.x1, box.z0, box.z1].map((v) => Math.round(v * 2)) as [number, number, number, number];
     for (let y = box.y0; y < box.y1; y++) {
-      for (let z = box.z0; z < box.z1; z++) {
-        for (let x = box.x0; x < box.x1; x++) yield [x, y, z];
+      for (let z = Math.floor(hz0 / 2); 2 * z < hz1; z++) {
+        const zHalves = halvesOf(z, hz0, hz1);
+        for (let x = Math.floor(hx0 / 2); 2 * x < hx1; x++) {
+          const xHalves = halvesOf(x, hx0, hx1);
+          yield [x, y, z, (zHalves & 1 ? xHalves : 0) | (zHalves & 2 ? xHalves << 2 : 0)];
+        }
       }
     }
   }
+}
+
+/** The cells a brick's solids reach into, wholly or in part (see brickCellQuarters). */
+export function* brickCells(brick: Brick, lookup: PartLookup): Generator<readonly [number, number, number]> {
+  for (const [x, y, z] of brickCellQuarters(brick, lookup)) yield [x, y, z];
 }
 
 export function cellBoxToAabb(box: CellBox): Aabb {

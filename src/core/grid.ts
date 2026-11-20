@@ -10,6 +10,14 @@ export const BRICK_HEIGHT = PLATE_HEIGHT * PLATES_PER_BRICK;
 export const STUD_RADIUS = 0.3;
 export const STUD_HEIGHT = 0.2;
 
+/** Bricks stand on whole studs, or half a stud over, as on the stud of a jumper plate. */
+export const STUD_STEP = 0.5;
+
+/** Whether x (or z) is a place a brick can stand: a whole or half stud. */
+export function isStudPosition(value: number): boolean {
+  return Number.isInteger(value / STUD_STEP);
+}
+
 /** LDraw units (LDU) per world unit (one stud pitch). */
 export const LDU_PER_UNIT = 20;
 

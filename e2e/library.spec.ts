@@ -64,6 +64,74 @@ test.describe('LDraw parts library', () => {
       await expect(counts(page)).toHaveText('1 brick');
     });
 
+    test('builds half a stud over on a jumper plate, keeps it there and gives it back to LDraw there', async ({ page }, testInfo) => {
+      // starts the editor and opens a model
+      test.slow();
+      await freshEditor(page);
+      page.on('dialog', (dialog) => void dialog.accept());
+      await page.getByRole('button', { name: 'Library', exact: true }).click();
+      await expect(page.locator('#library-category')).toBeVisible();
+      const choose = async (number: string): Promise<void> => {
+        const search = page.getByRole('searchbox').first();
+        await search.fill(number);
+        const tile = page.locator('.part-tile').first();
+        await expect(tile).toHaveAttribute('title', new RegExp(`LDraw ${number}\\b`));
+        await tile.click();
+      };
+      await choose('3794b');
+      const centre = await viewportCentre(page);
+      await page.mouse.click(centre.x, centre.y);
+      await expect(counts(page)).toHaveText('1 brick');
+
+      // up the screen onto the jumper's top, where a 1 × 1 plate's preview sits a plate up, half a stud over
+      await choose('3024');
+      const coords = page.locator('.status-coords');
+      let dy = 0;
+      for (let step = 2; step <= 80; step += 2) {
+        await page.mouse.move(centre.x, centre.y - step);
+        if (/Y1(?!\d)/.test((await coords.textContent()) ?? '')) {
+          dy = step;
+          break;
+        }
+      }
+      expect(dy).toBeGreaterThan(0);
+      await expect(coords).toContainText('.5');
+      await page.mouse.click(centre.x, centre.y - dy);
+      await expect(counts(page)).toHaveText('2 bricks');
+
+      /** The jumper and the plate on it, once the autosave holds both under the model's name. */
+      const saved = async (name: string) => {
+        await autosaved(page, 2);
+        const handle = await page.waitForFunction((wanted) => {
+          const model = JSON.parse(window.localStorage.getItem('brickbench:autosave:v1') ?? '{}') as { name?: string; bricks?: { x: number; z: number }[] };
+          return model.name === wanted ? model.bricks : undefined;
+        }, name);
+        return (await handle.jsonValue()) as { x: number; z: number }[];
+      };
+      const [jumper, plate] = await saved('Untitled model');
+      // the plate's one cell is centred on the jumper's stud, between the jumper's two cells
+      expect((plate?.x ?? 0) - (jumper?.x ?? 0)).toBe(0.5);
+      expect(plate?.z).toBe(jumper?.z);
+
+      // in LDraw, the plate stands right on the jumper's centre
+      const downloadPromise = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'File' }).click();
+      await page.getByRole('menuitem', { name: 'LDraw model (.ldr)' }).click();
+      const ldr = await readFile(await (await downloadPromise).path(), 'utf8');
+      const where = (number: string) => /^1 \d+ (\S+) \S+ (\S+) .* (\S+)\.dat$/m.exec(ldr.split('\n').find((line) => line.endsWith(` ${number}.dat`)) ?? '');
+      expect(where('3024')?.slice(1, 3)).toEqual(where('3794b')?.slice(1, 3));
+
+      // and opened again, it comes back the same
+      const path = testInfo.outputPath('jumper.ldr');
+      await writeFile(path, ldr);
+      await openModelFile(page, path);
+      await expect(page.getByRole('textbox', { name: 'Model name' })).toHaveValue('jumper');
+      await expect(counts(page)).toHaveText('2 bricks');
+      const [again, onIt] = await saved('jumper');
+      expect((onIt?.x ?? 0) - (again?.x ?? 0)).toBe(0.5);
+      expect(onIt?.z).toBe(again?.z);
+    });
+
     test('browses by category and pages through long lists', async ({ page }) => {
       await freshEditor(page);
       await page.getByRole('button', { name: 'Library', exact: true }).click();

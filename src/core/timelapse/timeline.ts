@@ -121,7 +121,7 @@ export function scheduleStuds(ordered: readonly Brick[], lookup: PartLookup, isO
   const until: number[] = [];
   for (const [i, brick] of ordered.entries()) {
     for (const stud of allStuds([brick], lookup)) {
-      const cover = index.owner(stud.x, stud.y, stud.z);
+      const cover = index.ownerAt(stud.x + 0.5, stud.y, stud.z + 0.5);
       const covered = cover !== undefined && isOpaque(colours.get(cover) ?? -1) ? order.get(cover) : undefined;
       studs.push(stud);
       from.push(i);

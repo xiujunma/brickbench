@@ -8,6 +8,7 @@ import type { Brick, Model } from '../core/model/types';
 import type { PartLookup } from '../core/parts/types';
 import { materialize, payloadFromPart, reuseIds, type Payload } from '../core/placement/payload';
 import { pickBricks, type Hit } from '../core/placement/ray';
+import { GROUND_GRIDS, gridsOf, offsetPhase } from '../core/placement/grids';
 import { solvePlacement, type PlacementResult } from '../core/placement/solver';
 import { BrickBatches } from '../engine/brickBatches';
 import { exportGlb } from '../engine/exporters';
@@ -273,11 +274,14 @@ export class EditorController {
     if (!hit) return null;
     const model = this.state.history.present;
     const ray = ids ? this.viewport.rayFromClient(clientX, clientY) : undefined;
+    // on a jumper plate's stud, or against a brick half a stud over, the payload lines up with it
+    const under = hit.brickId === null ? undefined : model.bricks.get(hit.brickId);
+    const grids = under ? gridsOf(under, this.lookup) : GROUND_GRIDS;
     return solvePlacement(
       hit,
       payload,
       (offset) => bricksFit(model, materialize(payload, offset, ids ? reuseIds(ids) : ghostIds()), this.lookup, moving),
-      { ray },
+      { ray, phase: { stack: offsetPhase(payload, grids.top), side: offsetPhase(payload, grids.body) } },
     );
   }
 

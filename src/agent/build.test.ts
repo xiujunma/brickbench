@@ -291,3 +291,40 @@ describe('describing the model', () => {
     expect(describeModel(emptyModel(), 'Empty', input('get_model', {}), getPart).bounds).toBeNull();
   });
 });
+
+describe('building half a stud over', () => {
+  it('places parts half a stud over side by side, and refuses other fractions of a stud', () => {
+    const { next, result } = placeBricks(
+      emptyModel(),
+      input('place_bricks', {
+        bricks: [
+          { part: 'plate-1x2', color: 4, x: 0.5, y: 0, z: 0 },
+          { part: 'plate-1x2', color: 4, x: 2.5, y: 0, z: 0 },
+          // half a stud into the first
+          { part: 'plate-1x2', color: 4, x: 2, y: 1, z: 0 },
+          { part: 'plate-1x2', color: 4, x: 0, y: 0, z: 0 },
+        ],
+      }),
+      context(),
+    );
+    expect(result.placed).toBe(3);
+    expect(result.rejected).toEqual([{ index: 3, reason: expect.stringMatching(/overlaps brick/) }]);
+    expect(allBricks(next).map((b) => b.x)).toEqual([0.5, 2.5, 2]);
+    // resting on both plates below where it overlaps them, it is held up
+    expect(result.floating).toEqual([]);
+    expect(parseToolInput('place_bricks', { bricks: [{ part: 'plate-1x2', color: 4, x: 0.25, y: 0, z: 0 }] }).ok).toBe(false);
+  });
+
+  it('holds up a part only where it overlaps what is under it, not where it meets it at an edge', () => {
+    // a plate from 2.5 to 4.5, a layer above one from 0.5 to 2.5: they meet at an edge
+    const model = modelOf(brick('low', 'plate-1x2', 0.5, 0, 0));
+    const { result } = placeBricks(model, input('place_bricks', { bricks: [{ part: 'plate-1x2', color: 4, x: 2.5, y: 1, z: 0 }] }), context());
+    expect(result.floating).toEqual([0]);
+  });
+
+  it('moves parts half a stud over by whole studs, refusing a move into another by half a stud', () => {
+    const model = modelOf(brick('a', 'plate-1x2', 0.5, 0, 0), brick('b', 'plate-1x2', 3, 0, 0));
+    expect(allBricks(moveBricks(model, input('move_bricks', { ids: ['a'], dx: -2 }), getPart).next).map((b) => b.x)).toEqual([-1.5, 3]);
+    expect(() => moveBricks(model, input('move_bricks', { ids: ['a'], dx: 1 }), getPart)).toThrow(/overlap brick/);
+  });
+});

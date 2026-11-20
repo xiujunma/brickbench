@@ -46,6 +46,18 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(result.fit.snug).toBe(true);
   });
 
+  it('says which way a jumper plate’s stud sits between cells, and that a plain plate’s do not', () => {
+    const offsetOf = (file: string) => {
+      const result = convertPart(file, flattener);
+      if (!result.ok) throw new Error(`${file} was skipped: ${result.reason}`);
+      return result.fit.studOffset;
+    };
+    // 1 × 2 jumpers, with and without groove or understud; a 2 × 2 with one centre stud; a 1 × 3 with two studs offset
+    for (const file of ['3794a.dat', '3794b.dat', '15573.dat', '34103.dat']) expect(offsetOf(file)).toEqual([0.5, 0]);
+    expect(offsetOf('87580.dat')).toEqual([0.5, 0.5]);
+    for (const file of ['3023.dat', '3024.dat', '3001.dat']) expect(offsetOf(file)).toEqual([0, 0]);
+  });
+
   it('keeps a converted brick inside its cells, studs on top', () => {
     const result = convertPart('3001.dat', flattener);
     if (!result.ok) throw new Error('3001.dat was skipped');

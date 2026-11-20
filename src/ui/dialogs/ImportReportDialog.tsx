@@ -18,7 +18,7 @@ const LEFT_OUT: Readonly<Record<LeftOutReason, { readonly title: string; readonl
     title: 'On their side or at an angle',
     why: 'BrickBench builds parts upright and turns them in quarter turns, so parts on their side, upside down or at an angle stay out.',
   },
-  'off-grid': { title: 'Between studs', why: 'These sit between studs or plates, as on jumper plates, hinges and Technic pins.' },
+  'off-grid': { title: 'Between studs', why: 'These sit off the grid BrickBench builds on (whole or half studs, whole plates), as parts on hinges and Technic pins can.' },
   overlapping: { title: 'Overlapping', why: 'On the grid these would overlap parts already in, which BrickBench doesn’t allow.' },
   outside: { title: 'Outside the building area', why: 'These lie beyond the building area.' },
 };
@@ -63,7 +63,7 @@ function Group({ title, why, rows }: { readonly title: string; readonly why: str
 function changes(plain: readonly PartTally[], moved: readonly PartTally[], squared: readonly PartTally[], recoloured: readonly Row[]) {
   return [
     { key: 'squared', title: 'Turned square', why: 'Submodels stood at an angle for show, turned to the nearest quarter turn.', rows: squared },
-    { key: 'moved', title: 'Lined up', why: 'Submodels built a little off the rest, moved up to half a stud or plate to line up.', rows: moved },
+    { key: 'moved', title: 'Lined up', why: 'Submodels built a little off the rest, moved up to a quarter stud or half a plate to line up.', rows: moved },
     { key: 'plain', title: 'Came in plainer', why: 'Printed and stickered parts the library lacks, built without their print or stickers, or with less of them.', rows: plain },
     { key: 'recoloured', title: 'Nearest colours', why: 'Colours BrickBench doesn’t have, built in the nearest it does.', rows: recoloured },
   ].filter((change) => change.rows.length > 0);

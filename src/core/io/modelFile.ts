@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { DEFAULT_COLOR_ID, getColor } from '../colors';
-import { GRID_LIMIT, MAX_LAYER, normalizeRotation } from '../grid';
+import { GRID_LIMIT, MAX_LAYER, isStudPosition, normalizeRotation } from '../grid';
 import type { IdFactory } from '../model/ids';
 import { createOccupancy, isOutOfBounds } from '../model/spatial';
 import { allBricks, modelFromBricks } from '../model/model';
@@ -31,7 +31,8 @@ export interface ModelDocument {
 
 export const DEFAULT_SCENE: SceneSettings = { baseplateSize: 32, baseplateColor: 2 };
 
-const coord = z.number().int().min(-GRID_LIMIT).max(GRID_LIMIT);
+/** Whole studs, or half a stud over (see STUD_STEP). */
+const coord = z.number().min(-GRID_LIMIT).max(GRID_LIMIT).refine(isStudPosition, 'not on a whole or half stud');
 
 const brickSchema = z.object({
   part: z.string().min(1).max(64),

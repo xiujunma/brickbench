@@ -65,9 +65,16 @@ describe('fitPart', () => {
     expect(fit.offset[0]).toBeCloseTo(0, 5);
   });
 
-  it('leaves half-offset studs alone, as on a jumper plate', () => {
+  it('leaves half-offset studs alone, as on a jumper plate, and says where they stand', () => {
     const fit = fitPart([-1, 0, -0.5], [1, 0.4, 0.5], [[0, 0.4, 0]]);
     expect(fit.offset[0]).toBeCloseTo(0, 5);
+    // between the two cells along X, on the one cell's centre along Z
+    expect(fit.studOffset).toEqual([0.5, 0]);
+    // a 2 × 2 plate with one stud in the middle: half a stud over both ways
+    expect(fitPart([-1, 0, -1], [1, 0.4, 1], [[0, 0.4, 0]]).studOffset).toEqual([0.5, 0.5]);
+    // studs on cells, and no studs at all
+    expect(fitPart([-2, -1.2, -1], [2, 0, 1], [[-1.5, 0, -0.5], [0.5, 0, 0.5]]).studOffset).toEqual([0, 0]);
+    expect(fitPart([-0.6, 0, -0.6], [0.6, 1.35, 0.6], []).studOffset).toEqual([0, 0]);
   });
 
   it('flags bodies that do not land on whole studs and plates, giving tall tops another plate', () => {

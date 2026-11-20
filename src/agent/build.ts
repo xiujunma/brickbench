@@ -5,7 +5,7 @@
  */
 import { GRID_LIMIT, MAX_LAYER, normalizeRotation } from '../core/grid';
 import { MAX_BRICKS } from '../core/io/modelFile';
-import { brickCells } from '../core/model/geometry';
+import { brickCellQuarters } from '../core/model/geometry';
 import type { IdFactory } from '../core/model/ids';
 import { addBricks, allBricks, emptyModel, recolorBricks, removeBricks as withoutBricks, replaceBricks } from '../core/model/model';
 import { isOutOfBounds, type SpatialIndex } from '../core/model/spatial';
@@ -48,14 +48,17 @@ function candidate(spec: BrickSpec, context: BuildContext): Brick | string {
   return isOutOfBounds(brick, context.lookup) ? OUT_OF_BOUNDS : brick;
 }
 
-const cellKey = (x: number, y: number, z: number): string => `${x},${y},${z}`;
+/** The quarters of a cell a brick fills (see brickCellQuarters), each as a key. */
+function quarterKeys(x: number, y: number, z: number, mask: number): string[] {
+  return [0, 1, 2, 3].filter((q) => mask & (1 << q)).map((q) => `${x},${y},${z},${q}`);
+}
 
 /** What a new brick would overlap: a brick in the model, or one placed earlier in the same call. */
 function overlap(brick: Brick, model: Model, index: SpatialIndex, claimed: ReadonlyMap<string, number>, lookup: PartLookup): string | null {
-  for (const [x, y, z] of brickCells(brick, lookup)) {
-    const owner = index.owner(x, y, z);
+  for (const [x, y, z, mask] of brickCellQuarters(brick, lookup)) {
+    const [owner] = index.ownersIn(x, y, z, mask);
     if (owner !== undefined) return `overlaps brick ${describeBrick(model, owner, lookup)}`;
-    const earlier = claimed.get(cellKey(x, y, z));
+    const earlier = quarterKeys(x, y, z, mask).map((key) => claimed.get(key)).find((at) => at !== undefined);
     if (earlier !== undefined) return `overlaps brick #${earlier} of this call`;
   }
   return null;
@@ -68,9 +71,10 @@ function overlap(brick: Brick, model: Model, index: SpatialIndex, claimed: Reado
  */
 function neighbours(brick: Brick, index: SpatialIndex, lookup: PartLookup): string[] {
   const found = new Set<string>();
-  for (const [x, y, z] of brickCells(brick, lookup)) {
-    for (const owner of [index.owner(x, y - 1, z), index.owner(x, y + 1, z)]) {
-      if (owner !== undefined && owner !== brick.id) found.add(owner);
+  // the same quarters below and above: bricks half a stud over join only where they overlap
+  for (const [x, y, z, mask] of brickCellQuarters(brick, lookup)) {
+    for (const owner of [...index.ownersIn(x, y - 1, z, mask), ...index.ownersIn(x, y + 1, z, mask)]) {
+      if (owner !== brick.id) found.add(owner);
     }
   }
   return [...found];
@@ -124,7 +128,7 @@ export function placeBricks(model: Model, input: ToolInput<'place_bricks'>, cont
       rejected.push({ index: i, reason });
       return;
     }
-    for (const [x, y, z] of brickCells(brick, lookup)) claimed.set(cellKey(x, y, z), i);
+    for (const [x, y, z, mask] of brickCellQuarters(brick, lookup)) for (const key of quarterKeys(x, y, z, mask)) claimed.set(key, i);
     placed.push({ brick, index: i });
   });
   if (placed.length === 0 || (input.all_or_nothing && rejected.length > 0)) {
@@ -197,9 +201,9 @@ export function moveBricks(
   const index = spatialIndexFor(model, lookup);
   const moving = new Set(bricks.map((b) => b.id));
   for (const brick of moved) {
-    for (const [x, y, z] of brickCells(brick, lookup)) {
-      const owner = index.owner(x, y, z);
-      if (owner !== undefined && !moving.has(owner)) {
+    for (const [x, y, z, mask] of brickCellQuarters(brick, lookup)) {
+      const owner = index.ownersIn(x, y, z, mask).find((id) => !moving.has(id));
+      if (owner !== undefined) {
         throw new BuildError(`Nothing moved: brick ${brick.id} would overlap brick ${describeBrick(model, owner, lookup)}.`);
       }
     }

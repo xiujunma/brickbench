@@ -53,6 +53,12 @@ export interface PartDef {
   readonly keywords: readonly string[];
   /** A printed or stickered library part. */
   readonly printed?: boolean | undefined;
+  /**
+   * How far off the grid its top studs sit along its own X and Z, in studs:
+   * half a stud along a jumper plate, so what goes on it sits half a stud
+   * over. Absent, its studs stand on cells.
+   */
+  readonly studOffset?: readonly [number, number] | undefined;
 }
 
 export type PartLookup = (id: string) => PartDef | undefined;

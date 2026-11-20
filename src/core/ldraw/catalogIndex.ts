@@ -9,6 +9,8 @@ const size = z.number().int().min(1).max(256);
 const cell = z.number().int().min(0).max(1023);
 /** An LDraw part number as the library writes it: lower case, as in "3001" or "3040b". */
 const partNumber = z.string().regex(/^[0-9a-z_-]{1,40}$/);
+/** How far a part's studs sit off the grid: not at all, or half a stud. */
+const studOffset = z.union([z.literal(0), z.literal(0.5)]);
 
 /** A box that holds at least one cell and stays inside the part's own box. */
 function fitsPart([x0, y0, z0, x1, y1, z1]: SolidBox, { w, d, h }: { readonly w: number; readonly d: number; readonly h: number }): boolean {
@@ -30,6 +32,7 @@ const entrySchema = z
     solids: z.array(z.tuple([cell, cell, cell, cell, cell, cell])).min(1).max(MAX_SOLIDS).optional(),
     printed: z.literal(true).optional(),
     base: partNumber.optional(),
+    studOffset: z.tuple([studOffset, studOffset]).optional(),
   })
   .refine((entry) => (entry.solids ?? []).every((box) => fitsPart(box, entry)), {
     message: 'a part fills cells outside its own box',
@@ -71,5 +74,6 @@ export function toPartDef(entry: LDrawIndexEntry): PartDef {
     ldraw: { file: `${entry.id}.dat`, origin: entry.origin },
     keywords: [entry.category.toLowerCase(), ...(entry.keywords ?? [])],
     ...(entry.printed ? { printed: true } : {}),
+    ...(entry.studOffset ? { studOffset: entry.studOffset } : {}),
   };
 }
