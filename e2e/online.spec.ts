@@ -1,6 +1,9 @@
 import { expect, test, type Page } from './fixtures';
 import { counts, freshEditor, viewportCentre } from './helpers';
 
+/** A save online draws the model's picture first: under software graphics, with two browsers open, that takes a while. */
+const SAVED = { timeout: 30_000 };
+
 /**
  * Accounts, models kept online and the gallery, against the test API
  * (server/local.ts, started by playwright.config.ts): it lets anyone sign in
@@ -63,7 +66,7 @@ test.describe('models online', () => {
     await build(page, 1);
     await nameModel(page, 'Boathouse');
     await fileMenu(page, 'Save online');
-    await expect(page.getByText('Saved “Boathouse” online.')).toBeVisible();
+    await expect(page.getByText('Saved “Boathouse” online.')).toBeVisible(SAVED);
 
     await fileMenu(page, 'Your models online…');
     const card = yourModels(page).getByRole('listitem', { name: 'Boathouse' });
@@ -88,7 +91,7 @@ test.describe('models online', () => {
       await other.mouse.click(centre.x + 150, centre.y + 40);
       await expect(counts(other)).toHaveText('2 bricks');
       await fileMenu(other, 'Save online');
-      await expect(other.getByText('Saved “Boathouse” online.')).toBeVisible();
+      await expect(other.getByText('Saved “Boathouse” online.')).toBeVisible(SAVED);
     } finally {
       await laptop.close();
     }
@@ -102,7 +105,7 @@ test.describe('models online', () => {
     const confirm = await asked;
     expect(confirm.message()).toContain('was saved online from somewhere else since you opened it here');
     await confirm.accept();
-    await expect(page.getByText('Saved “Boathouse” online.').last()).toBeVisible();
+    await expect(page.getByText('Saved “Boathouse” online.').last()).toBeVisible(SAVED);
     await fileMenu(page, 'Your models online…');
     await expect(yourModels(page).getByRole('listitem', { name: 'Boathouse' })).toHaveCount(2);
     await expect(yourModels(page).getByRole('listitem').filter({ hasText: '2 bricks' })).toHaveCount(2);
@@ -119,7 +122,7 @@ test.describe('models online', () => {
     await build(page, 2);
     await nameModel(page, title);
     await fileMenu(page, 'Save online');
-    await expect(page.getByText(`Saved “${title}” online.`)).toBeVisible();
+    await expect(page.getByText(`Saved “${title}” online.`)).toBeVisible(SAVED);
     await fileMenu(page, 'Your models online…');
     const mine = yourModels(page).getByRole('listitem', { name: title });
     await mine.getByRole('button', { name: 'Publish' }).click();
@@ -192,7 +195,7 @@ test.describe('models online', () => {
     await signedIn(page, ada, 'Ada');
     await build(page, 1);
     await fileMenu(page, 'Save online');
-    await expect(page.getByText('Saved “Untitled model” online.')).toBeVisible();
+    await expect(page.getByText('Saved “Untitled model” online.')).toBeVisible(SAVED);
     await page.getByRole('button', { name: 'Account: Ada' }).click();
     await page.getByRole('menuitem', { name: 'Account…' }).click();
     const account = page.getByRole('dialog', { name: 'Your account' });
