@@ -31,11 +31,22 @@ const CORNER_PLATE = ['0 Corner Plate', '0 BFC CERTIFY CCW', ...ldrawBox([-20, 0
 describe('converting a part', () => {
   const source = memorySource({
     'brick.dat': BRICK,
+    // the 1 × 1 brick with a stud on its LDraw -z side, 10 LDU under its top, as 87087
+    'side.dat': `${BRICK}\n1 16 0 10 -10 1 0 0 0 0 -1 0 1 0 stud.dat`,
     'stud.dat': STUD,
     'twotone.dat': `${BRICK}\n3 4 0 0 0 1 0 0 0 0 1`,
     'empty.dat': '0 Nothing to see\n0 BFC CERTIFY CCW',
   });
   const flattener = new Flattener(source);
+
+  it('keeps the studs on a part’s sides, where they stand on the placed part and the way they face', () => {
+    const result = convertPart('side.dat', flattener);
+    if (!result.ok) throw new Error(result.reason);
+    // y up from the brick's bottom: 14 LDU, 0.7 studs; LDraw's -z is our +z, the front of a 1 × 1 cell, half a stud out
+    expect(result.sideStuds).toEqual([[0, 0.7, 0.5, 4]]);
+    const plain = convertPart('brick.dat', flattener);
+    expect(plain.ok && plain.sideStuds).toEqual([]);
+  });
 
   it('turns LDraw coordinates into studs with y up', () => {
     expect(toEditor([20, -24, 40])).toEqual([1, 1.2, -2]);

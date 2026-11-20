@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'bun:test';
 import { getPart } from '../parts/catalog';
 import { PLATE_HEIGHT } from '../grid';
+import { facingOf } from '../orientation';
 import type { PartDef } from '../parts/types';
 import {
   WHOLE_CELL,
   brickCellBox,
   brickCellQuarters,
   brickCells,
+  brickLduSolids,
+  brickOrigin,
   brickWorldBoxes,
   groupCellBox,
+  isOnGrid,
   rotateGroup,
+  turnedSize,
 } from './geometry';
 import { makeBrick } from './testUtils';
 import type { Brick } from './types';
@@ -143,5 +148,38 @@ describe('bricks half a stud over', () => {
       [1, 0, 0, 0b0001],
     ]);
     expect([...brickCellQuarters(makeBrick({ partId: 'plate-1x1' }), getPart)]).toEqual([[0, 0, 0, WHOLE_CELL]]);
+  });
+});
+
+describe('bricks on their sides', () => {
+  // a 2 × 4 brick tipped onto its back: its top faces +Z, so its 3 plates of height lie along Z
+  const onBack = makeBrick({ id: 'back', r: 16 });
+
+  it('fill the box the part fills once turned, in studs and plates', () => {
+    expect(turnedSize(getPart('brick-2x4') as PartDef, 16)).toEqual({ w: 4, h: 5, d: 1.2 });
+    expect(brickCellBox(onBack, lookup)).toEqual({ x0: 0, y0: 0, z0: 0, x1: 4, y1: 5, z1: 1.2 });
+    expect(brickLduSolids(onBack, lookup)).toEqual([{ x0: 0, y0: 0, z0: 0, x1: 80, y1: 40, z1: 24 }]);
+    // its mesh turns about the middle of its footprint's bottom, which now stands at the middle of the box's back face
+    expect(brickOrigin(onBack, lookup)).toEqual({ x: 2, y: 1, z: 0 });
+  });
+
+  it('are on the grid only when upright, on whole or half studs and whole plates', () => {
+    expect(isOnGrid(makeBrick())).toBe(true);
+    expect(isOnGrid(makeBrick({ x: 0.5, z: -1.5 }))).toBe(true);
+    expect(isOnGrid(onBack)).toBe(false);
+    expect(isOnGrid(makeBrick({ x: 0.35 }))).toBe(false);
+    expect(isOnGrid(makeBrick({ y: 0.5 }))).toBe(false);
+  });
+
+  it('turn with their group, their top turning with them', () => {
+    const group = [makeBrick({ id: 'base', partId: 'brick-2x2' }), { ...onBack, x: 0, y: 3, z: 0 }];
+    const once = rotateGroup(group, lookup, 1);
+    // a quarter turn about the vertical (+X towards -Z) takes a top facing +Z round to face +X
+    expect(facingOf(once[1]?.r ?? 0)).toBe('+x');
+    expect(brickCellBox(once[1] as Brick, lookup)).toMatchObject({ y0: 3, y1: 8 });
+    let turned: readonly Brick[] = group;
+    for (let i = 0; i < 4; i++) turned = rotateGroup(turned, lookup, 1);
+    expect(turned).toEqual(group);
+    expect(rotateGroup(rotateGroup(group, lookup, -1), lookup, 1)).toEqual(group);
   });
 });

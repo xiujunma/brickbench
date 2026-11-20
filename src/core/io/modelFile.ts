@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DEFAULT_COLOR_ID, getColor } from '../colors';
-import { GRID_LIMIT, MAX_LAYER, isStudPosition, normalizeRotation } from '../grid';
+import { GRID_LIMIT, LDU_PER_PLATE_STEP, LDU_PER_STUD_STEP, MAX_LAYER, onLduLattice, snapToLdu } from '../grid';
+import { ORIENTATIONS } from '../orientation';
 import type { IdFactory } from '../model/ids';
 import { createOccupancy, isOutOfBounds } from '../model/spatial';
 import { allBricks, modelFromBricks } from '../model/model';
@@ -31,16 +32,34 @@ export interface ModelDocument {
 
 export const DEFAULT_SCENE: SceneSettings = { baseplateSize: 32, baseplateColor: 2 };
 
-/** Whole studs, or half a stud over (see STUD_STEP). */
-const coord = z.number().min(-GRID_LIMIT).max(GRID_LIMIT).refine(isStudPosition, 'not on a whole or half stud');
+/**
+ * Studs along x and z, plates along y. Upright bricks mostly stand on whole
+ * or half studs and whole plates; parts on their sides, and parts built on
+ * them, may stand on any whole LDraw unit (a twentieth of a stud, an eighth
+ * of a plate).
+ */
+const coord = z
+  .number()
+  .min(-GRID_LIMIT)
+  .max(GRID_LIMIT)
+  .refine((value) => onLduLattice(value, LDU_PER_STUD_STEP), 'not on a whole LDraw unit');
 
 const brickSchema = z.object({
   part: z.string().min(1).max(64),
   color: z.number().int().min(0).max(100_000),
   x: coord,
-  y: z.number().int().min(0).max(MAX_LAYER),
+  y: z
+    .number()
+    .min(0)
+    .max(MAX_LAYER)
+    .refine((value) => onLduLattice(value, LDU_PER_PLATE_STEP), 'not on a whole LDraw unit'),
   z: coord,
-  r: z.number().int().min(0).max(3),
+  /** 0 to 3 upright, turned that many quarter turns; 4 to 23 on a side or upside down (see ../orientation). */
+  r: z
+    .number()
+    .int()
+    .min(0)
+    .max(ORIENTATIONS - 1),
 });
 
 const settingsSchema = z.object({
@@ -141,10 +160,11 @@ export function collectBricks(records: readonly BrickRecord[], lookup: PartLooku
       id: '',
       partId: record.part,
       colorId: knownColor ? record.color : DEFAULT_COLOR_ID,
-      x: record.x,
-      y: record.y,
-      z: record.z,
-      r: normalizeRotation(record.r),
+      // exactly on the lattice, without the floating-point noise a file may carry
+      x: snapToLdu(record.x, LDU_PER_STUD_STEP),
+      y: snapToLdu(record.y, LDU_PER_PLATE_STEP),
+      z: snapToLdu(record.z, LDU_PER_STUD_STEP),
+      r: record.r,
     };
     if (isOutOfBounds(candidate, lookup)) {
       skipped.outside += 1;

@@ -23,6 +23,7 @@ const MOUSE: readonly Row[] = [
 const KEYBOARD: readonly Row[] = [
   ['Select · Build · Paint · Erase', keys('V', 'B', 'P', 'E')],
   ['Rotate (back)', keys('R', '⇧R')],
+  ['Tip over, on a side or upside down (back)', keys('T', '⇧T')],
   ['Nudge selection', keys('←', '↑', '→', '↓')],
   ['Raise / lower a plate', keys('⇧↑', '⇧↓')],
   ['Delete', keys('Del')],

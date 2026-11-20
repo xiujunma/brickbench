@@ -55,7 +55,7 @@ describe('model files', () => {
     JSON.stringify({ format: 'brickbench.model', version: 1, name: 'x', bricks, ...(settings ? { settings } : {}) });
   const record = (part: string, x: number, y: number, z: number) => ({ part, color: 4, x, y, z, r: 0 });
 
-  it('keeps bricks half a stud over, side by side, and refuses any other fraction of a stud', () => {
+  it('keeps bricks half a stud over, side by side, and on any whole LDraw unit, but not between', () => {
     const halves = file([record('plate-1x2', 0.5, 0, -1.5), record('plate-1x2', 2.5, 0, -1.5), record('plate-1x2', 2, 0, -1.5)]);
     const result = parseDocument(halves, getPart, ids());
     if (!result.ok) throw new Error(result.error);
@@ -66,9 +66,25 @@ describe('model files', () => {
     ]);
     expect(result.value.warnings).toEqual(['Skipped 1 brick that overlapped another.']);
     expect(JSON.parse(serializeDocument(result.value.doc)).bricks.map((b: { x: number }) => b.x)).toEqual([0.5, 2.5]);
-    for (const off of [0.25, 1 / 3]) expect(parseDocument(file([record('plate-1x2', off, 0, 0)]), getPart, ids()).ok).toBe(false);
-    // heights stay in whole plates
-    expect(parseDocument(file([record('plate-1x2', 0, 0.5, 0)]), getPart, ids()).ok).toBe(false);
+    // off whole and half studs and plates, a brick may stand on any whole LDraw unit, as parts built on turned ones do
+    const lattice = parseDocument(file([record('plate-1x2', 0.25, 0.5, 0.05)]), getPart, ids());
+    if (!lattice.ok) throw new Error(lattice.error);
+    expect(allBricks(lattice.value.doc.model).map((b) => [b.x, b.y, b.z])).toEqual([[0.25, 0.5, 0.05]]);
+    for (const [x, y] of [
+      [1 / 3, 0],
+      [0, 1 / 3],
+    ] as const) {
+      expect(parseDocument(file([record('plate-1x2', x, y, 0)]), getPart, ids()).ok).toBe(false);
+    }
+  });
+
+  it('keeps parts on their sides and upside down, and only the 24 ways a part can face', () => {
+    const turned = { part: 'brick-2x4', color: 4, x: 0, y: 0, z: 0, r: 16 };
+    const result = parseDocument(file([turned, { ...turned, r: 6, z: 3 }]), getPart, ids());
+    if (!result.ok) throw new Error(result.error);
+    expect(allBricks(result.value.doc.model).map((b) => b.r)).toEqual([16, 6]);
+    expect(JSON.parse(serializeDocument(result.value.doc)).bricks.map((b: { r: number }) => b.r)).toEqual([16, 6]);
+    expect(parseDocument(file([{ ...turned, r: 24 }]), getPart, ids()).ok).toBe(false);
   });
 
   it('drops bricks that overlap earlier ones', () => {

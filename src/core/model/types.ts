@@ -1,9 +1,12 @@
-import type { Rotation } from '../grid';
 import type { InstructionPlan } from '../instructions/plan';
+import type { Orientation } from '../orientation';
 
 /**
- * A placed part. (x, z) is the minimum corner of its rotated footprint in
- * studs and y is its bottom layer in plates, so every brick sits on the grid.
+ * A placed part. (x, y, z) is the minimum corner of the box it fills, x and
+ * z in studs and y in plates, and r is the way it faces (0 to 3: upright,
+ * turned that many quarter turns; see ../orientation). Upright bricks stand
+ * on whole or half studs and whole plates; parts on their sides, and parts
+ * built on them, may sit anywhere on the LDraw unit lattice.
  */
 export interface Brick {
   readonly id: string;
@@ -12,7 +15,7 @@ export interface Brick {
   readonly x: number;
   readonly y: number;
   readonly z: number;
-  readonly r: Rotation;
+  readonly r: Orientation;
 }
 
 export interface Model {

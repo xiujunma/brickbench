@@ -1,5 +1,6 @@
-import { LDU_PER_UNIT, cleanZero, rotatePoint } from '../grid';
+import { LDU_PER_UNIT, cleanZero } from '../grid';
 import { brickOrigin } from '../model/geometry';
+import { rotateVector, turnOf, type Orientation } from '../orientation';
 import { allBricks } from '../model/model';
 import type { Model } from '../model/types';
 import type { PartLookup } from '../parts/types';
@@ -11,6 +12,14 @@ export interface LDrawExport {
 }
 
 const NEWLINE = '\r\n';
+
+/** LDraw's axes are ours with y and z flipped, so a turn reads as the same turn with those flips on either side. */
+const FLIP = [1, -1, -1] as const;
+
+/** An orientation's rotation as LDraw writes it: row by row, in LDraw's own axes. */
+export function ldrawTurn(orientation: Orientation): number[] {
+  return turnOf(orientation).map((value, i) => cleanZero(value * (FLIP[Math.floor(i / 3)] ?? 1) * (FLIP[i % 3] ?? 1)));
+}
 
 function formatNumber(n: number): string {
   return String(cleanZero(Math.round(n * 1e4) / 1e4));
@@ -51,13 +60,9 @@ export function toLDraw(name: string, model: Model, lookup: PartLookup): LDrawEx
     }
     const centre = brickOrigin(brick, lookup);
     const [ox, oy, oz] = part.ldraw.origin;
-    const [rx, rz] = rotatePoint(ox, oz, brick.r);
-    const world = { x: centre.x + rx, y: centre.y + oy, z: centre.z + rz };
-    const angle = (brick.r * Math.PI) / 2;
-    const c = Math.round(Math.cos(angle));
-    const s = Math.round(Math.sin(angle));
-    // our turn about +Y by θ is a turn by -θ in LDraw's flipped frame
-    const matrix = [c, 0, -s, 0, 1, 0, s, 0, c];
+    const turned = rotateVector(brick.r, { x: ox, y: oy, z: oz });
+    const world = { x: centre.x + turned.x, y: centre.y + turned.y, z: centre.z + turned.z };
+    const matrix = ldrawTurn(brick.r);
     const position = [world.x, -world.y, -world.z].map((v) => v * LDU_PER_UNIT);
     lines.push(
       ['1', brick.colorId, ...position, ...matrix].map((v) => (typeof v === 'number' ? formatNumber(v) : v)).join(' ') +

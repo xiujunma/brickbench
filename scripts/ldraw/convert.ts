@@ -1,4 +1,5 @@
-import { MAIN_COLOUR, type SolidBox } from '../../src/core/ldraw/format.ts';
+import { MAIN_COLOUR, type SideStudEntry, type SolidBox } from '../../src/core/ldraw/format.ts';
+import { FACINGS, facingOfVector } from '../../src/core/orientation.ts';
 import { filledCells } from './cells.ts';
 import { colourFor, type ColourTable } from './colours.ts';
 import type { Flattener, FlatTriangle } from './flatten.ts';
@@ -18,6 +19,8 @@ export type Conversion =
       readonly fit: PartFit;
       /** The cells the part fills, when it leaves some of its box empty; null when it fills it all. */
       readonly solids: readonly SolidBox[] | null;
+      /** Its studs that face sideways or down, where they stand on the placed part (see SideStudEntry). */
+      readonly sideStuds: readonly SideStudEntry[];
       readonly triangles: number;
     }
   | { readonly ok: false; readonly reason: 'empty' | 'too detailed' };
@@ -108,5 +111,11 @@ export function convertPart(file: string, flattener: Flattener, colours: ColourT
   const placed = part.triangles.map((t) => ({ a: place(t.a), b: place(t.b), c: place(t.c), doubleSided: t.doubleSided, color: t.color }));
   const mesh = buildPartMesh(placed, colours);
   if (mesh.positions.length / 3 > MAX_VERTICES) return { ok: false, reason: 'too detailed' };
-  return { ok: true, mesh, fit, solids: filledCells(placed, fit), triangles: part.triangles.length };
+  const sideStuds = part.sideStuds.flatMap((stud): SideStudEntry[] => {
+    const [x, y, z] = place(stud.at);
+    const [dx, dy, dz] = toEditor(stud.dir).map((v) => v * LDU);
+    const facing = facingOfVector({ x: dx ?? 0, y: dy ?? 0, z: dz ?? 0 });
+    return facing && facing !== '+y' ? [[x, y, z, FACINGS.indexOf(facing)]] : [];
+  });
+  return { ok: true, mesh, fit, solids: filledCells(placed, fit), sideStuds, triangles: part.triangles.length };
 }

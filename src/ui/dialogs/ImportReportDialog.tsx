@@ -15,10 +15,9 @@ const LEFT_OUT: Readonly<Record<LeftOutReason, { readonly title: string; readonl
   },
   shapes: { title: 'Drawing shapes', why: 'Shapes the model draws itself, such as strings and wires. They aren’t LEGO parts.' },
   turned: {
-    title: 'On their side or at an angle',
-    why: 'BrickBench builds parts upright and turns them in quarter turns, so parts on their side, upside down or at an angle stay out.',
+    title: 'At an angle',
+    why: 'BrickBench builds parts square to the grid, upright, on their sides or upside down, so parts turned at an angle, as on hinges, stay out.',
   },
-  'off-grid': { title: 'Between studs', why: 'These sit off the grid BrickBench builds on (whole or half studs, whole plates), as parts on hinges and Technic pins can.' },
   overlapping: { title: 'Overlapping', why: 'On the grid these would overlap parts already in, which BrickBench doesn’t allow.' },
   outside: { title: 'Outside the building area', why: 'These lie beyond the building area.' },
 };

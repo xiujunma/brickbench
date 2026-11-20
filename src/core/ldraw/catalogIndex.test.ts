@@ -61,8 +61,19 @@ describe('library index', () => {
     expect(() => parseLDrawIndex({ version: 6, generated: '', parts: [{ ...jumper, studOffset: [0.25, 0] }] })).toThrow(/damaged/);
   });
 
+  it('reads the studs on a part’s sides (version 7), each facing away from its body', () => {
+    const sideStud: LDrawIndexEntry = { id: '87087', name: 'Brick 1 × 1 with Stud on 1 Side', category: 'Brick', w: 1, d: 1, h: 3, origin: [0, 1.2, 0], snug: true, sideStuds: [[0, 0.7, -0.5, 5]] };
+    const index = parseLDrawIndex({ version: 7, generated: '', parts: [sideStud, BRICK] });
+    expect(toPartDef(index.parts[0] as LDrawIndexEntry).sideStuds).toEqual([{ at: { x: 0, y: 0.7, z: -0.5 }, facing: '-z' }]);
+    expect(toPartDef(BRICK)).not.toHaveProperty('sideStuds');
+    // facing up is what top studs do, and there are only six ways to face
+    for (const facing of [0, 6]) {
+      expect(() => parseLDrawIndex({ version: 7, generated: '', parts: [{ ...sideStud, sideStuds: [[0, 0.7, -0.5, facing]] }] })).toThrow(/damaged/);
+    }
+  });
+
   it('rejects damaged or unexpected indexes with a readable message', () => {
-    expect(() => parseLDrawIndex({ version: 7, generated: '', parts: [] })).toThrow(/damaged/);
+    expect(() => parseLDrawIndex({ version: 8, generated: '', parts: [] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, id: '../evil' }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, w: 0 }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex('nope')).toThrow(/damaged/);

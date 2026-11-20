@@ -4,7 +4,7 @@ import { createIdFactory } from '../core/model/ids';
 import { addBricks, allBricks, emptyModel } from '../core/model/model';
 import type { Brick, Model } from '../core/model/types';
 import { getPart } from '../core/parts/catalog';
-import { clearModel, describeModel, moveBricks, paintBricks, placeBricks, removeBricks, type BuildContext } from './build';
+import { clearModel, describeModel, floatingBricks, moveBricks, paintBricks, placeBricks, removeBricks, type BuildContext } from './build';
 import { parseToolInput, type ToolInput, type ToolName } from './protocol';
 
 const context = (maxBricks?: number): BuildContext => ({ lookup: getPart, nextId: createIdFactory('t'), ...(maxBricks ? { maxBricks } : {}) });
@@ -326,5 +326,27 @@ describe('building half a stud over', () => {
     const model = modelOf(brick('a', 'plate-1x2', 0.5, 0, 0), brick('b', 'plate-1x2', 3, 0, 0));
     expect(allBricks(moveBricks(model, input('move_bricks', { ids: ['a'], dx: -2 }), getPart).next).map((b) => b.x)).toEqual([-1.5, 3]);
     expect(() => moveBricks(model, input('move_bricks', { ids: ['a'], dx: 1 }), getPart)).toThrow(/overlap brick/);
+  });
+});
+
+describe('parts on their sides', () => {
+  // a 1 × 1 plate on its back (r 16), against the front of a 1 × 1 brick: it fills z 1 to 1.4, from half a plate up
+  const wall = (): Model => modelOf(brick('wall', 'brick-1x1', 0, 0, 0), { ...brick('side', 'plate-1x1', 0, 0.5, 1), r: 16 });
+
+  it('are held up by what they stand against, as on a side stud', () => {
+    expect(floatingBricks(wall(), getPart)).toEqual(new Set());
+    // away from the wall, with nothing to stand on, it floats
+    expect(floatingBricks(modelOf({ ...brick('side', 'plate-1x1', 0, 2, 4), r: 16 }), getPart)).toEqual(new Set(['side']));
+    expect(describeModel(wall(), 'w', input('get_model', {}), getPart).bricks.map((b) => b.r)).toEqual([0, 16]);
+  });
+
+  it('are refused where an upright part would fill them, and moved only where they fit exactly', () => {
+    const { result } = placeBricks(wall(), input('place_bricks', { bricks: [{ part: 'plate-1x1', color: 4, x: 0, y: 1, z: 1 }] }), context());
+    expect(result.rejected).toEqual([{ index: 0, reason: expect.stringMatching(/overlaps brick/) }]);
+    expect(() => moveBricks(wall(), input('move_bricks', { ids: ['side'], dz: -1 }), getPart)).toThrow(/would overlap brick/);
+    expect(allBricks(moveBricks(wall(), input('move_bricks', { ids: ['side'], dx: 2 }), getPart).next).map((b) => [b.x, b.r])).toEqual([
+      [0, 0],
+      [2, 16],
+    ]);
   });
 });

@@ -4,7 +4,8 @@ import { counts, freshEditor } from './helpers';
 
 /**
  * A small LDraw model: a red and a yellow 2 × 4 stacked, a blue 2 × 2 beside
- * them turned a quarter, a brick upside down, and a part BrickBench lacks.
+ * them turned a quarter, a brick upside down beyond it, a brick at an angle
+ * and a part BrickBench lacks.
  */
 const WALL = [
   '0 Little Wall',
@@ -12,7 +13,8 @@ const WALL = [
   '1 4 0 -24 0 1 0 0 0 1 0 0 0 1 3001.dat',
   '1 14 0 -48 0 1 0 0 0 1 0 0 0 1 3001.dat',
   '1 1 60 -24 0 0 0 -1 0 1 0 1 0 0 3003.dat',
-  '1 4 0 -72 0 1 0 0 0 -1 0 0 0 -1 3001.dat',
+  '1 2 140 0 0 1 0 0 0 -1 0 0 0 -1 3001.dat',
+  '1 4 0 -72 0 0.7071 0 0.7071 0 1 0 -0.7071 0 0.7071 3001.dat',
   '1 4 0 -96 0 1 0 0 0 1 0 0 0 1 u9241.dat',
 ].join('\r\n');
 
@@ -39,13 +41,14 @@ test.describe('opening LDraw and Studio files', () => {
     await freshEditor(page);
     await openFile(page, 'wall.ldr', Buffer.from(WALL));
 
-    await expect(page.getByText('Opened “Little Wall”: 3 of 5 parts came in.')).toBeVisible();
-    await expect(counts(page)).toHaveText('3 bricks');
+    // the brick upside down comes in, turned; the one at an angle does not
+    await expect(page.getByText('Opened “Little Wall”: 4 of 6 parts came in.')).toBeVisible();
+    await expect(counts(page)).toHaveText('4 bricks');
     const report = page.getByRole('dialog', { name: 'What came in' });
-    await expect(report.getByTestId('import-summary')).toHaveText('3 of 5 parts came in.');
+    await expect(report.getByTestId('import-summary')).toHaveText('4 of 6 parts came in.');
     await report.getByText('Not in BrickBench').click();
     await expect(report.getByRole('cell', { name: 'u9241' })).toBeVisible();
-    await report.getByText('On their side or at an angle').click();
+    await report.getByText('At an angle', { exact: true }).click();
     await expect(report.getByRole('cell', { name: 'Brick 2 × 4 (3001)' })).toBeVisible();
     await report.getByRole('button', { name: 'Done' }).click();
     await expect(report).toBeHidden();
@@ -62,8 +65,8 @@ test.describe('opening LDraw and Studio files', () => {
     await page.dispatchEvent('body', 'dragover', { dataTransfer });
     await page.dispatchEvent('body', 'drop', { dataTransfer });
 
-    await expect(page.getByText('Opened “Little Wall”: 3 of 5 parts came in.')).toBeVisible();
-    await expect(counts(page)).toHaveText('3 bricks');
+    await expect(page.getByText('Opened “Little Wall”: 4 of 6 parts came in.')).toBeVisible();
+    await expect(counts(page)).toHaveText('4 bricks');
   });
 
   test('opens a Studio file locked with Studio’s password', async ({ page }) => {

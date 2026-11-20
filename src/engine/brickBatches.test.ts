@@ -76,7 +76,7 @@ describe('BrickBatches looks', () => {
 
   it('outlines bricks in the looks that call for it, even after a redraw in another look', () => {
     const batches = new BrickBatches(new GeometryCache(lookup, source), new MaterialLibrary(), lookup, 'selected');
-    batches.update([brick('a', 4, 0)], [{ x: 0, y: 3, z: 0, colorId: 4 }]);
+    batches.update([brick('a', 4, 0)], [{ x: 0.5, y: 1.2, z: 0.5, r: 0, colorId: 4 }]);
     expect(outlines(batches)).toHaveLength(1);
     batches.setOutlineWidth(0.08);
     // a picture is taken without the selection look, and a mesh arriving meanwhile redraws the bricks

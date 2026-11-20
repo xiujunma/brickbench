@@ -18,6 +18,21 @@ export function isStudPosition(value: number): boolean {
   return Number.isInteger(value / STUD_STEP);
 }
 
+/** LDraw units in a stud along x and z, and in a plate along y: parts off the cell grid stand on this lattice. */
+export const LDU_PER_STUD_STEP = 20;
+export const LDU_PER_PLATE_STEP = 8;
+
+/** Whether `value`, counted in units of `ldu` LDraw units each, falls on a whole LDraw unit (floating-point noise aside). */
+export function onLduLattice(value: number, ldu: number): boolean {
+  const scaled = value * ldu;
+  return Math.abs(scaled - Math.round(scaled)) < 1e-6;
+}
+
+/** `value` moved onto the nearest whole LDraw unit, counted in units of `ldu` LDraw units each, without floating-point noise. */
+export function snapToLdu(value: number, ldu: number): number {
+  return cleanZero(Math.round(value * ldu) / ldu);
+}
+
 /** LDraw units (LDU) per world unit (one stud pitch). */
 export const LDU_PER_UNIT = 20;
 
@@ -33,11 +48,6 @@ export interface Vec3 {
   readonly z: number;
 }
 
-export interface Size2 {
-  readonly w: number;
-  readonly d: number;
-}
-
 /** Turns -0 into 0 so grid coordinates compare and serialise cleanly. */
 export function cleanZero(n: number): number {
   return n === 0 ? 0 : n;
@@ -45,46 +55,4 @@ export function cleanZero(n: number): number {
 
 export function normalizeRotation(value: number): Rotation {
   return (((Math.trunc(value) % 4) + 4) % 4) as Rotation;
-}
-
-/** Footprint of a w×d part after r quarter turns. */
-export function rotatedSize(w: number, d: number, r: Rotation): Size2 {
-  return r % 2 === 0 ? { w, d } : { w: d, d: w };
-}
-
-/**
- * Maps footprint cell (lx, lz) of a w×d part to its cell index after the part
- * turns r quarter turns about +Y (the same turn as three.js `rotation.y = r·π/2`).
- */
-export function rotateCell(
-  lx: number,
-  lz: number,
-  w: number,
-  d: number,
-  r: Rotation,
-): readonly [number, number] {
-  switch (r) {
-    case 0:
-      return [lx, lz];
-    case 1:
-      return [lz, w - 1 - lx];
-    case 2:
-      return [w - 1 - lx, d - 1 - lz];
-    case 3:
-      return [d - 1 - lz, lx];
-  }
-}
-
-/** Rotates a point on the XZ plane by r quarter turns about +Y. */
-export function rotatePoint(x: number, z: number, r: Rotation): readonly [number, number] {
-  switch (r) {
-    case 0:
-      return [x, z];
-    case 1:
-      return [z, -x];
-    case 2:
-      return [-x, -z];
-    case 3:
-      return [-z, x];
-  }
 }

@@ -4,7 +4,9 @@
  * any way; BrickBench builds upright parts, turned in quarter turns, on
  * whole or half studs (as on a jumper plate) and whole plates.
  */
-import { LDU_PER_UNIT, PLATE_HEIGHT, STUD_STEP, cleanZero, rotatePoint, rotatedSize, type Rotation } from '../../grid';
+import { LDU_PER_PLATE_STEP, LDU_PER_STUD_STEP, LDU_PER_UNIT, PLATE_HEIGHT, STUD_STEP, cleanZero, snapToLdu, type Rotation } from '../../grid';
+import { turnedCorner } from '../../model/geometry';
+import { orientationOfTurn, rotateVector, type Orientation } from '../../orientation';
 import type { PartDef } from '../../parts/types';
 import type { M3, V3 } from './read';
 
@@ -25,14 +27,16 @@ export function turnMatrix(r: Rotation): M3 {
   return [c, 0, cleanZero(-s), 0, 1, 0, s, 0, c];
 }
 
-const TURNS: readonly (readonly [Rotation, M3])[] = ([0, 1, 2, 3] as const).map((r) => [r, turnMatrix(r)]);
+/** LDraw's axes are ours with y and z flipped, so a turn reads as the same turn with those flips on either side. */
+const FLIP = [1, -1, -1] as const;
 
-/** The quarter turn a matrix makes, or null when the part is tipped over, on its side, mirrored or at an angle. */
-export function quarterTurnOf(matrix: M3): Rotation | null {
-  for (const [r, turn] of TURNS) {
-    if (turn.every((value, i) => Math.abs(value - matrix[i]!) <= MATRIX_TOLERANCE)) return r;
-  }
-  return null;
+/**
+ * Which of the 24 ways a part can face a matrix turns it, upright, on a
+ * side or upside down; null when it is at an angle or mirrored.
+ */
+export function orientationOf(matrix: M3): Orientation | null {
+  const ours = matrix.map((value, i) => value * (FLIP[Math.floor(i / 3)] ?? 1) * (FLIP[i % 3] ?? 1));
+  return orientationOfTurn(ours, MATRIX_TOLERANCE);
 }
 
 /** Where a brick's footprint corner (x, z, in studs) and bottom (y, in plates) land, before snapping to whole cells. */
@@ -43,20 +47,22 @@ export interface GridSpot {
 }
 
 /**
- * Where the brick for an LDraw placement of `part`, turned `r`, would sit.
- * LDraw's frame is ours turned half a turn about X: (x, y, z) → (x, -y, -z),
- * at 20 LDU to the stud. Null for parts without an LDraw origin.
+ * Where the brick for an LDraw placement of `part`, turned `r`, would sit:
+ * the corner of the box it fills. LDraw's frame is ours turned half a turn
+ * about X: (x, y, z) → (x, -y, -z), at 20 LDU to the stud. Null for parts
+ * without an LDraw origin.
  */
-export function gridSpotOf(part: PartDef, position: V3, r: Rotation): GridSpot | null {
+export function gridSpotOf(part: PartDef, position: V3, r: Orientation): GridSpot | null {
   const origin = part.ldraw?.origin;
   if (!origin) return null;
   const [ox, oy, oz] = origin;
-  const [rx, rz] = rotatePoint(ox, oz, r);
-  const size = rotatedSize(part.w, part.d, r);
+  // where the LDraw origin sits from the part's own (the middle of its footprint, at its bottom), once turned
+  const offset = rotateVector(r, { x: ox, y: oy, z: oz });
+  const corner = turnedCorner(part, r);
   const x = position[0] / LDU_PER_UNIT;
   const y = -position[1] / LDU_PER_UNIT;
   const z = -position[2] / LDU_PER_UNIT;
-  return { x: x - rx - size.w / 2, y: (y - oy) / PLATE_HEIGHT, z: z - rz - size.d / 2 };
+  return { x: x - offset.x + corner.x, y: (y - offset.y + corner.y) / PLATE_HEIGHT, z: z - offset.z + corner.z };
 }
 
 /** How far the grid a model was built on sits from whole cells, along each axis, in cells. */
@@ -106,6 +112,19 @@ function snapAxis(value: number, offset: number, lduPerCell: number, step = 1): 
   const shifted = value - offset;
   const place = Math.round(shifted / step) * step;
   return Math.abs(shifted - place) * lduPerCell <= GRID_TOLERANCE_LDU ? place : null;
+}
+
+/**
+ * Where a spot sits, counted along the lattice, on the nearest whole LDraw
+ * unit: where parts off the cell grid (on their sides, or between studs)
+ * stand, moved at most half an LDraw unit.
+ */
+export function snapExactly(spot: GridSpot, lattice: Lattice): GridSpot {
+  return {
+    x: snapToLdu(spot.x - lattice.x, LDU_PER_STUD_STEP),
+    y: snapToLdu(spot.y - lattice.y, LDU_PER_PLATE_STEP),
+    z: snapToLdu(spot.z - lattice.z, LDU_PER_STUD_STEP),
+  };
 }
 
 /**

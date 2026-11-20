@@ -1,3 +1,5 @@
+import type { Vec3 } from '../grid';
+import type { Facing } from '../orientation';
 /** Built-in categories, plus 'library' for parts from the shipped LDraw library. */
 export type PartCategory = 'bricks' | 'plates' | 'tiles' | 'slopes' | 'round' | 'arches' | 'library';
 
@@ -59,6 +61,14 @@ export interface PartDef {
    * over. Absent, its studs stand on cells.
    */
   readonly studOffset?: readonly [number, number] | undefined;
+  /** Studs facing sideways or down, on which parts build facing out (library parts that have them). */
+  readonly sideStuds?: readonly SideStud[] | undefined;
+}
+
+/** A stud on a part's side or underside: where its base sits, in world units from the part's origin, and which way it faces, both before the part turns. */
+export interface SideStud {
+  readonly at: Vec3;
+  readonly facing: Facing;
 }
 
 export type PartLookup = (id: string) => PartDef | undefined;

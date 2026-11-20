@@ -9,6 +9,7 @@ import type { PartLookup } from '../core/parts/types';
 import { materialize, payloadFromPart, reuseIds, type Payload } from '../core/placement/payload';
 import { pickBricks, type Hit } from '../core/placement/ray';
 import { GROUND_GRIDS, gridsOf, offsetPhase } from '../core/placement/grids';
+import { attachToStuds } from '../core/placement/attach';
 import { solvePlacement, type PlacementResult } from '../core/placement/solver';
 import { BrickBatches } from '../engine/brickBatches';
 import { exportGlb } from '../engine/exporters';
@@ -274,8 +275,14 @@ export class EditorController {
     if (!hit) return null;
     const model = this.state.history.present;
     const ray = ids ? this.viewport.rayFromClient(clientX, clientY) : undefined;
-    // on a jumper plate's stud, or against a brick half a stud over, the payload lines up with it
     const under = hit.brickId === null ? undefined : model.bricks.get(hit.brickId);
+    // on studs facing out of the face under the cursor, sideways or down, the payload turns to meet them
+    const attached = under ? attachToStuds(hit, under, payload, this.lookup) : null;
+    if (attached) {
+      const bricks = materialize(attached.payload, attached.offset, ids ? reuseIds(ids) : ghostIds());
+      return { offset: attached.offset, payload: attached.payload, valid: bricksFit(model, bricks, this.lookup, moving) };
+    }
+    // on a jumper plate's stud, or against a brick half a stud over, the payload lines up with it
     const grids = under ? gridsOf(under, this.lookup) : GROUND_GRIDS;
     return solvePlacement(
       hit,
@@ -320,7 +327,7 @@ export class EditorController {
         state.setPlacementValid(null);
         state.setCursor(null);
       } else {
-        const ghostBricks = materialize(payload, result.offset, ghostIds());
+        const ghostBricks = materialize(result.payload ?? payload, result.offset, ghostIds());
         this.ghosts.setLook(result.valid ? 'ghost' : 'ghost-invalid');
         this.ghosts.update(ghostBricks, allStuds(ghostBricks, this.lookup));
         state.setPlacementValid(result.valid);
@@ -368,7 +375,7 @@ export class EditorController {
       this.state.toast('There is no room for that there.', 'error');
       return;
     }
-    this.state.placePayload(result.offset);
+    this.state.placePayload(result.offset, result.payload);
   }
 
   beginDrag(): void {
@@ -472,6 +479,20 @@ export class EditorController {
   /** Camera direction flattened onto the ground, for camera-relative nudges. */
   groundForward(): { x: number; z: number } {
     return this.viewport.groundForward();
+  }
+
+  /**
+   * Tips the part to build over a quarter turn, its top away from the
+   * viewer (towards them with `back`), about the level axis across the view.
+   */
+  tipBuild(back: boolean): void {
+    const forward = this.groundForward();
+    const alongX = Math.abs(forward.x) > Math.abs(forward.z);
+    const ahead = Math.sign(alongX ? forward.x : forward.z) || 1;
+    const away = back ? -1 : 1;
+    // a turn about X takes the top towards +Z; one about Z, towards -X
+    if (alongX) this.state.tipBuild('z', (-ahead * away) as 1 | -1);
+    else this.state.tipBuild('x', (ahead * away) as 1 | -1);
   }
 
   dispose(): void {

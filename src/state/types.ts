@@ -1,4 +1,5 @@
-import type { Rotation, Vec3 } from '../core/grid';
+import type { Vec3 } from '../core/grid';
+import type { Orientation } from '../core/orientation';
 import type { History } from '../core/history';
 import type { BaseplateSize, ModelDocument, SceneSettings } from '../core/io/modelFile';
 import type { Brick, Model } from '../core/model/types';
@@ -37,7 +38,8 @@ export interface EditorData {
   readonly tool: Tool;
   readonly activePartId: string;
   readonly activeColorId: number;
-  readonly buildRotation: Rotation;
+  /** How the part to build is turned: spun about its top (R) and tipped over (T). See ../core/orientation. */
+  readonly buildRotation: Orientation;
   readonly clipboard: Payload | null;
   /** Copied bricks waiting to be placed with the build tool. */
   readonly pastePayload: Payload | null;
@@ -66,8 +68,11 @@ export interface EditorActions {
   /** Sets the paint colour and recolours the selection, if any. */
   setActiveColor(colorId: number): void;
   rotateBuild(dir: 1 | -1): void;
+  /** Tips the part to build over a quarter turn about a level world axis; pasted groups stay as they are. */
+  tipBuild(axis: 'x' | 'z', dir: 1 | -1): void;
   /** Places the build payload (active part or paste) at a grid offset. */
-  placePayload(offset: Vec3): boolean;
+  /** Places the build payload (or `turned`, the same turned to meet studs facing another way) at an offset. */
+  placePayload(offset: Vec3, turned?: Payload): boolean;
   select(ids: readonly string[], mode: SelectMode): void;
   clearSelection(): void;
   selectAll(): void;

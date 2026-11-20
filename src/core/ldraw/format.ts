@@ -32,6 +32,14 @@ export type SolidBox = readonly [x0: number, y0: number, z0: number, x1: number,
 export const MAX_SOLIDS = 2048;
 
 /** One part in index.json. */
+/**
+ * A stud standing out of a part's side or underside: where its base sits in
+ * the part's frame (studs, from the middle of its footprint at its bottom,
+ * y up) and which way it faces, as an index into FACINGS (../orientation):
+ * never 0, up, which is what top studs face.
+ */
+export type SideStudEntry = readonly [number, number, number, number];
+
 export interface LDrawIndexEntry {
   /** LDraw part number, e.g. "3001" or "3040b". */
   readonly id: string;
@@ -64,18 +72,23 @@ export interface LDrawIndexEntry {
    * studs stand on cells.
    */
   readonly studOffset?: readonly [number, number];
+  /** Studs on its sides or underside, where more can be built facing out from it. */
+  readonly sideStuds?: readonly SideStudEntry[];
 }
 
 /**
  * The index format written now. Version 2 added solids, version 3 parts
  * drawn in several colours, version 4 the part numbers LDraw renamed,
  * version 5 printed and stickered parts, version 6 the studs of jumper
- * plates.
+ * plates, version 7 studs on parts' sides.
  */
-export const LDRAW_INDEX_VERSION = 6;
+export const LDRAW_INDEX_VERSION = 7;
 
 /** Index formats the app reads: in a version 1 library every part fills its whole box. */
-export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6] as const;
+export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7] as const;
+
+/** Most side studs an index entry lists: a brick with studs all round its sides has a few dozen. */
+export const MAX_SIDE_STUDS = 128;
 
 export interface LDrawIndex {
   readonly version: (typeof READABLE_INDEX_VERSIONS)[number];

@@ -6,7 +6,7 @@
 import type { Vec3 } from '../grid';
 import { planSteps, type StepOrder } from '../instructions/steps';
 import { buildSpatialIndex } from '../model/spatial';
-import { allStuds, type StudInstance } from '../model/studs';
+import { allStuds, studCover, type StudInstance } from '../model/studs';
 import type { Brick } from '../model/types';
 import type { PartLookup } from '../parts/types';
 
@@ -121,7 +121,7 @@ export function scheduleStuds(ordered: readonly Brick[], lookup: PartLookup, isO
   const until: number[] = [];
   for (const [i, brick] of ordered.entries()) {
     for (const stud of allStuds([brick], lookup)) {
-      const cover = index.ownerAt(stud.x + 0.5, stud.y, stud.z + 0.5);
+      const cover = studCover(stud, index);
       const covered = cover !== undefined && isOpaque(colours.get(cover) ?? -1) ? order.get(cover) : undefined;
       studs.push(stud);
       from.push(i);

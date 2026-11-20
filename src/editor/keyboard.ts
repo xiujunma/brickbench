@@ -85,6 +85,11 @@ function plain(controller: EditorController, event: KeyboardEvent, key: string):
       }
       return true;
     }
+    case 't':
+      // tip the part to build over; pasted groups stay upright
+      if (state.tool !== 'build' || state.pastePayload) return false;
+      controller.tipBuild(event.shiftKey);
+      return true;
     case 'delete':
     case 'backspace':
       state.deleteSelection();

@@ -1,46 +1,51 @@
 import { describe, expect, it } from 'bun:test';
-import type { Rotation } from '../../grid';
 import { modelFromBricks } from '../../model/model';
+import { ORIENTATIONS, type Orientation } from '../../orientation';
 import { PARTS, getPart } from '../../parts/catalog';
 import { toLDraw } from '../ldraw';
 import type { M3, V3 } from './read';
-import { gridSpotOf, latticeOf, quarterTurnOf, snapToLattice } from './toGrid';
+import { gridSpotOf, latticeOf, orientationOf, snapExactly, snapToLattice } from './toGrid';
 
-const ROTATIONS: readonly Rotation[] = [0, 1, 2, 3];
+const ALL: readonly Orientation[] = Array.from({ length: ORIENTATIONS }, (_, o) => o);
 
 /** The position and matrix of the one part line an export writes. */
-function exported(partId: string, x: number, y: number, z: number, r: Rotation): { position: V3; matrix: M3 } {
+function exported(partId: string, x: number, y: number, z: number, r: Orientation): { position: V3; matrix: M3 } {
   const model = modelFromBricks([{ id: 'b', partId, colorId: 4, x, y, z, r }]);
   const line = toLDraw('t', model, getPart).text.split('\r\n').find((l) => l.startsWith('1 '));
   const numbers = (line ?? '').split(' ').slice(2, 14).map(Number);
   return { position: numbers.slice(0, 3) as unknown as V3, matrix: numbers.slice(3) as unknown as M3 };
 }
 
-describe('quarterTurnOf', () => {
-  it('reads back each quarter turn the exporter writes', () => {
-    for (const r of ROTATIONS) expect(quarterTurnOf(exported('brick-2x4', 0, 0, 0, r).matrix)).toBe(r);
+describe('orientationOf', () => {
+  it('reads back each of the 24 ways the exporter turns a part', () => {
+    for (const r of ALL) expect(orientationOf(exported('brick-2x4', 0, 0, 0, r).matrix)).toBe(r);
+  });
+
+  it('reads parts upside down and on their sides', () => {
+    // LDraw's y points down: flipping it and z turns a part upside down; this one lies on its back
+    expect(orientationOf([1, 0, 0, 0, -1, 0, 0, 0, -1])).toBe(4);
+    expect(orientationOf([1, 0, 0, 0, 0, -1, 0, 1, 0])).toBe(16);
   });
 
   it('allows for the rounding editors leave in their numbers', () => {
-    expect(quarterTurnOf([0.99999, 0, 0.0002, 0, 1.000015, 0, -0.0001, 0, 1])).toBe(0);
+    expect(orientationOf([0.99999, 0, 0.0002, 0, 1.000015, 0, -0.0001, 0, 1])).toBe(0);
   });
 
-  it('refuses parts tipped over, on their side, mirrored or at an angle', () => {
+  it('refuses parts mirrored or at an angle', () => {
     const half = Math.SQRT1_2;
     const matrices: M3[] = [
-      [1, 0, 0, 0, -1, 0, 0, 0, -1],
-      [1, 0, 0, 0, 0, -1, 0, 1, 0],
       [-1, 0, 0, 0, 1, 0, 0, 0, 1],
       [half, 0, -half, 0, 1, 0, half, 0, half],
+      [1, 0, 0, 0, half, -half, 0, half, half],
     ];
-    for (const matrix of matrices) expect(quarterTurnOf(matrix)).toBeNull();
+    for (const matrix of matrices) expect(orientationOf(matrix)).toBeNull();
   });
 });
 
 describe('gridSpotOf', () => {
   it('undoes the export for every built-in part, turned every way', () => {
     for (const part of PARTS.filter((p) => p.ldraw)) {
-      for (const r of ROTATIONS) {
+      for (const r of ALL) {
         const { position } = exported(part.id, 3, 7, -5, r);
         const spot = gridSpotOf(part, position, r);
         expect(spot?.x, `${part.id} r${r}`).toBeCloseTo(3, 9);
@@ -82,6 +87,13 @@ describe('lattice', () => {
     expect(snapToLattice({ x: 0, y: 0.5, z: 0 }, lattice)).toBeNull();
     expect(snapToLattice({ x: 0, y: 0, z: 0.53 }, lattice)).toBeNull();
     expect(snapToLattice({ x: 0, y: 0, z: 0.02 }, lattice)).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('places parts off the grid on the nearest whole LDraw unit along it', () => {
+    const lattice = { x: 0.25, y: 0, z: 0 };
+    // 1.2 studs is 24 LDU; 2.5 plates is 20 LDU; off by a hair, as editors write numbers
+    expect(snapExactly({ x: 1.45000001, y: 2.5, z: -0.6 }, lattice)).toEqual({ x: 1.2, y: 2.5, z: -0.6 });
+    expect(snapExactly({ x: 0.26, y: 0.06, z: 0.02 }, lattice)).toEqual({ x: 0, y: 0, z: 0 });
   });
 
   it('starts at whole cells for an empty model', () => {

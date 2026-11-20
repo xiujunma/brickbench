@@ -46,6 +46,24 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(result.fit.snug).toBe(true);
   });
 
+  it('finds the studs on parts’ sides, and none on plain bricks', () => {
+    const sideOf = (file: string) => {
+      const result = convertPart(file, flattener);
+      if (!result.ok) throw new Error(`${file} was skipped: ${result.reason}`);
+      return result.sideStuds;
+    };
+    // facing index 4 is +Z: the studs stand 14 LDU (0.7 studs) up a brick, out of its front half a stud from its middle
+    expect(sideOf('87087.dat')).toEqual([[0, 0.7, 0.5, 4]]);
+    expect(sideOf('11211.dat')).toEqual([
+      [-0.5, 0.7, 0.5, 4],
+      [0.5, 0.7, 0.5, 4],
+    ]);
+    // a bracket's four, on the face of its upright plate
+    expect(sideOf('99207.dat')).toHaveLength(4);
+    expect(sideOf('99207.dat').every(([, , z, facing]) => z === 0.7 && facing === 4)).toBe(true);
+    for (const file of ['3001.dat', '3024.dat', '3794b.dat']) expect(sideOf(file)).toEqual([]);
+  });
+
   it('says which way a jumper plate’s stud sits between cells, and that a plain plate’s do not', () => {
     const offsetOf = (file: string) => {
       const result = convertPart(file, flattener);

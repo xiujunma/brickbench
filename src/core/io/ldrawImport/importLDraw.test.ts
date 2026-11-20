@@ -94,20 +94,43 @@ describe('importLDraw', () => {
       line(4, 0, -48, 0, '71427c01.dat'),
       line(4, 0, -48, 0, '71427c01.dat'),
       line(4, 0, -48, 0, 'wheels.ldr'),
-      line(4, 80, -24, 0, '3001.dat', '1 0 0 0 -1 0 0 0 -1'),
-      // a quarter stud over: on neither whole nor half studs
-      line(4, 165, -24, 0, '3001.dat'),
+      // at an angle: square to nothing
+      line(4, 80, -24, 0, '3001.dat', '0.7071 0 0.7071 0 1 0 -0.7071 0 0.7071'),
       line(4, 0, -24, 0, '3001.dat'),
     ]);
-    expect(report.parts).toBe(7);
+    expect(report.parts).toBe(6);
     expect(report.placed).toBe(1);
     expect(report.leftOut).toEqual([
       { reason: 'missing', count: 2, parts: [{ label: '71427c01', count: 2 }] },
       { reason: 'missing-file', count: 1, parts: [{ label: 'wheels.ldr', count: 1 }] },
       { reason: 'turned', count: 1, parts: [{ label: 'Brick 2 × 4 (3001)', count: 1 }] },
-      { reason: 'off-grid', count: 1, parts: [{ label: 'Brick 2 × 4 (3001)', count: 1 }] },
       { reason: 'overlapping', count: 1, parts: [{ label: 'Brick 2 × 4 (3001)', count: 1 }] },
     ]);
+  });
+
+  it('brings parts in upside down and on their sides, and parts between studs, where they stand', () => {
+    const { doc, report } = imported([
+      line(4, 0, -24, 0, '3001.dat'),
+      // upside down beside it, its studs pointing at the ground
+      line(1, 80, 0, 0, '3001.dat', '1 0 0 0 -1 0 0 0 -1'),
+      // on its back, its studs facing the front, its back against the first brick's front, 2 LDU above its top
+      line(2, 0, -36, -28, '3024.dat', '1 0 0 0 0 -1 0 1 0'),
+      // a quarter stud over: on neither whole nor half studs
+      line(14, 165, -24, 0, '3001.dat'),
+    ]);
+    expect(report.leftOut).toEqual([]);
+    expect(report.placed).toBe(4);
+    const [brick, upsideDown, onBack, between] = allBricks(doc.model);
+    expect(upsideDown?.r).toBe(4);
+    expect(upsideDown?.x).toBe((brick?.x ?? 0) + 4);
+    expect(onBack?.r).toBe(16);
+    // 20 LDU tall on its back: from 2 LDU over the brick's top, a quarter plate up, to 2.5 plates higher
+    expect(onBack?.y).toBe((brick?.y ?? 0) + 3.25);
+    expect(between?.x).toBe((brick?.x ?? 0) + 8.25);
+    // and back out where they came from
+    const lines = toLDraw('round trip', doc.model, getPart).text.split('\r\n').filter((l) => l.startsWith('1 '));
+    expect(lines[1]).toMatch(/ 1 0 0 0 -1 0 0 0 -1 3001\.dat$/);
+    expect(lines[2]).toMatch(/ 1 0 0 0 0 -1 0 1 0 3024\.dat$/);
   });
 
   it('builds printed parts plain and brings other colours in as the nearest', () => {
@@ -160,10 +183,12 @@ describe('importLDraw', () => {
   });
 
   it('keeps a submodel where it is when more of its parts fit the model grid as they are', () => {
-    // its last part a quarter stud over, on neither whole nor half studs
-    const { report } = imported(['0 FILE m.ldr', line(4, 0, -24, 0, '3001.dat'), '1 1 0 -48 0 1 0 0 0 1 0 0 0 1 Top', '0 FILE Top', line(16, 0, 0, 0, '3001.dat'), line(16, 0, -24, 0, '3001.dat'), line(16, 5, -48, 0, '3001.dat')]);
+    // its last part a quarter stud over, on neither whole nor half studs: it comes in where it is
+    const { doc, report } = imported(['0 FILE m.ldr', line(4, 0, -24, 0, '3001.dat'), '1 1 0 -48 0 1 0 0 0 1 0 0 0 1 Top', '0 FILE Top', line(16, 0, 0, 0, '3001.dat'), line(16, 0, -24, 0, '3001.dat'), line(16, 5, -48, 0, '3001.dat')]);
     expect(report.moved).toEqual([]);
-    expect(report.leftOut).toEqual([{ reason: 'off-grid', count: 1, parts: [{ label: 'Brick 2 × 4 (3001)', count: 1 }] }]);
+    expect(report.leftOut).toEqual([]);
+    const bricks = allBricks(doc.model);
+    expect(bricks.map((b) => b.x - (bricks[0]?.x ?? 0))).toEqual([0, 0, 0, 0.25]);
   });
 
   it('keeps a part half a stud over where it is, as on a jumper plate, and gives it back to LDraw there', () => {

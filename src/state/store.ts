@@ -1,6 +1,7 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { DEFAULT_COLOR_ID, getColor } from '../core/colors';
-import { normalizeRotation, type Vec3 } from '../core/grid';
+import type { Vec3 } from '../core/grid';
+import { compose, quarterTurn } from '../core/orientation';
 import { createHistory, pushHistory, redo, squashSince, undo } from '../core/history';
 import { clampRef } from '../core/instructions/plan';
 import { DEFAULT_STEP_OPTIONS } from '../core/instructions/steps';
@@ -147,11 +148,15 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
         set((s) =>
           s.pastePayload
             ? { pastePayload: rotatePayload(s.pastePayload, lookup, dir) }
-            : { buildRotation: normalizeRotation(s.buildRotation + dir) },
+            : // about the part's own top, whichever way that faces
+              { buildRotation: compose(s.buildRotation, quarterTurn('y', dir)) },
         ),
 
-      placePayload: (offset) => {
-        const payload = buildPayload();
+      tipBuild: (axis, dir) =>
+        set((s) => (s.pastePayload ? s : { buildRotation: compose(quarterTurn(axis, dir), s.buildRotation) })),
+
+      placePayload: (offset, turned) => {
+        const payload = turned ?? buildPayload();
         if (!payload) return false;
         const bricks = materialize(payload, offset, nextId);
         if (!bricksFit(model(), bricks, lookup)) {

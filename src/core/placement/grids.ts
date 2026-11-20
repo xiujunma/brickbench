@@ -5,6 +5,7 @@
  * further along a jumper plate's axes.
  */
 import type { Brick } from '../model/types';
+import { isUpright } from '../orientation';
 import type { PartLookup } from '../parts/types';
 import type { Payload } from './payload';
 
@@ -30,9 +31,13 @@ export function phaseOf(value: number): number {
   return phase === 1 ? 0 : phase;
 }
 
-/** The grids of a placed brick; a part whose studs sit between cells (studOffset) shifts its top grid half a stud. */
+/**
+ * The grids of a placed brick; a part whose studs sit between cells
+ * (studOffset) shifts its top grid half a stud. A part on its side has no
+ * top grid of its own here: its studs take what goes on them (see attach).
+ */
 export function gridsOf(brick: Brick, lookup: PartLookup): BrickGrids {
-  const [ox, oz] = lookup(brick.partId)?.studOffset ?? [0, 0];
+  const [ox, oz] = isUpright(brick.r) ? (lookup(brick.partId)?.studOffset ?? [0, 0]) : [0, 0];
   // turned a quarter, its own x lies along z
   const [wx, wz] = brick.r % 2 === 0 ? [ox, oz] : [oz, ox];
   return {

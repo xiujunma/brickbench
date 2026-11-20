@@ -5,10 +5,10 @@
  */
 import { GRID_LIMIT, MAX_LAYER, normalizeRotation } from '../core/grid';
 import { MAX_BRICKS } from '../core/io/modelFile';
-import { brickCellQuarters } from '../core/model/geometry';
+import { brickCellQuarters, brickLduSolids, isOnGrid, type LduBox } from '../core/model/geometry';
 import type { IdFactory } from '../core/model/ids';
 import { addBricks, allBricks, emptyModel, recolorBricks, removeBricks as withoutBricks, replaceBricks } from '../core/model/model';
-import { isOutOfBounds, type SpatialIndex } from '../core/model/spatial';
+import { firstOverlap, isOutOfBounds, type SpatialIndex } from '../core/model/spatial';
 import type { Brick, Model } from '../core/model/types';
 import type { PartLookup } from '../core/parts/types';
 import { spatialIndexFor } from '../state/selectors';
@@ -64,17 +64,32 @@ function overlap(brick: Brick, model: Model, index: SpatialIndex, claimed: Reado
   return null;
 }
 
+/** A box grown by one LDraw unit on every side: what touches it overlaps this. */
+function grown(box: LduBox): LduBox {
+  return { x0: box.x0 - 1, y0: box.y0 - 1, z0: box.z0 - 1, x1: box.x1 + 1, y1: box.y1 + 1, z1: box.z1 + 1 };
+}
+
 /**
  * Bricks it rests on or hangs from: those filling a cell just below or just
  * above one of its own, so nothing joins through the missing corner of an
- * L-shaped plate, and a plate can hang from the top of an arch.
+ * L-shaped plate, and a plate can hang from the top of an arch. Parts off
+ * the grid (on their sides, on side studs) join whatever they touch.
  */
-function neighbours(brick: Brick, index: SpatialIndex, lookup: PartLookup): string[] {
+function neighbours(brick: Brick, model: Model, index: SpatialIndex, lookup: PartLookup): string[] {
   const found = new Set<string>();
-  // the same quarters below and above: bricks half a stud over join only where they overlap
-  for (const [x, y, z, mask] of brickCellQuarters(brick, lookup)) {
-    for (const owner of [...index.ownersIn(x, y - 1, z, mask), ...index.ownersIn(x, y + 1, z, mask)]) {
-      if (owner !== brick.id) found.add(owner);
+  const onGrid = isOnGrid(brick);
+  if (onGrid) {
+    // the same quarters below and above: bricks half a stud over join only where they overlap
+    for (const [x, y, z, mask] of brickCellQuarters(brick, lookup)) {
+      for (const owner of [...index.ownersIn(x, y - 1, z, mask), ...index.ownersIn(x, y + 1, z, mask)]) {
+        if (owner !== brick.id) found.add(owner);
+      }
+    }
+  }
+  for (const box of brickLduSolids(brick, lookup)) {
+    for (const owner of index.ownersInBox(grown(box))) {
+      const other = model.bricks.get(owner);
+      if (owner !== brick.id && other && (!onGrid || !isOnGrid(other))) found.add(owner);
     }
   }
   return [...found];
@@ -87,7 +102,7 @@ export function floatingBricks(model: Model, lookup: PartLookup): ReadonlySet<st
   const reached = new Set(grounded.map((b) => b.id));
   const queue = [...grounded];
   for (let brick = queue.pop(); brick; brick = queue.pop()) {
-    for (const id of neighbours(brick, index, lookup)) {
+    for (const id of neighbours(brick, model, index, lookup)) {
       const next = model.bricks.get(id);
       if (next && !reached.has(id)) {
         reached.add(id);
@@ -201,11 +216,9 @@ export function moveBricks(
   const index = spatialIndexFor(model, lookup);
   const moving = new Set(bricks.map((b) => b.id));
   for (const brick of moved) {
-    for (const [x, y, z, mask] of brickCellQuarters(brick, lookup)) {
-      const owner = index.ownersIn(x, y, z, mask).find((id) => !moving.has(id));
-      if (owner !== undefined) {
-        throw new BuildError(`Nothing moved: brick ${brick.id} would overlap brick ${describeBrick(model, owner, lookup)}.`);
-      }
+    const owner = firstOverlap(index, brick, lookup, moving);
+    if (owner !== undefined) {
+      throw new BuildError(`Nothing moved: brick ${brick.id} would overlap brick ${describeBrick(model, owner, lookup)}.`);
     }
   }
   const next = moved.length > 0 ? replaceBricks(model, moved) : model;

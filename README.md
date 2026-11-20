@@ -19,6 +19,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 - **Build with an AI agent:** ask Claude Code, GPT, Grok or a model on your own computer, from a chat panel in the app (or Claude Code and other agents from your terminal), to build or change the model. It places, paints and moves bricks while you watch, checks its work with pictures of the model, and one undo takes back a whole request.
 - **68 colours:** solid, transparent and metallic, following the LDraw palette, the newer ones included (Dark Purple, Light Aqua, Warm Tan, Reddish Orange and more).
 - **Grid snapping that understands bricks.** Point at a top face to stack, at a side to build beside it (lined up with that brick's courses), or underneath to hang below. Parts never overlap: the preview turns red when there's no room, and drops land on top of whatever is in the way. A part put on a jumper plate's stud sits half a stud over, and what you build against it lines up with it.
+- **Sideways and upside down (SNOT).** Point at a stud on a part's side, as on a brick with studs on its sides or a bracket, and the part you build turns to face out from it, its underside on the stud; `R` spins it about its top. Build on the studs of a part on its side the same way, and under studs facing down. `T` tips the part you build over, on its side or upside down, to lay it anywhere. Parts off the grid like these are placed exactly, to the LDraw unit, and collide by the space they really fill.
 - **Tools:** Build, Select & move (click, Shift-click, box select, drag to move), Paint and Erase, plus an eyedropper (Alt-click) and rotate, nudge, copy, paste and duplicate.
 - **Unlimited undo** (up to 200 steps) and **autosave** in the browser.
 - **Accounts and a gallery:** sign in with GitHub or Google to keep models online and open them on any computer, and publish them to a gallery where anyone can browse, open a copy and build on it. See [Accounts and the gallery](#accounts-and-the-gallery).
@@ -51,7 +52,8 @@ Requires [Bun](https://bun.sh) 1.4 or later and a browser with WebGL 2. Bun runs
 | Pan / zoom | Middle-drag or Shift + right-drag / scroll or pinch | |
 | Select | Click, Shift-click to add, drag a box on empty space | `⌘A` all |
 | Move selection | Drag a selected brick | Arrows; `⇧↑` / `⇧↓` for one plate up or down |
-| Rotate | | `R` (`⇧R` turns back) |
+| Rotate | | `R` (`⇧R` turns back); on its side, `R` spins the part about its top |
+| Tip over, on a side or upside down | | `T` (`⇧T` tips back): the part you build tips away from you |
 | Tools | | `V` select, `B` build, `P` paint, `E` erase |
 | Copy / cut / paste / duplicate | | `⌘C` `⌘X` `⌘V` `⌘D` |
 | Delete | | `Del` / `Backspace` |
@@ -93,12 +95,11 @@ The video is made in your browser and saved to your downloads: an MP4 (H.264), o
 
 **File › Open…** also opens models made elsewhere: LDraw files (`.ldr`, `.mpd`) from LeoCAD, MLCad or the [LDraw model repository](https://library.ldraw.org/omr) of official sets, and BrickLink Studio files (`.io`), old and new. Submodels are built where the model puts them, in their colours. Parts come in in the model's own order, so a time-lapse of an opened model follows its building steps. Its steps (`0 STEP`) and submodels become the steps of its instructions too: each use of a submodel is a sub-assembly, built on pages of its own and added at the step that uses it.
 
-BrickBench builds upright parts, turned in quarter turns, on whole plates and on whole studs, or half a stud over as on a jumper plate. What doesn't fit stays out, and a report says what and why:
+BrickBench builds parts square to the grid: upright, on their sides or upside down, in any of the 24 ways a part can face. Upright parts go on whole plates and on whole studs, or half a stud over as on a jumper plate; parts on their sides, and parts between studs, go exactly where the model puts them, to the nearest LDraw unit. What doesn't fit stays out, and a report says what and why:
 
 - **Not in BrickBench:** parts the library doesn't have.
-- **On their side or at an angle:** parts tipped over, upside down or turned at an angle, as in sideways building.
-- **Between studs:** parts off the whole and half studs, as on hinges and Technic pins.
-- **Overlapping:** parts that would overlap others once on the grid, such as a tyre on its wheel or glass in its frame.
+- **At an angle:** parts turned at an angle, as on hinges, and mirrored ones.
+- **Overlapping:** parts that would overlap others, such as a tyre on its wheel or glass in its frame.
 - **Drawing shapes** (strings and wires a model draws itself) and **submodels kept in other files**.
 
 To bring in as much as it can, it also:
@@ -110,7 +111,7 @@ To bring in as much as it can, it also:
 
 The model stands in the middle of the scene on a baseplate big enough to hold it, or on none if it brings its own.
 
-How much of a model comes in depends on how it is built. In a sample of official sets from the LDraw model repository, houses, trains and vehicles came in at 53 to 77% of their parts; models built mostly sideways, such as a Star Destroyer, at under 20%.
+How much of a model comes in depends on how it is built: parts on hinges, Technic pins and axles at an angle, and parts whose rough shape overlaps their neighbours', stay out.
 
 Studio files are ZIP archives: BrickBench reads the LDraw model inside with [zip.js](https://gildas-lormeau.github.io/zip.js/) (BSD-3-Clause), which loads only when you open one.
 
@@ -332,7 +333,7 @@ The deploy also uploads the API, from `functions/`. It answers only once the sit
 
 `bun run ldraw` turns the [LDraw parts library](https://library.ldraw.org) into files the app can load quickly, in `public/ldraw/` (not committed; `bun run build` makes it whenever it is missing, incomplete or partial):
 
-- `index.json` lists every part: its name, category, keywords, author, how it sits on the grid and, when it leaves some of its box empty, which cells it fills. Printed and stickered parts say so, with the plain part each decorates when the library has it (3068b for 3068bp80). It also lists the part numbers LDraw moved or merged, each with the part it now is (4073 is 6141), so parts lists that use the old numbers still match.
+- `index.json` lists every part: its name, category, keywords, author, how it sits on the grid, the studs on its sides and underside and, when it leaves some of its box empty, which cells it fills. Printed and stickered parts say so, with the plain part each decorates when the library has it (3068b for 3068bp80). It also lists the part numbers LDraw moved or merged, each with the part it now is (4073 is 6141), so parts lists that use the old numbers still match.
 - `parts/<number>.bin` holds one mesh per part: gzip-compressed, 16-bit positions and 8-bit normals, with its triangles in runs by colour when the part fixes colours of its own. A 2 × 4 brick is under 5 kB.
 - `CREDITS.txt` names the author of every part and of every primitive it uses, and copies of the LDraw licence files sit alongside.
 - `build.json` says the build is complete and, for downloads, records the archive's SHA-256. `complete.zip` always holds the latest LDraw release; keep a copy and pass `--library` to pin one.
@@ -349,7 +350,7 @@ bun run ldraw --limit 200                    # the first 200 parts (also partial
 bun run ldraw --fetch-only                   # just download and unpack it into .ldraw-cache/ldraw
 ```
 
-In the app, library parts are ordinary parts with ids like `ldraw:3001`. Each sits in the smallest box of whole cells that holds its body (a fifth of a stud may stick out on a side), placed so its top studs sit over cell centres, so it stacks and collides like any brick. Within that box it fills only the cells its shape takes up: the missing corner of a corner plate, the opening of an arch, window or door frame, and the space under a bracket's overhang stay free for other parts. A cell counts as filled when the part reaches two LDraw units or more into it, or when the part closes it in on every side and from above, as it does the hollow underside of a brick. Jumper plates keep their half-stud offset, and the index says which way their stud sits between cells, so what goes on it sits half a stud over. A part drawn in several colours takes the colour you choose wherever LDraw draws it in the part's own colour; the colours it fixes are drawn as the palette's version of that colour when there is one, and as LDraw defines them otherwise. While a mesh loads, a plain box of the right size stands in; parts that fail to load are retried when the connection comes back.
+In the app, library parts are ordinary parts with ids like `ldraw:3001`. Each sits in the smallest box of whole cells that holds its body (a fifth of a stud may stick out on a side), placed so its top studs sit over cell centres, so it stacks and collides like any brick. Within that box it fills only the cells its shape takes up: the missing corner of a corner plate, the opening of an arch, window or door frame, and the space under a bracket's overhang stay free for other parts. A cell counts as filled when the part reaches two LDraw units or more into it, or when the part closes it in on every side and from above, as it does the hollow underside of a brick. Jumper plates keep their half-stud offset, and the index says which way their stud sits between cells, so what goes on it sits half a stud over. The index also lists the studs on a part's sides and underside, where each stands and which way it faces, so parts can be built facing out from them. A part drawn in several colours takes the colour you choose wherever LDraw draws it in the part's own colour; the colours it fixes are drawn as the palette's version of that colour when there is one, and as LDraw defines them otherwise. While a mesh loads, a plain box of the right size stands in; parts that fail to load are retried when the connection comes back.
 
 Opening a model or restoring the autosave loads the library index first. If bricks still cannot be restored, say because the library is unreachable or a rebuilt library gave a part a different size, the whole session is kept and **File › Recover earlier session** opens it later.
 
@@ -391,7 +392,7 @@ functions/    the Cloudflare Pages Function that runs the API
 e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 ```
 
-**Grid and units.** One world unit is one stud pitch (8 mm). Bricks snap to whole studs on X/Z and whole plates (3.2 mm) on Y. A brick is stored as its part, its colour and the corner of its footprint, plus a quarter-turn rotation.
+**Grid and units.** One world unit is one stud pitch (8 mm). Bricks snap to whole studs on X/Z and whole plates (3.2 mm) on Y. A brick is stored as its part, its colour and the corner of the box it fills, plus which of the 24 ways it faces (`src/core/orientation.ts`): upright, turned in quarter turns, or on a side or upside down. Upright bricks on whole or half studs and whole plates fill grid cells; the rest are placed to the LDraw unit and collide by their exact boxes, which the spatial index keeps in each cell they reach into.
 
 **Placement.** Picking intersects the cursor ray with the boxes each part fills (arches leave their opening free, and library parts fill only the cells their shape takes up), so it never needs triangle tests. The solver turns the face that was hit into a grid position, and a spatial index answers "who fills this cell?" in constant time for collision checks.
 
@@ -409,7 +410,7 @@ e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 }
 ```
 
-`x`/`z` are in studs, whole or half (a part on a jumper plate's stud stands half a stud over), `y` is in whole plates and `r` is quarter turns. Parts from the LDraw library are written as `ldraw:` plus their LDraw number, e.g. `ldraw:3001`. Colours are LDraw colour codes. Files are validated on load: unknown parts, bricks off the grid and bricks that overlap others are skipped, unknown colours are replaced, and you get a warning for each. Models are limited to 50,000 bricks and 2 million grid cells.
+`x`, `y` and `z` are the corner of the box the part fills: `x` and `z` in studs, `y` in plates. `r` is the way it faces: 0 to 3 upright, turned that many quarter turns; 4 to 23 on a side or upside down, as `src/core/orientation.ts` counts them (four quarter turns about the part's own top for each of the six ways its top can face: up, down, +x, -x, +z, -z). Upright parts stand on whole or half studs (a part on a jumper plate's stud stands half a stud over) and whole plates; parts on their sides, and parts built on them, stand on any whole LDraw unit, a twentieth of a stud or an eighth of a plate. Parts from the LDraw library are written as `ldraw:` plus their LDraw number, e.g. `ldraw:3001`. Colours are LDraw colour codes. Files are validated on load: unknown parts, bricks off the grid and bricks that overlap others are skipped, unknown colours are replaced, and you get a warning for each. Models are limited to 50,000 bricks and 2 million grid cells.
 
 A model with instruction steps of its own (arranged by hand, or from an opened LDraw file) also has an `instructions` field. Its steps name bricks by their place in `bricks`, counting from 0, and sub-assemblies by their place in `assemblies`; a `view` is a direction to look along (x, y, z), never straight up or down:
 
@@ -430,7 +431,8 @@ Bricks it leaves out are planned bottom up after its steps. If it cannot be read
 
 ## Not done yet
 
-- Connections beyond the stud grid: library parts snap to whole and half studs and whole plates, so hinges don't swing, Technic pins don't plug into holes, and minifigures don't assemble
+- Connections beyond studs: parts build on studs facing any of the six ways, but hinges don't swing, Technic pins don't plug into holes, and minifigures don't assemble
+- Tipping over a pasted group (`T` tips the part you build; a pasted group turns with `R` only)
 - Accounts in the desktop app (it shares models by file for now)
 
 ## Privacy

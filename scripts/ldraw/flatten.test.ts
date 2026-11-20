@@ -83,6 +83,23 @@ describe('flattenPart', () => {
       [10, 0, 0],
       [-10, 0, 0],
     ]);
+    // the stud turned on its side points along -X; the tube underneath (stud4) is no stud to build on
+    expect(part.sideStuds).toEqual([{ at: [20, -8, 0], dir: [-1, 0, 0] }]);
+  });
+
+  it('follows side studs through sub-files, and leaves studs at an angle out', () => {
+    const source = memorySource({
+      'stud.dat': certified(TRI),
+      'side.dat': certified('1 16 0 -10 10 1 0 0 0 0 1 0 -1 0 stud.dat'),
+      'part.dat': certified(['1 16 0 0 0 1 0 0 0 1 0 0 0 1 side.dat', '1 16 40 0 0 -1 0 0 0 1 0 0 0 -1 side.dat', '1 16 0 0 0 0.7 -0.7 0 0.7 0.7 0 0 0 1 stud.dat'].join('\n')),
+    });
+    const part = flattenPart('part.dat', source);
+    expect(part.topStuds).toEqual([]);
+    // a stud facing +Z, and the same turned half a turn about the vertical, facing -Z
+    expect(part.sideStuds).toEqual([
+      { at: [0, -10, 10], dir: [0, 0, 1] },
+      { at: [40, -10, -10], dir: [0, 0, -1] },
+    ]);
   });
 
   it('reports missing files instead of failing silently', () => {

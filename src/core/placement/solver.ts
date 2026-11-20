@@ -7,6 +7,8 @@ export interface PlacementResult {
   /** Grid offset for the payload's minimum corner. */
   readonly offset: Vec3;
   readonly valid: boolean;
+  /** The payload as it lands, when it lands turned (on studs facing another way; see ./attach); the payload as given otherwise. */
+  readonly payload?: Payload;
 }
 
 export interface SolveOptions {

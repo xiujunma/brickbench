@@ -80,9 +80,9 @@ describe('bricks half a stud over', () => {
       buildSpatialIndex([makeBrick({ id: 'b', partId: 'brick-1x2' }), makeBrick({ id: 'p', partId: 'plate-1x1', x: 0.5, y: 3 })], lookup),
       lookup,
     );
-    expect(studs.map((s) => s.x)).toEqual([1]);
+    expect(studs.map((s) => s.x)).toEqual([1.5]);
     // a half-over plate's own studs stand half a stud over too
-    expect(allStuds([left], lookup).map((s) => s.x)).toEqual([0.5, 1.5]);
+    expect(allStuds([left], lookup).map((s) => s.x)).toEqual([1, 2]);
   });
 });
 
@@ -95,5 +95,58 @@ describe('isOutOfBounds', () => {
     expect(isOutOfBounds(makeBrick({ y: -1 }), lookup)).toBe(true);
     expect(isOutOfBounds(makeBrick({ x: GRID_LIMIT - 1 }), lookup)).toBe(true);
     expect(isOutOfBounds(makeBrick({ z: -GRID_LIMIT - 1 }), lookup)).toBe(true);
+  });
+});
+
+describe('bricks off the grid', () => {
+  // a 1 × 1 plate on its back, its top facing +Z: 20 LDU wide and high (2.5 plates), 8 LDU deep
+  const plateOnBack = (id: string, at: { x: number; y: number; z: number }) => makeBrick({ id, partId: 'plate-1x1', r: 16, ...at });
+
+  it('take exactly the space they fill, sharing cells with bricks they miss', () => {
+    // 12 to 20 LDU along z: the back of cell z = 0
+    const turned = plateOnBack('turned', { x: 0, y: 0, z: 0.6 });
+    const index = buildSpatialIndex([turned], lookup);
+    // an upright plate half a stud over, -10 to 10 LDU along z, misses it, though both reach into cell (0, 0, 0)
+    expect(collides(index, [makeBrick({ id: 'n', partId: 'plate-1x1', z: -0.5 })], lookup)).toBe(false);
+    expect(collides(index, [makeBrick({ id: 'n', partId: 'plate-1x1', z: 0 })], lookup)).toBe(true);
+    // its 2.5 plates of height: the third layer is filled to half, the fourth not at all
+    expect(collides(index, [makeBrick({ id: 'n', partId: 'plate-1x1', y: 2 })], lookup)).toBe(true);
+    expect(collides(index, [makeBrick({ id: 'n', partId: 'plate-1x1', y: 3 })], lookup)).toBe(false);
+    // and other turned bricks the same way: touching is fine, overlapping is not
+    expect(collides(index, [plateOnBack('n', { x: 0, y: 0, z: 1 })], lookup)).toBe(false);
+    expect(collides(index, [plateOnBack('n', { x: 0, y: 0, z: 0.9 })], lookup)).toBe(true);
+    expect(collides(index, [plateOnBack('n', { x: 0, y: 0, z: 0.9 })], lookup, new Set(['turned']))).toBe(false);
+  });
+
+  it('answer the index’s questions: who fills a cell, a box, a point', () => {
+    const turned = plateOnBack('turned', { x: 0, y: 0, z: 0.6 });
+    const index = buildSpatialIndex([turned, makeBrick({ id: 'grid', partId: 'plate-1x1', x: 2 })], lookup);
+    expect(index.owner(0, 2, 0)).toBe('turned');
+    expect(index.owner(0, 3, 0)).toBeUndefined();
+    expect(index.ownersIn(0, 0, 0, 0b0011)).toEqual([]);
+    expect(index.ownersIn(0, 0, 0, 0b1100)).toEqual(['turned']);
+    expect([...index.ownersInBox({ x0: 0, y0: 0, z0: 0, x1: 60, y1: 8, z1: 20 })].sort()).toEqual(['grid', 'turned']);
+    expect(index.ownerAtPoint({ x: 0.5, y: 0.5, z: 0.8 })).toBe('turned');
+    expect(index.ownerAtPoint({ x: 0.5, y: 0.5, z: 0.5 })).toBeUndefined();
+    expect(index.ownerAtPoint({ x: 2.5, y: 0.1, z: 0.5 })).toBe('grid');
+  });
+
+  it('are refused by an occupancy where they overlap, and kept where they only touch', () => {
+    const occupancy = createOccupancy(lookup);
+    expect(occupancy.tryAdd(plateOnBack('a', { x: 0, y: 0, z: 0 }))).toBe(true);
+    expect(occupancy.tryAdd(plateOnBack('b', { x: 0, y: 0, z: 0.2 }))).toBe(false);
+    expect(occupancy.tryAdd(plateOnBack('c', { x: 0, y: 0, z: 0.4 }))).toBe(true);
+    expect(occupancy.tryAdd(makeBrick({ id: 'd', partId: 'plate-1x1', y: 1 }))).toBe(false);
+    expect(occupancy.cells).toBeGreaterThan(0);
+  });
+
+  it('turn their studs with them, hidden by what they press into', () => {
+    const turned = plateOnBack('turned', { x: 0, y: 0, z: 0 });
+    const [stud] = allStuds([turned], lookup);
+    // the stud stands on the plate's top, now facing +Z: 8 LDU out from z = 0, at mid-height of its 2.5 plates
+    expect(stud).toEqual({ x: 0.5, y: 0.5, z: 0.4, r: 16, colorId: 4 });
+    const wall = makeBrick({ id: 'wall', partId: 'brick-1x1', z: 0.4, y: 0, x: 0 });
+    expect(visibleStuds([turned], buildSpatialIndex([turned, wall], lookup), lookup)).toEqual([]);
+    expect(visibleStuds([turned], buildSpatialIndex([turned], lookup), lookup)).toHaveLength(1);
   });
 });

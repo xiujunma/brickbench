@@ -19,8 +19,9 @@ describe('visibleStuds', () => {
   it('shows every stud of a lone brick on its top face', () => {
     const studs = studsFor([makeBrick({ partId: 'brick-2x2', x: 5, y: 3, z: -1 })]);
     expect(studs).toHaveLength(4);
-    expect(studs.every((s) => s.y === 6 && s.colorId === 4)).toBe(true);
-    expect(studs.map((s) => `${s.x},${s.z}`).sort()).toEqual(['5,-1', '5,0', '6,-1', '6,0']);
+    // where each stud's base stands, in world units: the middle of its cell, on top of the brick's sixth plate
+    expect(studs.every((s) => s.y === 2.4 && s.r === 0 && s.colorId === 4)).toBe(true);
+    expect(studs.map((s) => `${s.x},${s.z}`).sort()).toEqual(['5.5,-0.5', '5.5,0.5', '6.5,-0.5', '6.5,0.5']);
   });
 
   it('hides studs covered by an opaque brick', () => {
@@ -62,6 +63,6 @@ describe('visibleStuds', () => {
     expect(studsFor([makeBrick({ partId: 'tile-2x2' })])).toHaveLength(0);
     const slope = studsFor([makeBrick({ partId: 'slope45-2x2', r: 1, x: 0, z: 0 })]);
     // a quarter turn moves the back row from -Z to -X
-    expect(slope.map((s) => `${s.x},${s.z}`).sort()).toEqual(['0,0', '0,1']);
+    expect(slope.map((s) => `${s.x},${s.z}`).sort()).toEqual(['0.5,0.5', '0.5,1.5']);
   });
 });

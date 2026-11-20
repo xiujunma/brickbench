@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { FACINGS } from '../orientation';
 import type { CellBox, PartDef } from '../parts/types';
-import { MAX_ALIASES, MAX_SOLIDS, READABLE_INDEX_VERSIONS, type LDrawIndex, type LDrawIndexEntry, type SolidBox } from './format';
+import { MAX_ALIASES, MAX_SIDE_STUDS, MAX_SOLIDS, READABLE_INDEX_VERSIONS, type LDrawIndex, type LDrawIndexEntry, type SolidBox } from './format';
 
 /** Prefix that marks library parts in model files, e.g. "ldraw:3001". */
 export const LDRAW_PREFIX = 'ldraw:';
@@ -33,6 +34,10 @@ const entrySchema = z
     printed: z.literal(true).optional(),
     base: partNumber.optional(),
     studOffset: z.tuple([studOffset, studOffset]).optional(),
+    sideStuds: z
+      .array(z.tuple([z.number().finite(), z.number().finite(), z.number().finite(), z.number().int().min(1).max(FACINGS.length - 1)]))
+      .max(MAX_SIDE_STUDS)
+      .optional(),
   })
   .refine((entry) => (entry.solids ?? []).every((box) => fitsPart(box, entry)), {
     message: 'a part fills cells outside its own box',
@@ -75,5 +80,6 @@ export function toPartDef(entry: LDrawIndexEntry): PartDef {
     keywords: [entry.category.toLowerCase(), ...(entry.keywords ?? [])],
     ...(entry.printed ? { printed: true } : {}),
     ...(entry.studOffset ? { studOffset: entry.studOffset } : {}),
+    ...(entry.sideStuds ? { sideStuds: entry.sideStuds.map(([x, y, z, facing]) => ({ at: { x, y, z }, facing: FACINGS[facing] ?? '-y' })) } : {}),
   };
 }

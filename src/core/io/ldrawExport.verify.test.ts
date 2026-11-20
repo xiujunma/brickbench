@@ -7,7 +7,8 @@
  *   LDRAW_DIR=/path/to/ldraw bun test src/core/io/ldrawExport.verify.test.ts
  */
 import { describe, expect, it } from 'bun:test';
-import { LDU_PER_UNIT, PLATE_HEIGHT, STUD_HEIGHT, rotatePoint, type Rotation } from '../grid';
+import { LDU_PER_UNIT, PLATE_HEIGHT, STUD_HEIGHT, type Rotation } from '../grid';
+import { rotateVector } from '../orientation';
 import { brickCellBox } from '../model/geometry';
 import { modelFromBricks } from '../model/model';
 import { PARTS, getPart } from '../parts/catalog';
@@ -49,7 +50,7 @@ describe.skipIf(!LDRAW_DIR)('LDraw export round trip', () => {
 
     if (part.shape.kind === 'slope') {
       // the high side (stud rows for normal slopes, the base for inverted ones) faces local -Z turned by r
-      const [hx, hz] = rotatePoint(0, -1, r);
+      const { x: hx, z: hz } = rotateVector(r, { x: 0, y: 0, z: -1 });
       const centre = [(actual.min[0] + actual.max[0]) / 2, (actual.min[2] + actual.max[2]) / 2];
       const ys = world.map((p) => p[1]);
       const probe = part.shape.inverted

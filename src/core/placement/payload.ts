@@ -1,5 +1,6 @@
-import { PLATE_HEIGHT, rotatedSize, type Rotation, type Vec3 } from '../grid';
-import { groupCellBox, rotateGroup } from '../model/geometry';
+import { PLATE_HEIGHT, type Vec3 } from '../grid';
+import { groupCellBox, rotateGroup, turnedSize } from '../model/geometry';
+import type { Orientation } from '../orientation';
 import type { IdFactory } from '../model/ids';
 import type { Brick } from '../model/types';
 import type { PartDef, PartLookup } from '../parts/types';
@@ -21,9 +22,8 @@ function centreGrab(size: Payload['size']): Vec3 {
   return { x: size.w / 2, y: size.h / 2, z: size.d / 2 };
 }
 
-export function payloadFromPart(part: PartDef, colorId: number, r: Rotation): Payload {
-  const footprint = rotatedSize(part.w, part.d, r);
-  const size = { w: footprint.w, h: part.h, d: footprint.d };
+export function payloadFromPart(part: PartDef, colorId: number, r: Orientation): Payload {
+  const size = turnedSize(part, r);
   return {
     bricks: [{ partId: part.id, colorId, x: 0, y: 0, z: 0, r }],
     size,

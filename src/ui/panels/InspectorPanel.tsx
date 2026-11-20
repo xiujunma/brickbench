@@ -1,6 +1,7 @@
 import { useShallow } from 'zustand/react/shallow';
 import { COLOR_GROUPS, getColor } from '../../core/colors';
 import type { Brick } from '../../core/model/types';
+import { facingOf, spinOf, type Orientation } from '../../core/orientation';
 import { getPart } from '../../core/parts/catalog';
 import { getEngine } from '../../editor/engineRegistry';
 import { useEditor } from '../../state/editorStore';
@@ -59,6 +60,18 @@ function ColorSection() {
 }
 
 const SUMMARY_ROWS = 5;
+
+/** How the part to build is turned, in words: "turned 90°", "on its side, turned 180°", "upside down". */
+function orientationText(orientation: Orientation): string {
+  const turned = `turned ${spinOf(orientation) * 90}°`;
+  const facing = facingOf(orientation);
+  if (facing === '+y') return turned;
+  return `${facing === '-y' ? 'upside down' : 'on its side'}, ${turned}`;
+}
+
+function tipCurrent(): void {
+  getEngine()?.tipBuild(false);
+}
 
 function rotateCurrent(): void {
   const engine = getEngine();
@@ -144,7 +157,8 @@ function BuildingSection() {
         <div>
           <strong>{part.name}</strong>
           <span>
-            {part.ldraw ? `LDraw ${part.ldraw.file.replace(/\.dat$/, '')} · ` : ''}turned {rotation * 90}°
+            {part.ldraw ? `LDraw ${part.ldraw.file.replace(/\.dat$/, '')} · ` : ''}
+            {orientationText(rotation)}
           </span>
         </div>
       </div>
@@ -152,6 +166,9 @@ function BuildingSection() {
       <div className="action-row">
         <button type="button" className="btn btn-outline" onClick={rotateCurrent}>
           <Icon name="rotate" size={16} /> Rotate <kbd>R</kbd>
+        </button>
+        <button type="button" className="btn btn-outline" onClick={tipCurrent}>
+          <Icon name="cube" size={16} /> Tip over <kbd>T</kbd>
         </button>
       </div>
     </section>

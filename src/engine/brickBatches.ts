@@ -5,14 +5,13 @@ import {
   Group,
   InstancedMesh,
   Matrix4,
-  Quaternion,
-  Vector3,
   type BufferGeometry,
   type Material,
 } from 'three';
 import type { ColorFinish } from '../core/colors';
-import { PLATE_HEIGHT } from '../core/grid';
+import type { Vec3 } from '../core/grid';
 import { brickOrigin } from '../core/model/geometry';
+import { turnOf, type Orientation } from '../core/orientation';
 import type { StudInstance } from '../core/model/studs';
 import type { Brick } from '../core/model/types';
 import type { PartLookup } from '../core/parts/types';
@@ -28,14 +27,17 @@ import {
   type OutlineTone,
 } from './materials';
 
-const UP = new Vector3(0, 1, 0);
 const WHITE = new Color('#ffffff');
+
+/** World matrix for something built around `at`, turned to an orientation. */
+export function orientedMatrix(at: Vec3, orientation: Orientation, target = new Matrix4()): Matrix4 {
+  const [a, b, c, d, e, f, g, h, i] = turnOf(orientation);
+  return target.set(a, b, c, at.x, d, e, f, at.y, g, h, i, at.z, 0, 0, 0, 1);
+}
 
 /** World matrix for a brick mesh built around its bottom-centre. */
 export function brickMatrix(brick: Brick, lookup: PartLookup, target = new Matrix4()): Matrix4 {
-  const origin = brickOrigin(brick, lookup);
-  const rotation = new Quaternion().setFromAxisAngle(UP, (brick.r * Math.PI) / 2);
-  return target.compose(new Vector3(origin.x, origin.y, origin.z), rotation, new Vector3(1, 1, 1));
+  return orientedMatrix(brickOrigin(brick, lookup), brick.r, target);
 }
 
 function capacityFor(count: number): number {
@@ -141,7 +143,7 @@ export class BrickBatches {
     for (const [finish, list] of studsByFinish) {
       const mesh = this.ensure(this.studs, finish, list.length, this.geometries.stud(), finish as ColorFinish);
       list.forEach((stud, i) => {
-        mesh.setMatrixAt(i, this.scratch.makeTranslation(stud.x + 0.5, stud.y * PLATE_HEIGHT, stud.z + 0.5));
+        mesh.setMatrixAt(i, orientedMatrix(stud, stud.r, this.scratch));
         mesh.setColorAt(i, this.color(stud.colorId));
       });
       finishBatch(mesh, list.length);

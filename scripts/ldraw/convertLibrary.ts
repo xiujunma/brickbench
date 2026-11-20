@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { encodePartMesh, LDRAW_INDEX_VERSION, MAX_ALIASES, type LDrawIndex, type LDrawIndexEntry } from '../../src/core/ldraw/format.ts';
+import { encodePartMesh, LDRAW_INDEX_VERSION, MAX_ALIASES, MAX_SIDE_STUDS, type LDrawIndex, type LDrawIndexEntry, type SideStudEntry } from '../../src/core/ldraw/format.ts';
 import { plainNumberOf } from '../../src/core/ldraw/prints.ts';
 import { readColourTable, type ColourTable } from './colours.ts';
 import { convertPart, type Conversion } from './convert.ts';
@@ -70,7 +70,7 @@ function round(n: number): number {
 }
 
 function toEntry(id: string, header: PartHeader, conversion: Extract<Conversion, { ok: true }>): LDrawIndexEntry {
-  const { fit, solids } = conversion;
+  const { fit, solids, sideStuds } = conversion;
   const keywords = header.keywords.slice(0, MAX_KEYWORDS).map((k) => k.slice(0, 80));
   return {
     id,
@@ -85,6 +85,9 @@ function toEntry(id: string, header: PartHeader, conversion: Extract<Conversion,
     snug: fit.snug,
     ...(fit.studOffset.some((offset) => offset !== 0) ? { studOffset: fit.studOffset } : {}),
     ...(solids ? { solids } : {}),
+    ...(sideStuds.length > 0
+      ? { sideStuds: sideStuds.slice(0, MAX_SIDE_STUDS).map(([x, y, z, facing]): SideStudEntry => [round(x), round(y), round(z), facing]) }
+      : {}),
     ...(isPrintedPart(header) ? { printed: true as const } : {}),
   };
 }

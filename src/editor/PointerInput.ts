@@ -192,7 +192,7 @@ export class PointerInput {
     }
     const result = this.host.solveAt(x, y, session.payload, session.ids);
     if (result) {
-      const preview = materialize(session.payload, result.offset, reuseIds(session.ids));
+      const preview = materialize(result.payload ?? session.payload, result.offset, reuseIds(session.ids));
       session = { ...session, preview, valid: result.valid };
       this.host.showDragPreview(preview, result.valid);
     }
