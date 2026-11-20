@@ -3,11 +3,15 @@ import { Icon, type IconName } from './Icon';
 
 type MenuProps = {
   readonly label: string;
+  /** Shown before the label on the button. */
+  readonly icon?: IconName;
+  /** What the button and menu are called when the label alone would not say. */
+  readonly name?: string;
   readonly children: (close: () => void) => ReactNode;
 };
 
 /** A dropdown menu built on the popover API: light-dismiss and top-layer stacking for free. */
-export function Menu({ label, children }: MenuProps) {
+export function Menu({ label, icon, name, children }: MenuProps) {
   const id = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -41,11 +45,12 @@ export function Menu({ label, children }: MenuProps) {
 
   return (
     <>
-      <button ref={triggerRef} type="button" className="menu-trigger" popoverTarget={id} aria-haspopup="menu">
-        {label}
+      <button ref={triggerRef} type="button" className="menu-trigger" popoverTarget={id} aria-haspopup="menu" aria-label={name}>
+        {icon && <Icon name={icon} size={16} />}
+        <span className="menu-trigger-label">{label}</span>
         <Icon name="chevron" size={14} />
       </button>
-      <div ref={popoverRef} id={id} popover="auto" className="menu" role="menu" aria-label={label}>
+      <div ref={popoverRef} id={id} popover="auto" className="menu" role="menu" aria-label={name ?? label}>
         {children(close)}
       </div>
     </>

@@ -16,6 +16,8 @@ import { getEngine } from '../../editor/engineRegistry';
 import { useViewPreferences, viewPreferences } from '../../state/viewPreferences';
 import { useEditor } from '../../state/editorStore';
 import { useBackupAvailable } from '../../state/sessionBackup';
+import { useAccount } from '../../state/account';
+import { saveOnline, signOut } from '../../state/online';
 import { BrandMark, Icon } from '../components/Icon';
 import { Menu, MenuItem } from '../components/Menu';
 import { cssVars, shortcut } from '../platform';
@@ -31,6 +33,7 @@ const SHAREABLE = shareBase() !== null;
 function FileMenu() {
   const openDialog = useEditor((s) => s.openDialog);
   const canRecover = useBackupAvailable();
+  const online = useAccount((s) => s.status === 'ready');
   return (
     <Menu label="File">
       {(close) => {
@@ -43,6 +46,9 @@ function FileMenu() {
             <MenuItem icon="plus" label="New model" onSelect={run(newModel)} />
             <MenuItem icon="folder" label="Open…" shortcut={shortcut('O')} onSelect={run(openModelFile)} />
             <MenuItem icon="save" label="Save to file" shortcut={shortcut('S')} onSelect={run(saveModelFile)} />
+            {online && <MenuItem icon="cloud" label="Save online" onSelect={run(saveOnline)} />}
+            {online && <MenuItem icon="cloud" label="Your models online…" onSelect={run(() => openDialog('online-models'))} />}
+            {online && <MenuItem icon="globe" label="Gallery…" onSelect={run(() => openDialog('gallery'))} />}
             {SHAREABLE && <MenuItem icon="copy" label="Copy share link" onSelect={run(copyShareLink)} />}
             <MenuItem icon="brick" label="Open sample cottage" onSelect={run(openSample)} />
             <MenuItem icon="grid" label="Your parts…" onSelect={run(() => openDialog('my-parts'))} />
@@ -121,6 +127,62 @@ function SceneMenu() {
         </>
       )}
     </Menu>
+  );
+}
+
+/** The gallery, where the site has one. */
+function GalleryButton() {
+  const online = useAccount((s) => s.status === 'ready');
+  const openDialog = useEditor((s) => s.openDialog);
+  if (!online) return null;
+  return (
+    <button type="button" className="btn gallery-toggle" aria-label="Gallery" data-tip="Models people have shared" data-tip-side="below" onClick={() => openDialog('gallery')}>
+      <Icon name="globe" size={16} />
+      <span className="gallery-toggle-label">Gallery</span>
+    </button>
+  );
+}
+
+const SHOWN_NAME = 18;
+
+/** As much of a name as the top bar has room for. */
+function shortName(name: string): string {
+  return name.length > SHOWN_NAME ? `${name.slice(0, SHOWN_NAME - 1).trimEnd()}…` : name;
+}
+
+/** Signing in, or the signed-in account's menu, where the site has accounts. */
+function AccountControl() {
+  const status = useAccount((s) => s.status);
+  const user = useAccount((s) => s.user);
+  const openDialog = useEditor((s) => s.openDialog);
+  if (status !== 'ready') return null;
+  if (!user) {
+    return (
+      <button type="button" className="btn btn-outline account-button" aria-label="Sign in" onClick={() => openDialog('account')}>
+        <Icon name="user" size={16} />
+        <span className="account-button-label">Sign in</span>
+      </button>
+    );
+  }
+  return (
+    <div className="account-menu">
+      <Menu label={shortName(user.name)} icon="user" name={`Account: ${user.name}`}>
+        {(close) => {
+          const run = (action: () => unknown) => () => {
+            close();
+            void action();
+          };
+          return (
+            <>
+              <MenuItem icon="cloud" label="Your models online…" onSelect={run(() => openDialog('online-models'))} />
+              <MenuItem icon="user" label="Account…" onSelect={run(() => openDialog('account'))} />
+              <div className="menu-sep" role="separator" />
+              <MenuItem icon="signOut" label="Sign out" onSelect={run(signOut)} />
+            </>
+          );
+        }}
+      </Menu>
+    </div>
   );
 }
 
@@ -232,6 +294,7 @@ export function TopBar({ drawer, onToggleDrawer, agentOpen, onToggleAgent }: Pro
       <ModelName />
       <div className="topbar-actions">
         <SaveStatus />
+        <GalleryButton />
         <AgentToggle open={agentOpen} onToggle={onToggleAgent} />
         <button type="button" className="icon-btn" aria-label="Undo" data-tip={`Undo (${shortcut('Z')})`} data-tip-side="below" disabled={!canUndo} onClick={undo}>
           <Icon name="undo" />
@@ -242,6 +305,7 @@ export function TopBar({ drawer, onToggleDrawer, agentOpen, onToggleAgent }: Pro
         <button type="button" className="icon-btn" aria-label="Help and shortcuts" data-tip="Help (?)" data-tip-side="below" onClick={() => openDialog('help')}>
           <Icon name="help" />
         </button>
+        <AccountControl />
         <div className="drawer-toggles">
           <button
             type="button"

@@ -1,4 +1,5 @@
 import { desktopApi } from '../../desktop/protocol';
+import { useAccount } from '../../state/account';
 import { useEditor } from '../../state/editorStore';
 import { partLibrary } from '../../state/library';
 import { Dialog } from '../components/Dialog';
@@ -17,6 +18,7 @@ const KEEPING = IN_DESKTOP_APP
 export function AboutDialog() {
   const isOpen = useEditor((s) => s.dialog === 'about');
   const close = useEditor((s) => s.closeDialog);
+  const accounts = useAccount((s) => s.status === 'ready');
   return (
     <Dialog id="about" title="About BrickBench" open={isOpen} onClose={() => close('about')}>
       <div className="about">
@@ -24,7 +26,18 @@ export function AboutDialog() {
         <section aria-labelledby="about-privacy">
           <h3 id="about-privacy">Your models stay with you</h3>
           <ul>
-            <li>There are no accounts. Your models, your favourite and recent parts, and the parts lists you add are kept {KEPT_WHERE}, not on a server.</li>
+            {accounts ? (
+              <>
+                <li>Your models, your favourite and recent parts, and the parts lists you add are kept {KEPT_WHERE}, not on a server, unless you sign in and save a model online.</li>
+                <li>
+                  Signing in is up to you. With an account, this site keeps the models you save online, private to you until you put one in the gallery, the name and
+                  account number GitHub or Google gives it, and a cookie that keeps you signed in. It never sees your password or email address. Deleting your account
+                  deletes them all.
+                </li>
+              </>
+            ) : (
+              <li>There are no accounts. Your models, your favourite and recent parts, and the parts lists you add are kept {KEPT_WHERE}, not on a server.</li>
+            )}
             <li>BrickBench downloads only its own files, such as the LDraw parts you use, from wherever it is hosted. There is no tracking and there are no adverts.</li>
             <li>A share link carries the model itself, after the “#”, which browsers never send to the site: only whoever opens the link sees it.</li>
             <li>

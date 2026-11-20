@@ -8,10 +8,12 @@ type Props = {
   readonly onClose: () => void;
   readonly children: ReactNode;
   readonly footer?: ReactNode;
+  /** Room for a grid of models. */
+  readonly wide?: boolean;
 };
 
 /** Modal built on <dialog>: focus trapping, Escape and backdrop clicks close it. */
-export function Dialog({ id, title, open, onClose, children, footer }: Props) {
+export function Dialog({ id, title, open, onClose, children, footer, wide = false }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -24,7 +26,7 @@ export function Dialog({ id, title, open, onClose, children, footer }: Props) {
   return (
     <dialog
       ref={ref}
-      className="dialog"
+      className={wide ? 'dialog dialog-wide' : 'dialog'}
       aria-labelledby={`${id}-title`}
       onClose={() => onClose()}
       onClick={(event) => {

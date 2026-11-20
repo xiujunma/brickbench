@@ -1,5 +1,6 @@
 import type { StoreApi } from 'zustand/vanilla';
 import { serializeDocument } from '../core/io/modelFile';
+import { onlineCopy, onlineCopyStore, writeOnlineCopy } from './onlineCopy';
 import type { EditorState } from './types';
 
 export const AUTOSAVE_KEY = 'brickbench:autosave:v1';
@@ -56,6 +57,8 @@ export function startAutosave(store: StoreApi<EditorState>): () => void {
         AUTOSAVE_KEY,
         serializeDocument({ name: state.name, model: state.history.present, settings: state.settings }),
       );
+      // which model online this is, written with it, so the two always go together
+      writeOnlineCopy(window.localStorage, onlineCopy());
       dirty = false;
       state.markSaved(Date.now());
     } catch {
@@ -65,16 +68,20 @@ export function startAutosave(store: StoreApi<EditorState>): () => void {
     }
   };
 
+  const schedule = (): void => {
+    dirty = true;
+    clearTimeout(timer);
+    timer = setTimeout(write, AUTOSAVE_DELAY_MS);
+  };
   const unsubscribe = store.subscribe((state, previous) => {
     const changed =
       state.history.present !== previous.history.present ||
       state.name !== previous.name ||
       state.settings !== previous.settings;
-    if (!changed) return;
-    dirty = true;
-    clearTimeout(timer);
-    timer = setTimeout(write, AUTOSAVE_DELAY_MS);
+    if (changed) schedule();
   });
+  // saved online, or opened from there: this tab's doing too
+  const unsubscribeCopy = onlineCopyStore.subscribe(schedule);
 
   const flush = (): void => {
     clearTimeout(timer);
@@ -84,6 +91,7 @@ export function startAutosave(store: StoreApi<EditorState>): () => void {
 
   return () => {
     unsubscribe();
+    unsubscribeCopy();
     window.removeEventListener('pagehide', flush);
     clearTimeout(timer);
   };

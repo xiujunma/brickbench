@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { Toasts } from '../ui/components/Toasts';
 import { AboutDialog } from '../ui/dialogs/AboutDialog';
+import { AccountDialog } from '../ui/dialogs/AccountDialog';
+import { GalleryDialog } from '../ui/dialogs/GalleryDialog';
+import { OnlineModelsDialog } from '../ui/dialogs/OnlineModelsDialog';
 import { HelpDialog } from '../ui/dialogs/HelpDialog';
 import { PhotoDialog } from '../ui/dialogs/PhotoDialog';
 import { ImportReportDialog } from '../ui/dialogs/ImportReportDialog';
@@ -63,6 +66,9 @@ export function App() {
       <MyPartsDialog />
       <TimelapseDialog />
       <ImportReportDialog />
+      <AccountDialog />
+      <OnlineModelsDialog />
+      <GalleryDialog />
     </div>
   );
 }

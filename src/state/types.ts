@@ -8,7 +8,18 @@ import type { StepOptions } from '../core/instructions/steps';
 import type { Payload } from '../core/placement/payload';
 
 export type Tool = 'select' | 'build' | 'paint' | 'erase';
-export type DialogId = 'help' | 'about' | 'parts-list' | 'instructions' | 'my-parts' | 'timelapse' | 'photo' | 'import-report';
+export type DialogId =
+  | 'help'
+  | 'about'
+  | 'parts-list'
+  | 'instructions'
+  | 'my-parts'
+  | 'timelapse'
+  | 'photo'
+  | 'import-report'
+  | 'account'
+  | 'online-models'
+  | 'gallery';
 export type ToastTone = 'info' | 'success' | 'error';
 export type SelectMode = 'replace' | 'add' | 'toggle';
 

@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": [
+      "ES2023",
+      "WebWorker"
+    ],
+    "types": [],
+    "noEmit": true
+  },
+  "include": [
+    "server",
+    "functions"
+  ],
+  "exclude": [
+    "server/**/*.test.ts",
+    "server/testing",
+    "server/local.ts",
+    "server/sqliteD1.ts"
+  ]
+}

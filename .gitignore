@@ -15,3 +15,6 @@ test-results
 # desktop app: the bundled Electron app folder and the packaged installers (`bun run desktop:dist`)
 /.desktop
 /release
+
+# the API's database when run on this computer (`bun run api`)
+/.data

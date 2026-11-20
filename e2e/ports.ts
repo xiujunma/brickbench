@@ -7,3 +7,5 @@ export const API_AGENT_PORT = 7497;
 export const CHAT_AGENT_PORT = 7495;
 /** A stand-in for a model behind an OpenAI-style Responses API (agent/fixtures/fakeModelApi.ts). */
 export const FAKE_MODEL_PORT = 7496;
+/** The accounts and gallery API, on a database that lasts as long as the tests (server/local.ts). */
+export const API_PORT = 7490;

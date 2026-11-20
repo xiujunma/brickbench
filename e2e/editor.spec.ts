@@ -304,7 +304,9 @@ test.describe('interface', () => {
     const about = page.getByRole('dialog', { name: 'About BrickBench' });
     await expect(page.locator('.panel-footer')).toContainText('Not made or endorsed by the LEGO Group');
     await page.getByRole('button', { name: 'About & privacy' }).click();
-    await expect(about).toContainText('There are no accounts');
+    // the test API runs, so the site has accounts, and says what they keep
+    await expect(about).toContainText('Signing in is up to you.');
+    await expect(about).toContainText('It never sees your password or email address.');
     await expect(about).toContainText('LEGO® is a trademark of the LEGO Group, which does not sponsor, authorise or endorse BrickBench.');
     await expect(about.getByRole('link', { name: 'Everyone who made them' })).toHaveAttribute('href', /ldraw\/CREDITS\.txt$/);
     await page.keyboard.press('Escape');

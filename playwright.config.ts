@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { AGENT_PORT, API_AGENT_PORT, APP_PORT as PORT, CHAT_AGENT_PORT, FAKE_MODEL_PORT } from './e2e/ports';
+import { AGENT_PORT, API_AGENT_PORT, API_PORT, APP_PORT as PORT, CHAT_AGENT_PORT, FAKE_MODEL_PORT } from './e2e/ports';
 
 const CI = Boolean(process.env['CI']);
 
@@ -66,6 +66,15 @@ export default defineConfig({
       command: `bunx --bun vite ${CI ? 'preview' : ''} --port ${PORT} --strictPort --host 127.0.0.1`,
       url: `http://127.0.0.1:${PORT}`,
       reuseExistingServer: !CI,
+      // its /api requests go to the test API below
+      env: { BRICKBENCH_API: `http://127.0.0.1:${API_PORT}` },
+    },
+    {
+      // accounts and the gallery, kept in memory for as long as the tests run; test sign-in is on, and "moderator" moderates
+      command: 'bun server/local.ts',
+      url: `http://127.0.0.1:${API_PORT}/health`,
+      reuseExistingServer: false,
+      env: { BRICKBENCH_API_PORT: String(API_PORT), BRICKBENCH_API_DB: ':memory:', BRICKBENCH_ADMINS: 'test:moderator' },
     },
     {
       // the agent bridge, with a stand-in for Claude Code that builds a small tower through MCP

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { getPart } from '../core/parts/catalog';
 import { parseDocument } from '../core/io/modelFile';
+import { ONLINE_COPY_KEY, setOnlineCopy } from './onlineCopy';
 import { AUTOSAVE_KEY, pauseAutosave, readAutosaveText, resumeAutosave, startAutosave } from './persistence';
 import { createEditorStore } from './store';
 import { stubGlobal, unstubAllGlobals } from '../testing/helpers';
@@ -15,6 +16,7 @@ function fakeWindow() {
     localStorage: {
       getItem: (key: string) => storage.get(key) ?? null,
       setItem: (key: string, value: string) => void storage.set(key, value),
+      removeItem: (key: string) => void storage.delete(key),
     },
     addEventListener: (type: string, listener: Listener) => {
       const set = listeners.get(type) ?? new Set<Listener>();
@@ -112,5 +114,18 @@ describe('autosave', () => {
       },
     });
     expect(readAutosaveText()).toEqual({ status: 'failed', reason: 'Access denied' });
+  });
+
+  it('keeps which model online this is with the model, and forgets it with it', () => {
+    const store = newStore();
+    const stop = startAutosave(store);
+    setOnlineCopy({ id: 'abcdefghjkmnpqrs', revision: 3, owner: 'ownerownerowner1' });
+    vi.advanceTimersByTime(1000);
+    expect(JSON.parse(win.storage.get(ONLINE_COPY_KEY) ?? 'null')).toEqual({ id: 'abcdefghjkmnpqrs', revision: 3, owner: 'ownerownerowner1' });
+    expect(win.storage.has(AUTOSAVE_KEY)).toBe(true);
+    setOnlineCopy(null);
+    vi.advanceTimersByTime(1000);
+    expect(win.storage.has(ONLINE_COPY_KEY)).toBe(false);
+    stop();
   });
 });

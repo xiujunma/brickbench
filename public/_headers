@@ -1,6 +1,7 @@
 # Response headers for hosting on Cloudflare Pages (https://developers.cloudflare.com/pages/configuration/headers/).
 # The /* block also applies to `vite preview`, so the browser tests in CI run under the same policy.
 # connect-src lets the Agent panel reach the agent bridge on the visitor's own computer.
+# Strict-Transport-Security keeps browsers on HTTPS, which keeps the sign-in cookie off plain HTTP; browsers ignore it over HTTP, as `vite preview` serves.
 
 /*
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
@@ -8,6 +9,7 @@
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Strict-Transport-Security: max-age=31536000
 
 # the app's scripts and styles carry a hash in their names, so they never change
 /assets/*

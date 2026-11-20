@@ -2,7 +2,7 @@ import { useStore } from 'zustand';
 import { createIdFactory } from '../core/model/ids';
 import { getPart } from '../core/parts/catalog';
 import { partLibrary, usesLibraryParts } from './library';
-import { restoreSession } from './session';
+import { restoreSession, type Restored } from './session';
 import { createEditorStore } from './store';
 import type { EditorState } from './types';
 
@@ -13,7 +13,7 @@ export const nextId = createIdFactory();
 export const editorStore = createEditorStore({ lookup: getPart, nextId });
 
 /** Reopens this browser's autosave, loading the LDraw library first when the model needs it. */
-export function restoreLastSession(): Promise<void> {
+export function restoreLastSession(): Promise<Restored> {
   return restoreSession({
     store: editorStore,
     lookup: getPart,

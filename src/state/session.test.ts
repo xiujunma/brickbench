@@ -68,7 +68,7 @@ const lastToast = (store: ReturnType<typeof setup>['store']) => store.getState()
 describe('restoring the last session', () => {
   it('does nothing without a save', async () => {
     const { store, deps, loadLibrary } = setup();
-    await restoreSession(deps);
+    expect(await restoreSession(deps)).toBe('none');
     expect(store.getState().history.present.bricks.size).toBe(0);
     expect(loadLibrary).not.toHaveBeenCalled();
   });
@@ -76,7 +76,7 @@ describe('restoring the last session', () => {
   it('opens a model of built-in parts without waiting for the library', async () => {
     const { store, deps, loadLibrary } = setup();
     storage.set(AUTOSAVE_KEY, savedModel([BUILT_IN]));
-    await restoreSession(deps);
+    expect(await restoreSession(deps)).toBe('whole');
     expect(partsOf(store)).toEqual(['brick-2x4']);
     expect(loadLibrary).not.toHaveBeenCalled();
   });
@@ -95,7 +95,8 @@ describe('restoring the last session', () => {
     const { store, deps } = setup();
     const text = savedModel([BUILT_IN, FROM_LIBRARY]);
     storage.set(AUTOSAVE_KEY, text);
-    await restoreSession({ ...deps, loadLibrary: () => Promise.reject(new Error('offline')) });
+    // back only in part, so it must not save over its copy online
+    expect(await restoreSession({ ...deps, loadLibrary: () => Promise.reject(new Error('offline')) })).toBe('partly');
     expect(partsOf(store)).toEqual(['brick-2x4']);
     expect(storage.get(AUTOSAVE_BACKUP_KEY)).toBe(text);
     expect(backupStore.getState().available).toBe(true);

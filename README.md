@@ -21,6 +21,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 - **Grid snapping that understands bricks.** Point at a top face to stack, at a side to build beside it (lined up with that brick's courses), or underneath to hang below. Parts never overlap: the preview turns red when there's no room, and drops land on top of whatever is in the way. A part put on a jumper plate's stud sits half a stud over, and what you build against it lines up with it.
 - **Tools:** Build, Select & move (click, Shift-click, box select, drag to move), Paint and Erase, plus an eyedropper (Alt-click) and rotate, nudge, copy, paste and duplicate.
 - **Unlimited undo** (up to 200 steps) and **autosave** in the browser.
+- **Accounts and a gallery:** sign in with GitHub or Google to keep models online and open them on any computer, and publish them to a gallery where anyone can browse, open a copy and build on it. See [Accounts and the gallery](#accounts-and-the-gallery).
 - **Files:** save and open `.brickbench.json`, or load the sample cottage. **File › Copy share link** puts the whole model in a link: whoever opens it gets their own copy, with no server in between (links to big models get too long, and the file is the way to send those).
 - **Open models from elsewhere:** LDraw files (`.ldr`, `.mpd`) and BrickLink Studio files (`.io`) open as BrickBench models, built in the model's own order, with a report on any parts that couldn't come in. Use File › Open, or drop a file on the window. See [Opening LDraw and Studio files](#opening-ldraw-and-studio-files).
 - **A desktop app** for macOS, Windows and Linux, with the parts library inside, a native menu, and LDraw and Studio files opened from Finder or Explorer. See [Desktop app](#desktop-app).
@@ -36,6 +37,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 bun install
 bun run ldraw      # once: downloads and converts the LDraw parts library (about 5 minutes)
 bun run dev        # http://localhost:5173
+bun run api        # optional, in another terminal: accounts and the gallery (see below)
 ```
 
 Requires [Bun](https://bun.sh) 1.4 or later and a browser with WebGL 2. Bun runs everything outside the browser, so Node is not needed. Without GPU acceleration the app still runs, but skips shadows. Without `bun run ldraw` the app works with the basic parts, and the LDraw library tab explains how to add the rest.
@@ -152,6 +154,22 @@ In the brackets, rows go from the back of the part to the front: `o` is a stud, 
 
 Agents get each part's own pattern from `find_parts`, such as `S45[oo/..]^3=3039`, so they know where a part has its studs. [docs/part-patterns.md](docs/part-patterns.md) defines the language in full; its tests check every example there.
 
+## Accounts and the gallery
+
+Where the site is hosted with its API (see [Hosting](#hosting)), you can sign in with GitHub or Google. Signing in is never needed to build; it keeps models online and lets you share them.
+
+- **File › Save online** keeps the open model online, with a picture of it, and saves over that copy each time after. Open it on any computer you sign in on from **File › Your models online…**, which also publishes models to the gallery, takes them out again, copies their links and deletes them. Each account keeps up to 100 models, in 25 MB (a model of a few hundred bricks takes some 20 kB, its picture included).
+- **Saves never pass each other unseen.** Each save follows on from the one you opened, so if the model was saved from somewhere else in the meantime, BrickBench asks before saving, and keeps both.
+- **The gallery** (**Gallery** in the top bar, or **File › Gallery…**) shows published models, the latest first, with a search by name. Anyone can open one, which opens a copy to build on: saving it online keeps a copy of your own. A model's link (`#gallery=…`) opens it straight away. Saving a published model again updates it in the gallery.
+- **Reports and moderation.** Signed-in builders can report a model as offensive, spam, copied or something else. Moderators (the accounts named in `ADMINS`) see a **Reported** view in the gallery, the most reported models first, where they take models out of the gallery, keep them or delete them, and stop accounts saving, publishing and reporting (their models leave the gallery with them) or let them back in. A stopped account that deletes itself loses its models, but its GitHub or Google account number is kept, so signing in again does not start it afresh.
+- **Your account** (from your name in the top bar) changes the name the gallery shows, signs out, or deletes the account with all its models.
+
+The desktop app has no accounts yet: it builds on your computer, and you share its models by file.
+
+**How it works.** The API is one function from a request to a response (`server/app.ts`). On Cloudflare Pages it runs as a Pages Function (`functions/api/[[path]].ts`) on a D1 database, at the site's own address, so the page needs no permission to reach it. It makes its tables itself the first time it runs. A signed-in browser holds a random secret in a cookie that scripts cannot read, and the database keeps only its hash; a session lasts 30 days from when it was last renewed, and is renewed when used in its last 15. Anything that changes something must come from the site's own page (its `Origin`) as well as carry the cookie, and is limited per account (saves, publishing, reports) or per visitor (sign-ins, counted by a hash of the visitor's address that is cleared out after a day). Signing in uses OAuth with PKCE and asks the provider for an id and a name only, never an email address; the provider's token is used once and not kept. A model online is its file, deflated, with a JPEG of it drawn the way the building instructions draw their pages; the gallery shows only models that are published, not taken out by a moderator, and from accounts in good standing.
+
+`bun run api` runs the same API on this computer, on SQLite (kept in `.data/`), at `http://127.0.0.1:8788`, and the dev server and `bun run preview` pass the site's `/api` requests to it. It offers **Sign in for testing**, which lets anyone in under any name and is honoured only on this computer, never on a hosted site; signing in for testing as "admin" moderates. To try real sign-in, set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`, or Google's, with `http://127.0.0.1:5173/api/auth/github/callback` (or `…/google/callback`) as the app's callback address, and open the site at `http://127.0.0.1:5173`.
+
 ## Desktop app
 
 BrickBench also runs as a desktop app, built with [Electron](https://www.electronjs.org): the same app, with the parts library inside it, so it works offline.
@@ -248,6 +266,7 @@ The bridge listens on this computer only (127.0.0.1) and answers only pages serv
 | `bun run build` | Type-check, build the LDraw library if it is missing, and build to `dist/` |
 | `bun run ldraw` | Download and convert the LDraw parts library into `public/ldraw/` |
 | `bun run agent` | Start the agent bridge, so the Agent panel's chat and other MCP agents can build in BrickBench |
+| `bun run api` | Run the accounts and gallery API on this computer, on SQLite ([Accounts and the gallery](#accounts-and-the-gallery)) |
 | `bun test` | Run the unit tests (`bun test`, about a second) |
 | `bun run coverage` | Run the unit tests with coverage; fails if any file drops below 80% of its lines or functions |
 | `bun run e2e` | Run the browser tests (Playwright; starts the dev server itself) |
@@ -282,13 +301,13 @@ GitHub Actions runs `.github/workflows/test.yml` on every push to `main` and on 
 - **Type check and unit tests:** `bun run typecheck` and `bun run coverage`, about a minute.
 - **LDraw checks and browser tests:** builds the LDraw library, runs `bun test verify` against it, builds the app, then runs `bun run e2e` against that build in headless Chromium. The library download and the converted library are cached, so only the first run, or one after the converter changes, spends a few minutes converting. Traces of failed browser tests are kept for a week as a `playwright-traces` artifact.
 
-The runners have no GPU, so WebGL is drawn on the CPU: with `CI` set, Playwright tests the production build (`vite preview`, which sends the hosted site's headers and security policy; any test whose page breaks the policy fails) one test at a time, gives each test two minutes, retries once, and stops after three failures. Run the same way locally with `bunx --bun vite build && CI=1 bun run e2e`. The browser tests also start the agent bridge, on port 7499, with a stand-in for Claude Code that builds through MCP, so they spend nothing on a real model.
+The runners have no GPU, so WebGL is drawn on the CPU: with `CI` set, Playwright tests the production build (`vite preview`, which sends the hosted site's headers and security policy; any test whose page breaks the policy fails) one test at a time, gives each test two minutes, retries once, and stops after three failures. Run the same way locally with `bunx --bun vite build && CI=1 bun run e2e`. The browser tests also start the agent bridge, on port 7499, with a stand-in for Claude Code that builds through MCP, so they spend nothing on a real model, and the accounts and gallery API, on port 7490, on a database that lasts as long as the tests.
 
 To pick up a newer LDraw release in CI, bump `ldraw-download-v1` in the workflow.
 
 ### Hosting
 
-BrickBench is a static site: `bun run build` writes it to `dist/`, about 350 MB in some 17,600 files, nearly all of them the parts library. It needs no server of its own, and the parts are stored compressed, which the app undoes itself, so any static host serves it as it is. Mind a host's limit on files: Cloudflare Pages takes 20,000 per site on its free plan (100,000 on paid ones), which leaves room for some 2,400 more parts, and the deploy job warns once a build passes 19,000 files. The build also writes `third-party-licences.txt`, the licences of the packages bundled into it, which About links to.
+BrickBench is a static site: `bun run build` writes it to `dist/`, about 350 MB in some 17,600 files, nearly all of them the parts library. Building in it needs no server of its own, and the parts are stored compressed, which the app undoes itself, so any static host serves it as it is. Only accounts and the gallery need the API, and without it the page leaves them out. Mind a host's limit on files: Cloudflare Pages takes 20,000 per site on its free plan (100,000 on paid ones), which leaves room for some 2,400 more parts, and the deploy job warns once a build passes 19,000 files. The build also writes `third-party-licences.txt`, the licences of the packages bundled into it, which About links to.
 
 The workflow deploys to [Cloudflare Pages](https://pages.cloudflare.com) after both test jobs pass on `main`. To switch it on:
 
@@ -296,6 +315,16 @@ The workflow deploys to [Cloudflare Pages](https://pages.cloudflare.com) after b
 2. In the GitHub repository's settings, add the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and the variable `CLOUDFLARE_PROJECT` set to the project's name.
 3. Push to `main`, or run the workflow by hand. The **Deploy to Cloudflare Pages** job uploads the build; Cloudflare sends only files that changed.
 4. Add your domain to the project under Custom domains. Cloudflare sets up HTTPS.
+
+The deploy also uploads the API, from `functions/`. It answers only once the site has a database; until then the page has no accounts or gallery. To switch them on, in the Cloudflare dashboard:
+
+1. Create a D1 database (Storage & Databases › D1), and bind it to the Pages project as `DB` (the project's Settings › Bindings). The API makes its tables on its first request. D1's free plan holds 5 GB, room for tens of thousands of models.
+2. Register the sign-in apps, with your domain in their addresses:
+   - **GitHub:** Settings › Developer settings › OAuth Apps › New OAuth App, with the homepage `https://your-domain` and the callback URL `https://your-domain/api/auth/github/callback`. Then generate a client secret.
+   - **Google:** in the Google Cloud console, set up the OAuth consent screen (with the scopes `openid` and `profile`), then create an OAuth client ID for a web application, with the redirect URI `https://your-domain/api/auth/google/callback`.
+3. Add the Pages project's settings (Settings › Variables and Secrets), as secrets: `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`, and `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Either pair alone is enough: the page offers the ways in that are set up. Then deploy again.
+4. Name the moderators in `ADMINS`: provider and account number, comma-separated, such as `github:1234567`. A GitHub account's number is the `id` at `https://api.github.com/users/<login>`; a Google account's is the `sub` it signs in with. Never set `TEST_SIGN_IN` on a hosted site (the API ignores it there anyway).
+5. Add a rate limiting rule for `/api/` (Security › WAF; the free plan has one), say 100 requests a minute from one address. The API limits what each account and visitor may change, but not how often anyone reads, and a gallery search reads every published model.
 
 `public/_headers` sets the hosted site's response headers: a Content Security Policy, other security headers, and how long browsers keep files (the app's own for good, since their names change with every build; library files for a day). The agent chat on a hosted site still talks to the bridge on each visitor's own computer: start it with `BRICKBENCH_AGENT_ORIGINS=https://your-domain bun run agent` to let the site's page in.
 
@@ -346,7 +375,8 @@ src/
               batches, selection and preview layers, ground, viewport, thumbnails,
               glTF export
   editor/     connects state and scene: pointer gestures, keyboard, drag and drop
-  state/      zustand store and actions, selectors, autosave, file commands
+  state/      zustand store and actions, selectors, autosave, file commands, accounts
+              and models online
   ui/         React panels, dialogs and toasts
   agent/      the build tools agents call, the link to the agent bridge, and the chat
   instructions/  building-instruction booklets: rendering steps and writing the PDF
@@ -356,6 +386,8 @@ scripts/ldraw/  the LDraw library converter (run straight from TypeScript by Bun
 agent/        the agent bridge: an MCP server for agents, a WebSocket for BrickBench tabs,
               and the chat's agent: Claude Code run headless, or a model behind an API (api/)
 electron/     the desktop app's main process and preload script, and the agent bridge it runs
+server/       the accounts and gallery API, as Cloudflare runs it, and on SQLite here (local.ts)
+functions/    the Cloudflare Pages Function that runs the API
 e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 ```
 
@@ -399,11 +431,11 @@ Bricks it leaves out are planned bottom up after its steps. If it cannot be read
 ## Not done yet
 
 - Connections beyond the stud grid: library parts snap to whole and half studs and whole plates, so hinges don't swing, Technic pins don't plug into holes, and minifigures don't assemble
-- Accounts and a gallery (models are shared by file or by link for now)
+- Accounts in the desktop app (it shares models by file for now)
 
 ## Privacy
 
-BrickBench has no accounts and no server of its own. Your models, favourite and recent parts, and parts lists stay in your browser's storage (in the desktop app, on your computer). It downloads only its own files, such as the LDraw parts you use, from wherever it is hosted, with no tracking or adverts. If you connect an AI agent, what you ask it and the model it works on go to whoever runs it: with Claude Code, to Anthropic under your own account; with GPT or Grok, to OpenAI or xAI under your API key. With a model you run yourself, through Ollama or LM Studio, they go only to where it runs, usually your own computer. A share link carries the model after its `#`, which browsers never send to the site. **About & privacy**, at the foot of the parts panel, says the same in the app, with the credits and trademark notices.
+Your models, favourite and recent parts, and parts lists stay in your browser's storage (in the desktop app, on your computer), unless you sign in and save a model online. Signing in is up to you. With an account, the site keeps the models you save online, private to you until you put one in the gallery, the name and account number GitHub or Google gives it, and a cookie that keeps you signed in; it never sees your password or email address, and deleting your account deletes them all (if a moderator has stopped the account, the account number stays, so it stays stopped). To limit sign-in attempts, the site counts them for a while by a hash of your internet address, never the address itself. BrickBench downloads only its own files, such as the LDraw parts you use, from wherever it is hosted, with no tracking or adverts. If you connect an AI agent, what you ask it and the model it works on go to whoever runs it: with Claude Code, to Anthropic under your own account; with GPT or Grok, to OpenAI or xAI under your API key. With a model you run yourself, through Ollama or LM Studio, they go only to where it runs, usually your own computer. A share link carries the model after its `#`, which browsers never send to the site. **About & privacy**, at the foot of the parts panel, says the same in the app, with the credits and trademark notices.
 
 ## Licence
 

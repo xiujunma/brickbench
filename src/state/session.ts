@@ -38,12 +38,19 @@ function keepCopy(store: StoreApi<EditorState>, text: string, problem: string): 
   store.getState().toast(`${problem} ${next}`, 'error');
 }
 
-function restoreText(deps: SessionDeps, text: string): void {
+/**
+ * How a restore went: the autosaved model back whole, none to restore, or
+ * one back only in part or not at all. Only a model back whole may go on
+ * saving over its copy online.
+ */
+export type Restored = 'whole' | 'none' | 'partly';
+
+function restoreText(deps: SessionDeps, text: string): Restored {
   const { store } = deps;
   const result = parseDocument(text, deps.lookup, deps.nextId);
   if (!result.ok) {
     store.getState().toast('Your last session could not be restored, so a fresh model was started.', 'error');
-    return;
+    return 'partly';
   }
   const { doc, warnings, skippedBricks } = result.value;
   store.getState().loadDocument(doc);
@@ -52,6 +59,7 @@ function restoreText(deps: SessionDeps, text: string): void {
     keepCopy(store, text, `${bricks} from your last session could not be restored.`);
   }
   for (const warning of warnings) store.getState().toast(warning, 'info');
+  return skippedBricks > 0 ? 'partly' : 'whole';
 }
 
 /**
@@ -60,19 +68,20 @@ function restoreText(deps: SessionDeps, text: string): void {
  * are dropped. If bricks are lost anyway (the library is unreachable, or a
  * part changed size), the full session is kept for File › Recover.
  */
-export async function restoreSession(deps: SessionDeps): Promise<void> {
+export async function restoreSession(deps: SessionDeps): Promise<Restored> {
   const { store } = deps;
   checkForBackup();
   const saved = readAutosaveText();
-  if (saved.status === 'empty') return;
+  if (saved.status === 'empty') return 'none';
   if (saved.status === 'failed') {
     store.getState().toast('Your last session could not be restored, so a fresh model was started.', 'error');
-    return;
+    return 'partly';
   }
   if (deps.usesLibrary(saved.text)) await withTimeout(deps.loadLibrary(), deps.waitMs ?? LIBRARY_WAIT_MS);
   try {
-    restoreText(deps, saved.text);
+    return restoreText(deps, saved.text);
   } catch {
     keepCopy(store, saved.text, 'Your last session could not be restored.');
+    return 'partly';
   }
 }

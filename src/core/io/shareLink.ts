@@ -30,13 +30,14 @@ export function fromBase64Url(text: string): Uint8Array | null {
   return Uint8Array.from(binary, (c) => c.charCodeAt(0));
 }
 
-async function deflate(text: string): Promise<Uint8Array> {
+/** Text deflated (raw DEFLATE, as share links and models kept online carry it). */
+export async function deflate(text: string): Promise<Uint8Array> {
   const stream = new Blob([text]).stream().pipeThrough(new CompressionStream(FORMAT));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 /** Unpacks deflated text, stopping once it passes `limit` bytes; null when it does. */
-async function inflate(bytes: Uint8Array, limit: number): Promise<string | null> {
+export async function inflate(bytes: Uint8Array, limit: number): Promise<string | null> {
   const reader = new Blob([bytes as Uint8Array<ArrayBuffer>]).stream().pipeThrough(new DecompressionStream(FORMAT)).getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;

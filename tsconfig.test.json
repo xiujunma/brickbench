@@ -10,7 +10,11 @@
   "include": [
     "src/**/*.test.ts",
     "src/**/*.verify.ts",
-    "src/testing"
+    "src/testing",
+    "server/**/*.test.ts",
+    "server/testing",
+    "server/local.ts",
+    "server/sqliteD1.ts"
   ],
   "exclude": []
 }
