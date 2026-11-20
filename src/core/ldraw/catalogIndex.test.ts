@@ -84,7 +84,7 @@ describe('library index', () => {
     expect(toPartDef(BRICK)).not.toHaveProperty('connectors');
     // no such kind, no axis, no length
     for (const connector of [
-      [16, 0, 0, 0, 1, 0, 0, 1],
+      [18, 0, 0, 0, 1, 0, 0, 1],
       [0, 0, 0, 0, 0, 0, 0, 1],
       [0, 0, 0, 0, 1, 0, 0, 0],
     ]) {
@@ -92,8 +92,16 @@ describe('library index', () => {
     }
   });
 
+  it('reads how far a part’s shape really reaches, when that is well inside its cells', () => {
+    const bar: LDrawIndexEntry = { ...BRICK, id: '87994', name: 'Bar 3L', extent: [-0.2, 0, -0.2, 0.2, 3, 0.2] };
+    const [part] = parseLDrawIndex({ version: 10, generated: '', parts: [bar] }).parts;
+    expect(toPartDef(part as LDrawIndexEntry).extent).toEqual({ min: { x: -0.2, y: 0, z: -0.2 }, max: { x: 0.2, y: 3, z: 0.2 } });
+    expect(toPartDef(BRICK)).not.toHaveProperty('extent');
+    expect(() => parseLDrawIndex({ version: 10, generated: '', parts: [{ ...bar, extent: [0.2, 0, 0, -0.2, 3, 0] }] })).toThrow(/damaged/);
+  });
+
   it('rejects damaged or unexpected indexes with a readable message', () => {
-    expect(() => parseLDrawIndex({ version: 10, generated: '', parts: [] })).toThrow(/damaged/);
+    expect(() => parseLDrawIndex({ version: 11, generated: '', parts: [] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, id: '../evil' }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, w: 0 }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex('nope')).toThrow(/damaged/);

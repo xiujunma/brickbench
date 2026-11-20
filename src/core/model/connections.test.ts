@@ -43,6 +43,10 @@ describe('connections of placed parts', () => {
     // a minifigure's head on its neck, hips under its waist, legs, arms and hands
     for (const [a, b] of [['neck', 'head'], ['hips', 'waist'], ['hip', 'leg'], ['arm', 'shoulder'], ['wrist', 'hand']] as const) expect(mates(a, b)).toBe(true);
     expect(mates('head', 'waist')).toBe(false);
+    // a bar in a clip, or in a minifigure's hand, which turns in it
+    expect(mates('clip', 'bar')).toBe(true);
+    expect(mates('bar', 'pinhole')).toBe(false);
+    expect(turnsFreely('bar', 'clip')).toBe(true);
     expect(mates('arm', 'pinhole')).toBe(false);
     // heads, legs, arms and hands turn; a torso on its hips does not
     expect(turnsFreely('neck', 'head')).toBe(true);

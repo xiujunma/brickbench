@@ -169,6 +169,26 @@ export function partLocalBoxes(part: PartDef): Aabb[] {
   });
 }
 
+/**
+ * How low a brick really reaches, in plates: a loose part with a known
+ * extent (PartDef.extent) by its shape, which a bar's is well inside the
+ * whole cells of its box; any other by its box.
+ */
+export function brickFloor(brick: PlacedPart, lookup: PartLookup): number {
+  const part = requirePart(lookup, brick.partId);
+  if (!isLoose(brick) || !part.extent) return brickCellBox(brick, lookup).y0;
+  const { min, max } = part.extent;
+  const box = turnBox(brickTurn(brick), {
+    x0: min.x * LDU_PER_UNIT,
+    y0: min.y * LDU_PER_UNIT,
+    z0: min.z * LDU_PER_UNIT,
+    x1: max.x * LDU_PER_UNIT,
+    y1: max.y * LDU_PER_UNIT,
+    z1: max.z * LDU_PER_UNIT,
+  });
+  return (originLdu(brick, part).y + box.y0) / LDU_PER_PLATE;
+}
+
 /** World-grid box covering a brick's whole footprint and height (x and z in studs, y in plates). */
 export function brickCellBox(brick: PlacedPart, lookup: PartLookup): CellBox {
   const part = requirePart(lookup, brick.partId);

@@ -4,6 +4,7 @@ import { DEFAULT_COLOR_ID } from '../colors';
 import { allBricks, modelFromBricks } from '../model/model';
 import { makeBrick } from '../model/testUtils';
 import type { Brick } from '../model/types';
+import type { PartDef, PartLookup } from '../parts/types';
 import { DEFAULT_SCENE, parseDocument, serializeDocument, type ModelDocument } from './modelFile';
 
 function ids() {
@@ -101,6 +102,17 @@ describe('model files', () => {
     if (!result.ok) throw new Error(result.error);
     expect(result.value.skippedBricks).toBe(3);
     expect(result.value.unknownParts).toEqual(['ldraw:3001']);
+  });
+
+  it('keeps a loose part whose box reaches under the ground where its shape does not, and no square part under it', () => {
+    const bar: PartDef = { ...getPart('brick-1x1')!, id: 'bar', h: 8, extent: { min: { x: -0.2, y: 0, z: -0.2 }, max: { x: 0.2, y: 3, z: 0.2 } } };
+    const withBar: PartLookup = (id) => (id === 'bar' ? bar : getPart(id));
+    // a bar lying along X, its middle 0.3 up: its box reaches half a stud down, its shape a fifth
+    const lying = { part: 'bar', color: 4, x: -1.5, y: -0.5, z: 0.5, r: 6, m: [0, -1, 0, 1, 0, 0, 0, 0, 1] };
+    const kept = parseDocument(file([lying]), withBar, ids());
+    expect(kept.ok && kept.value.doc.model.bricks.size).toBe(1);
+    // a square brick has no shape of its own to go by
+    expect(parseDocument(file([{ part: 'brick-1x1', color: 4, x: 0, y: -1, z: 0, r: 0 }]), withBar, ids()).ok).toBe(false);
   });
 
   it('drops bricks that stick out past the edge of the grid', () => {

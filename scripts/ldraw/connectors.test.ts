@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { connectorPrimitive, finishConnectors, type FlatConnector } from './connectors.ts';
+import { barPiece, connectorPrimitive, finishConnectors, type FlatConnector } from './connectors.ts';
 import { flattenPart } from './flatten.ts';
 import { memorySource } from './library.ts';
 
@@ -131,5 +131,51 @@ describe('minifigure joints', () => {
   it('are kept once when a part is drawn with two files that set the same joint', () => {
     const source = memorySource({ 's/3626bs02.dat': body, 's/3626cs02.dat': body, 'head.dat': certified('1 16 0 0 0 1 0 0 0 1 0 0 0 1 s\\3626bs02.dat\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 s\\3626cs02.dat') });
     expect(finishConnectors(flattenPart('head.dat', source).connectors).map((c) => c.kind)).toEqual(['head']);
+  });
+});
+
+describe('bars and clips', () => {
+  const cylinder = certified(tube(0, 1));
+  const IDENTITY = { m: [1, 0, 0, 0, 1, 0, 0, 0, 1] as const, t: [0, 0, 0] as const };
+
+  it('find a bar in a whole cylinder of a bar’s radius, outside in, long enough to hold', () => {
+    const bar = { m: [4, 0, 0, 0, 40, 0, 0, 0, 4] as const, t: [0, -40, 0] as const };
+    expect(barPiece('4-4cyli.dat', bar, false)).toEqual({ kind: 'bar', at: [0, -20, 0], axis: [0, 1, 0], length: 40, outward: 0 });
+    expect(barPiece('48\\4-4cylo.dat', bar, false)?.kind).toBe('bar');
+    // inside out it is a hole; a stud is fatter; a stub is too short to hold; a half cylinder is no bar
+    expect(barPiece('4-4cyli.dat', bar, true)).toBeNull();
+    expect(barPiece('4-4cyli.dat', { ...bar, m: [6, 0, 0, 0, 40, 0, 0, 0, 6] }, false)).toBeNull();
+    expect(barPiece('4-4cyli.dat', { ...bar, m: [4, 0, 0, 0, 4, 0, 0, 0, 4] }, false)).toBeNull();
+    expect(barPiece('2-4cyli.dat', bar, false)).toBeNull();
+    expect(barPiece('4-4cyli.dat', IDENTITY, false)).toBeNull();
+  });
+
+  it('join a bar drawn in pieces, and leave out the cylinders studs and clips are drawn with', () => {
+    const source = memorySource({
+      '4-4cyli.dat': cylinder,
+      // a stud primitive with a bar-sized cylinder inside it
+      'stud3.dat': certified('1 16 0 0 0 4 0 0 0 -4 0 0 0 4 4-4cyli.dat\n1 16 0 -4 0 4 0 0 0 -8 0 0 0 4 4-4cyli.dat'),
+      // a clip, drawn round a bar-sized cylinder from x -4 to -8, 2 under its origin
+      'clip6.dat': certified('1 16 -4 2 0 0 -4 0 8 0 0 0 0 4 4-4cyli.dat'),
+      'part.dat': certified(
+        [
+          '1 16 0 0 0 4 0 0 0 -20 0 0 0 4 4-4cyli.dat',
+          '1 16 0 -20 0 4 0 0 0 -20 0 0 0 4 4-4cyli.dat',
+          '1 16 40 0 0 1 0 0 0 1 0 0 0 1 stud3.dat',
+          '1 16 0 0 40 1 0 0 0 1 0 0 0 1 clip6.dat',
+        ].join('\n'),
+      ),
+    });
+    const found = finishConnectors(flattenPart('part.dat', source).connectors).map(round);
+    expect(found).toEqual([
+      { kind: 'bar', at: [0, -20, 0], axis: [0, -1, 0], length: 40 },
+      { kind: 'clip', at: [-6, 2, 40], axis: [1, 0, 0], length: 4 },
+    ]);
+  });
+
+  it('know the clips that hold bars, and the road-sign clip that holds a plate', () => {
+    expect(connectorPrimitive('clip1.dat')?.kind).toBe('clip');
+    expect(connectorPrimitive('phandle1.dat')?.kind).toBe('bar');
+    expect(connectorPrimitive('clip4.dat')).toBeUndefined();
   });
 });

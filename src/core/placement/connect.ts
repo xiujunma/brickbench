@@ -55,7 +55,7 @@ function isHole(connector: { readonly kind: string }): boolean {
 /** How near the cursor must be to a connection to plug into it (see MOUTH_REACH). */
 function reachOf(socket: WorldConnector): number {
   if (isHole(socket)) return MOUTH_REACH;
-  return isRound(socket.kind) || socket.kind === 'finger' || socket.kind === 'fork' ? REACH : JOINT_REACH;
+  return isRound(socket.kind) || ['finger', 'fork', 'clip'].includes(socket.kind) ? REACH : JOINT_REACH;
 }
 
 /** How far the cursor is from a connection it could plug into: from a hole's nearer mouth, or from anywhere along a pin, axle or hinge. */
@@ -106,8 +106,8 @@ function middleOn(plug: Connector, socket: WorldConnector, axis: Vec3, hit: Hit)
     // onto the pin from its base, as far as the hole reaches
     return along(along(socket.at, socket.axis, -half), socket.axis, plug.length / 2);
   }
-  if (socket.kind === 'axle') {
-    // along the axle to where the cursor is, in half studs from its end
+  if (socket.kind === 'axle' || socket.kind === 'bar') {
+    // along the axle or bar to where the cursor is, in half studs from its end
     const room = Math.max(half - plug.length / 2, 0);
     const s = Math.min(Math.max(dot(minus(hit.point, socket.at), socket.axis), -room), room);
     const fromEnd = Math.round((s - plug.length / 2 + half) / SLIDE_STEP) * SLIDE_STEP;

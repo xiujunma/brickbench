@@ -1,4 +1,4 @@
-import { connectorOf, connectorPrimitive, placeConnector, type FlatConnector } from './connectors.ts';
+import { barPiece, connectorOf, connectorPrimitive, placeConnector, type FlatConnector } from './connectors.ts';
 import { MINIFIG_JOINTS } from './minifigJoints.ts';
 import { normalizeName, type LibrarySource } from './library.ts';
 import { parseLDraw, type Transform, type V3 } from './parse.ts';
@@ -207,6 +207,9 @@ export class Flattener {
           const placed = placeConnector(connector, line.matrix, inverted);
           if (placed) connectors.push(placed);
         }
+        // a bar drawn as a plain cylinder; the cylinders studs are drawn with are studs, not bars
+        const bar = isStud ? null : barPiece(line.file, line.matrix, inverted);
+        if (bar) connectors.push(bar);
       }
     }
     const primitive = connectorPrimitive(key);

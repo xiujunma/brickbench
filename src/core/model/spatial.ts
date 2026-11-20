@@ -1,6 +1,6 @@
 import { GRID_LIMIT, LDU_PER_UNIT, MAX_LAYER, type Vec3 } from '../grid';
 import type { PartLookup } from '../parts/types';
-import { LDU_PER_PLATE, LDU_PER_STUD, WHOLE_CELL, brickCellBox, brickCellQuarters, brickLduSolids, isLoose, isOnGrid, type LduBox } from './geometry';
+import { LDU_PER_PLATE, LDU_PER_STUD, WHOLE_CELL, brickCellBox, brickCellQuarters, brickLduSolids, isLoose, isOnGrid, type LduBox, brickFloor } from './geometry';
 import type { Brick } from './types';
 
 /**
@@ -279,10 +279,11 @@ export function collides(
   return candidates.some((brick) => firstOverlap(index, brick, lookup, ignore) !== undefined);
 }
 
+/** Whether a brick reaches out of the build area: below the ground (by its shape, for a loose part at an angle), above the top, or past an edge. */
 export function isOutOfBounds(brick: Brick, lookup: PartLookup): boolean {
   const box = brickCellBox(brick, lookup);
   return (
-    box.y0 < 0 ||
+    brickFloor(brick, lookup) < -1e-6 ||
     box.y1 > MAX_LAYER ||
     box.x0 < -GRID_LIMIT ||
     box.z0 < -GRID_LIMIT ||

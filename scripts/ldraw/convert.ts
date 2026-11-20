@@ -24,6 +24,8 @@ export type Conversion =
       readonly sideStuds: readonly SideStudEntry[];
       /** Its Technic and click-hinge connections, in the placed part's frame (see ConnectorEntry). */
       readonly connectors: readonly ConnectorEntry[];
+      /** The box its whole shape fills, studs and all, in the placed part's frame (see LDrawIndexEntry.extent). */
+      readonly extent: readonly [number, number, number, number, number, number];
       readonly triangles: number;
     }
   | { readonly ok: false; readonly reason: 'empty' | 'too detailed' };
@@ -126,5 +128,7 @@ export function convertPart(file: string, flattener: Flattener, colours: ColourT
     const size = Math.hypot(ax, ay, az);
     return [CONNECTOR_KINDS.indexOf(connector.kind), x, y, z, ax / size, ay / size, az / size, connector.length / LDU];
   });
-  return { ok: true, mesh, fit, solids: filledCells(placed, fit), sideStuds, connectors, triangles: part.triangles.length };
+  const all = bounds(part.triangles, () => true) ?? body;
+  const extent = [all.min[0] + ox, all.min[1] + oy, all.min[2] + oz, all.max[0] + ox, all.max[1] + oy, all.max[2] + oz] as const;
+  return { ok: true, mesh, fit, solids: filledCells(placed, fit), sideStuds, connectors, extent, triangles: part.triangles.length };
 }

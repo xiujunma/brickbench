@@ -74,13 +74,28 @@ function crediting(source: LibrarySource, credits: Map<string, Credit>): Library
   };
 }
 
+/** A plate's height in studs. */
+const PLATE_STUDS = 0.4;
+/** A part's extent goes in the index when it is more than two LDraw units inside its cells on some side. */
+const EXTENT_SLACK = 0.1;
+
+/** An extent rounded outwards to a hundredth of a stud, so it still holds the whole shape. */
+function outwards(extent: readonly [number, number, number, number, number, number]): readonly [number, number, number, number, number, number] {
+  // a whisker of slack either way, so a value already on a hundredth stays on it
+  const out = (v: number, k: number): number => (k < 3 ? Math.floor(v * 100 + 1e-6) : Math.ceil(v * 100 - 1e-6)) / 100 + 0;
+  return [out(extent[0], 0), out(extent[1], 1), out(extent[2], 2), out(extent[3], 3), out(extent[4], 4), out(extent[5], 5)];
+}
+
 function round(n: number): number {
   const r = Math.round(n * 1e4) / 1e4;
   return r === 0 ? 0 : r;
 }
 
 function toEntry(id: string, header: PartHeader, conversion: Extract<Conversion, { ok: true }>): LDrawIndexEntry {
-  const { fit, solids, sideStuds, connectors } = conversion;
+  const { fit, solids, sideStuds, connectors, extent } = conversion;
+  // the cells it sits in, around its origin: its extent is worth listing only when well inside them
+  const cells = [-fit.w / 2, 0, -fit.d / 2, fit.w / 2, fit.h * PLATE_STUDS, fit.d / 2];
+  const inside = extent.some((v, k) => (k < 3 ? v - (cells[k] ?? 0) : (cells[k] ?? 0) - v) > EXTENT_SLACK);
   const keywords = header.keywords.slice(0, MAX_KEYWORDS).map((k) => k.slice(0, 80));
   return {
     id,
@@ -105,6 +120,7 @@ function toEntry(id: string, header: PartHeader, conversion: Extract<Conversion,
             .map(([kind, x, y, z, ax, ay, az, length]): ConnectorEntry => [kind, round(x), round(y), round(z), round(ax), round(ay), round(az), round(length)]),
         }
       : {}),
+    ...(inside ? { extent: outwards(extent) } : {}),
     ...(isPrintedPart(header) ? { printed: true as const } : {}),
   };
 }

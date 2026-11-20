@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import { decodePartMesh, encodePartMesh } from '../../src/core/ldraw/format.ts';
 import { readColourTable } from './colours.ts';
-import { finishConnectors, HINGE_PRIMITIVES, type FlatConnector } from './connectors.ts';
+import { finishConnectors, HINGE_PRIMITIVES, ROD_PRIMITIVES, type FlatConnector } from './connectors.ts';
 import { convertPart } from './convert.ts';
 import { Flattener } from './flatten.ts';
 import { directorySource, memorySource, type LibrarySource } from './library.ts';
@@ -178,6 +178,58 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(joinsOf('973p01.dat').map((j) => j.kind)).toEqual(['neck', 'waist', 'waist', 'shoulder', 'shoulder']);
     expect(joinsOf('3626c.dat').map((j) => j.kind)).toEqual(['head']);
     expect(joinsOf('3816c.dat').map((j) => j.kind)).toEqual(['leg']);
+  });
+
+  it('finds bars, and the clips and minifigure hands that hold them', () => {
+    const kindsOf = (file: string) => finishConnectors(new Flattener(directorySource(LDRAW_DIR ?? '')).flatten(file).connectors).map((c) => [c.kind, Math.round(c.length)]);
+    // a bar 3 studs long; a plate with a handle along it; a lightsaber blade
+    expect(kindsOf('87994.dat')).toEqual([['bar', 60]]);
+    expect(kindsOf('48336.dat')).toEqual([['bar', 40]]);
+    expect(kindsOf('30374.dat')).toEqual([['bar', 80]]);
+    // plates with clips; a minifigure's hand, by its pin and its grip
+    expect(kindsOf('61252.dat').map(([kind]) => kind)).toEqual(['clip']);
+    expect(kindsOf('63868.dat').map(([kind]) => kind)).toEqual(['clip']);
+    expect(kindsOf('3820.dat').map(([kind]) => kind)).toEqual(['hand', 'clip']);
+    // the cylinders studs and minifigure torsos are drawn with are not bars
+    for (const file of ['3001.dat', '3024.dat', '3023.dat', '973.dat', '3062b.dat']) expect(kindsOf(file).filter(([kind]) => kind === 'bar')).toEqual([]);
+  });
+
+  it('holds bars on the line each clip primitive’s bar-sized round surfaces run round', () => {
+    const circle = /^(?:48\\|8\\)?\d+-\d+(?:cyli|cylc|cylo|cyls|ring\d*|ndis|disc|edge|con\d+|chrd|tndis)\.dat$/i;
+    const compose = (p: Transform, c: Transform): Transform => {
+      const [a, b, cc, d, e, f, g, h, i] = p.m;
+      const [A, B, C, D, E, F, G, H, I] = c.m;
+      const [x, y, z] = c.t;
+      return {
+        t: [p.t[0] + a * x + b * y + cc * z, p.t[1] + d * x + e * y + f * z, p.t[2] + g * x + h * y + i * z],
+        m: [a * A + b * D + cc * G, a * B + b * E + cc * H, a * C + b * F + cc * I, d * A + e * D + f * G, d * B + e * E + f * H, d * C + e * F + f * I, g * A + h * D + i * G, g * B + h * E + i * H, g * C + h * F + i * I],
+      };
+    };
+    for (const [name, primitive] of Object.entries(ROD_PRIMITIVES)) {
+      const [ux, uy, uz] = primitive.axis;
+      // where the circles of a bar's radius about the primitive's axis are centred, the axis's own part left out
+      const found = new Map<string, number>();
+      const walk = (file: string, at: Transform): void => {
+        for (const line of parseLDraw(readFileSync(join(LDRAW_DIR ?? '', 'p', file.replace(/\\/g, '/').toLowerCase()), 'utf8'))) {
+          if (line.kind !== 'ref') continue;
+          const placed = compose(at, line.matrix);
+          if (!circle.test(line.file)) {
+            walk(line.file, placed);
+            continue;
+          }
+          const [a, b, , d, e, , g, h] = placed.m;
+          const length = Math.hypot(b, e, h);
+          if (Math.abs((b * ux + e * uy + h * uz) / length) < 0.999 || Math.abs(Math.hypot(a, d, g) - 4) > 0.1) continue;
+          const [x, y, z] = placed.t;
+          const along = x * ux + y * uy + z * uz;
+          const key = [x - along * ux, y - along * uy, z - along * uz].map((v) => Math.round(v * 100) / 100 + 0).join(',');
+          found.set(key, (found.get(key) ?? 0) + 1);
+        }
+      };
+      walk(`${name}.dat`, { m: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0] });
+      const [most] = [...found.entries()].sort((p, q) => q[1] - p[1]);
+      expect(`${name} ${most?.[0]}`).toBe(`${name} ${primitive.through.map((v) => v + 0).join(',')}`);
+    }
   });
 
   it('says which way a jumper plate’s stud sits between cells, and that a plain plate’s do not', () => {

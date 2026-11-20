@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import { PLATE_HEIGHT, type Vec3 } from '../grid';
 import { brickConnectors, engaged } from '../model/connections';
-import { brickCellBox, isLoose } from '../model/geometry';
+import { brickCellBox, brickFloor, isLoose } from '../model/geometry';
+import { isOutOfBounds } from '../model/spatial';
 import { connectorLookup as lookup } from '../model/connectorTestParts';
 import { makeBrick } from '../model/testUtils';
 import { turnOf } from '../orientation';
@@ -156,5 +157,40 @@ describe('putting a minifigure together', () => {
     const { x } = box(arm);
     expect(((x[0] ?? 0) + (x[1] ?? 0)) / 2).toBeLessThan(0);
     expect(pluggedInto(arm, torso)).toBe(true);
+  });
+});
+
+describe('bars and clips', () => {
+  it('lays a bar in a clip, along it, its middle in the clip', () => {
+    const plate = makeBrick({ id: 'plate', partId: 'clip-plate' });
+    // the clip's front, at its bar's line: x 0.5, y 0.3, z 1.5 in the world
+    const bar = plug(plate, 'bar', { x: 0.55, y: 0.35, z: 2 }, { x: 0, y: 0, z: 1 });
+    if (!bar) throw new Error('no bar');
+    const [held] = brickConnectors(bar, lookup);
+    expect(Math.abs(held?.axis.x ?? 0)).toBeCloseTo(1, 9);
+    expect(held?.at.x).toBeCloseTo(0.5, 9);
+    expect(held?.at.z).toBeCloseTo(1.5, 9);
+    expect(pluggedInto(bar, plate)).toBe(true);
+  });
+
+  it('lets a bar lie in a clip near the ground, its shape clear of it though its box is not', () => {
+    const plate = makeBrick({ id: 'plate', partId: 'clip-plate' });
+    const bar = plug(plate, 'bar', { x: 0.55, y: 0.35, z: 2 }, { x: 0, y: 0, z: 1 });
+    if (!bar) throw new Error('no bar');
+    expect(brickCellBox(bar, lookup).y0).toBeLessThan(0);
+    expect(isOutOfBounds(bar, lookup)).toBe(false);
+    // a fifth of a stud under the clip's line, a quarter of a plate off the ground
+    expect(brickFloor(bar, lookup)).toBeCloseTo(0.25, 9);
+  });
+
+  it('slides a clip along a bar, half a stud at a time', () => {
+    const upright = makeBrick({ id: 'bar', partId: 'bar' });
+    const clip = plug(upright, 'clip-plate', { x: 0.8, y: 2.1, z: 0.5 }, { x: 1, y: 0, z: 0 });
+    if (!clip) throw new Error('no clip');
+    const [holding] = brickConnectors(clip, lookup);
+    // on the bar's line, its lower end on the half stud nearest the cursor: 2 studs up the bar
+    expect(holding?.at.x).toBeCloseTo(0.5, 9);
+    expect((holding?.at.y ?? 0) - (holding?.length ?? 0) / 2).toBeCloseTo(2, 9);
+    expect(pluggedInto(clip, upright)).toBe(true);
   });
 });

@@ -66,6 +66,12 @@ export interface PartDef {
   readonly sideStuds?: readonly SideStud[] | undefined;
   /** Technic pins, holes and axles, and click hinges, where parts plug in (library parts that have them). */
   readonly connectors?: readonly Connector[] | undefined;
+  /**
+   * The box its shape really fills, in world units around its origin, when
+   * that is well inside its cells (library parts such as bars): how far it
+   * reaches once at an angle.
+   */
+  readonly extent?: { readonly min: Vec3; readonly max: Vec3 } | undefined;
 }
 
 export type ConnectorKind = (typeof CONNECTOR_KINDS)[number];

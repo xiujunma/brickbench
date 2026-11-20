@@ -47,7 +47,8 @@ const brickSchema = z
     part: z.string().min(1).max(64),
     color: z.number().int().min(0).max(100_000),
     x: coord,
-    y: z.number().min(0).max(MAX_LAYER),
+    // a loose part's box may reach under the ground where its shape does not (see brickFloor)
+    y: z.number().min(-MAX_LAYER).max(MAX_LAYER),
     z: coord,
     /** 0 to 3 upright, turned that many quarter turns; 4 to 23 on a side or upside down (see ../orientation). */
     r: z
@@ -59,6 +60,7 @@ const brickSchema = z
     m: z.array(z.number().finite()).length(9).refine((m) => isRotation(m, 1e-3), 'not a rotation').optional(),
   })
   // only loose parts stand off the LDraw unit lattice
+  .refine((b) => b.m !== undefined || b.y >= 0, { message: 'below the ground', path: ['y'] })
   .refine((b) => b.m !== undefined || onLattice(b.x, LDU_PER_STUD_STEP), { message: LATTICE, path: ['x'] })
   .refine((b) => b.m !== undefined || onLattice(b.y, LDU_PER_PLATE_STEP), { message: LATTICE, path: ['y'] })
   .refine((b) => b.m !== undefined || onLattice(b.z, LDU_PER_STUD_STEP), { message: LATTICE, path: ['z'] });

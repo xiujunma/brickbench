@@ -1,37 +1,5 @@
-import { expect, test, type Page } from './fixtures';
-import { chooseLibraryPart, counts, freshEditor, savedBricks, viewportCentre } from './helpers';
-
-/** Moves the cursor over the scene near `from` until the build preview's position matches `wanted`; where it does, or null. */
-async function findSpot(page: Page, from: { x: number; y: number }, wanted: RegExp): Promise<{ x: number; y: number } | null> {
-  const coords = page.locator('.status-coords');
-  for (let dy = -90; dy <= 60; dy += 6) {
-    for (let dx = -60; dx <= 60; dx += 6) {
-      await page.mouse.move(from.x + dx, from.y + dy);
-      if (wanted.test((await coords.textContent()) ?? '')) return { x: from.x + dx, y: from.y + dy };
-    }
-  }
-  return null;
-}
-
-/**
- * Builds the chosen part where it plugs into something near `from`: tries
- * each spot where the build preview's position matches `wanted`, keeping
- * the first where the new part comes in loose (plugged in), undoing the rest.
- */
-async function plugNear(page: Page, from: { x: number; y: number }, wanted: RegExp, bricks: number): Promise<{ x: number; y: number } | null> {
-  const coords = page.locator('.status-coords');
-  for (let dy = -90; dy <= 60; dy += 6) {
-    for (let dx = -60; dx <= 60; dx += 6) {
-      await page.mouse.move(from.x + dx, from.y + dy);
-      if (!wanted.test((await coords.textContent()) ?? '')) continue;
-      await page.mouse.click(from.x + dx, from.y + dy);
-      if ((await savedBricks(page, bricks + 1)).at(-1)?.m) return { x: from.x + dx, y: from.y + dy };
-      await page.keyboard.press('ControlOrMeta+z');
-      await savedBricks(page, bricks);
-    }
-  }
-  return null;
-}
+import { expect, test } from './fixtures';
+import { chooseLibraryPart, counts, findSpot, freshEditor, plugNear, savedBricks, viewportCentre } from './helpers';
 
 test.describe('Technic, hinges and minifigures', () => {
   test('plugs a pin into a beam, a beam onto the pin, and swings it on the pin', async ({ page }) => {
@@ -128,5 +96,28 @@ test.describe('Technic, hinges and minifigures', () => {
     await expect(counts(page)).toContainText('1 selected');
     await page.keyboard.press('r');
     await expect.poll(async () => (await savedBricks(page, 3))[2]?.m?.[0]).toBeCloseTo(Math.cos(Math.PI / 12), 6);
+  });
+
+  test('clips a bar to a plate with a clip', async ({ page }) => {
+    // starts the editor and searches the library twice
+    test.slow();
+    await freshEditor(page);
+    await page.getByRole('button', { name: 'Library', exact: true }).click();
+    await expect(page.locator('#library-category')).toBeVisible();
+
+    // a 1 × 1 plate with a clip on its side, on the baseplate
+    await chooseLibraryPart(page, '61252');
+    const centre = await viewportCentre(page);
+    await page.mouse.click(centre.x, centre.y);
+    await expect(counts(page)).toHaveText('1 brick');
+
+    // a bar 3 long goes into the clip, across it, its middle in the clip: low enough that its box, a stud thick to its fifth, reaches under the ground
+    await chooseLibraryPart(page, '87994');
+    const inClip = await plugNear(page, centre, /Y\s*-0\.\d/, 1);
+    expect(inClip).not.toBeNull();
+    const bar = (await savedBricks(page, 2))[1];
+    expect(bar?.partId).toBe('ldraw:87994');
+    // lying level: its own up, along the bar, runs across
+    expect(Math.abs(bar?.m?.[4] ?? 1)).toBeLessThan(1e-6);
   });
 });

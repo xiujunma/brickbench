@@ -56,6 +56,10 @@ const entrySchema = z
       .max(MAX_SIDE_STUDS)
       .optional(),
     connectors: z.array(connector).max(MAX_CONNECTORS).optional(),
+    extent: z
+      .tuple([finite, finite, finite, finite, finite, finite])
+      .refine(([x0, y0, z0, x1, y1, z1]) => x0 <= x1 && y0 <= y1 && z0 <= z1, { message: 'a part’s extent is inside out' })
+      .optional(),
   })
   .refine((entry) => (entry.solids ?? []).every((box) => fitsPart(box, entry)), {
     message: 'a part fills cells outside its own box',
@@ -106,5 +110,6 @@ export function toPartDef(entry: LDrawIndexEntry): PartDef {
     ...(entry.studOffset ? { studOffset: entry.studOffset } : {}),
     ...(entry.sideStuds ? { sideStuds: entry.sideStuds.map(([x, y, z, facing]) => ({ at: { x, y, z }, facing: FACINGS[facing] ?? '-y' })) } : {}),
     ...(entry.connectors ? { connectors: entry.connectors.map(toConnector) } : {}),
+    ...(entry.extent ? { extent: { min: { x: entry.extent[0], y: entry.extent[1], z: entry.extent[2] }, max: { x: entry.extent[3], y: entry.extent[4], z: entry.extent[5] } } } : {}),
   };
 }

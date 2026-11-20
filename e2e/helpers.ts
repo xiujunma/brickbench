@@ -88,3 +88,41 @@ export async function chooseLibraryPart(page: Page, number: string): Promise<voi
   await expect(tile).toHaveAttribute('title', new RegExp(`LDraw ${number}\\b`));
   await tile.click();
 }
+
+/** Points on the screen around `from`, out to `reach` pixels and `step` apart, nearest first: where to look for something near it. */
+export function spotsAround(from: { x: number; y: number }, reach = 90, step = 6): { x: number; y: number }[] {
+  const spots: { x: number; y: number; d: number }[] = [];
+  for (let dy = -reach; dy <= reach; dy += step) {
+    for (let dx = -reach; dx <= reach; dx += step) spots.push({ x: from.x + dx, y: from.y + dy, d: dx * dx + dy * dy });
+  }
+  return spots.sort((a, b) => a.d - b.d).map(({ x, y }) => ({ x, y }));
+}
+
+/** Moves the cursor out from `from` until the build preview's position matches `wanted`; where it does, or null. */
+export async function findSpot(page: Page, from: { x: number; y: number }, wanted: RegExp): Promise<{ x: number; y: number } | null> {
+  const coords = page.locator('.status-coords');
+  for (const spot of spotsAround(from)) {
+    await page.mouse.move(spot.x, spot.y);
+    if (wanted.test((await coords.textContent()) ?? '')) return spot;
+  }
+  return null;
+}
+
+/**
+ * Builds the chosen part where it plugs into something near `from`: tries
+ * each spot, nearest first, where the build preview's position matches
+ * `wanted`, keeping the first where the new part comes in loose (plugged
+ * in), undoing the rest.
+ */
+export async function plugNear(page: Page, from: { x: number; y: number }, wanted: RegExp, bricks: number): Promise<{ x: number; y: number } | null> {
+  const coords = page.locator('.status-coords');
+  for (const spot of spotsAround(from)) {
+    await page.mouse.move(spot.x, spot.y);
+    if (!wanted.test((await coords.textContent()) ?? '')) continue;
+    await page.mouse.click(spot.x, spot.y);
+    if ((await savedBricks(page, bricks + 1)).at(-1)?.m) return spot;
+    await page.keyboard.press('ControlOrMeta+z');
+    await savedBricks(page, bricks);
+  }
+  return null;
+}

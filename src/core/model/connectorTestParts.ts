@@ -66,7 +66,16 @@ export const HEAD = part('head', 1, 1, 3, [{ kind: 'head', at: { x: 0, y: 0, z: 
 /** A minifigure's right arm, by its shoulder pin, which its body hangs out and down from. */
 export const ARM = part('arm', 1, 1, 4, [{ kind: 'arm', at: { x: 0.4, y: 1.4, z: 0 }, axis: X, length: 0.3 }]);
 
-const TECHNIC = new Map([PIN, BEAM, TECHNIC_BRICK, AXLE, BUSH, FINGER, FORK, TORSO, HIPS, HEAD, ARM].map((p) => [p.id, p]));
+/** A bar 3 studs long, upright, as LDraw 87994: a fifth of a stud across, well inside its cells. */
+export const BAR = {
+  ...part('bar', 1, 1, 8, [{ kind: 'bar', at: { x: 0, y: 1.5, z: 0 }, axis: Y, length: 3 }]),
+  extent: { min: { x: -0.2, y: 0, z: -0.2 }, max: { x: 0.2, y: 3, z: 0.2 } },
+};
+
+/** A 1 × 1 plate with a clip on its front, holding a bar across, as LDraw 61252. */
+export const CLIP_PLATE = part('clip-plate', 1, 2, 1, [{ kind: 'clip', at: { x: 0, y: 0.3, z: 0.5 }, axis: X, length: 0.4 }]);
+
+const TECHNIC = new Map([PIN, BEAM, TECHNIC_BRICK, AXLE, BUSH, FINGER, FORK, TORSO, HIPS, HEAD, ARM, BAR, CLIP_PLATE].map((p) => [p.id, p]));
 
 /** The test parts, and the built-in catalogue's. */
 export const connectorLookup: PartLookup = (id) => TECHNIC.get(id) ?? getPart(id);

@@ -9,7 +9,7 @@ const keys = (...list: string[]) => list.map((key) => <kbd key={key}>{key}</kbd>
 
 const MOUSE: readonly Row[] = [
   ['Place a part (Build)', 'Click'],
-  ['Plug into a Technic pin, hole or axle, a hinge or a minifigure', 'Click at it with a part that fits'],
+  ['Plug into a Technic pin, hole or axle, a hinge, a minifigure, a bar or a clip', 'Click at it with a part that fits'],
   ['Drop a part from the library', 'Drag its tile'],
   ['Orbit', 'Right-drag · Alt-drag'],
   ['Orbit in Build, Paint, Erase', 'Left-drag'],

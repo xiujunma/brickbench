@@ -191,6 +191,8 @@ test.describe('models online', () => {
   });
 
   test('deletes an account with its models', async ({ page }) => {
+    // starts the editor twice, signing in each time
+    test.slow();
     const ada = someone('ada');
     await signedIn(page, ada, 'Ada');
     await build(page, 1);

@@ -45,6 +45,6 @@ export const MINIFIG_JOINTS: Readonly<Record<string, readonly FlatConnector[]>> 
   's/3817cs02.dat': LEG,
   // the right arm's inner half (the left arm is the right one mirrored): its shoulder, and the wrist its hand turns in
   's/3818s01.dat': [joint('arm', [0, 0, 0], ACROSS, 6), joint('wrist', [-4.994, 18.891, -9.898], [0, -1, 1], 6)],
-  // a hand, by the pin along its Z it turns on
-  '3820.dat': [joint('hand', [0, 0, 0], [0, 0, 1], 13)],
+  // a hand, by the pin along its Z it turns on, and its grip, which holds a bar like a clip
+  '3820.dat': [joint('hand', [0, 0, 0], [0, 0, 1], 13), joint('clip', [0, -0.823, -9.895], [0, -0.9681, -0.2504], 11)],
 };

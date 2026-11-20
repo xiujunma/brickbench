@@ -60,6 +60,13 @@ describe('converting a part', () => {
     expect(plain.ok && plain.connectors).toEqual([]);
   });
 
+  it('measures the box its whole shape fills, studs and all', () => {
+    const result = convertPart('brick.dat', flattener);
+    if (!result.ok) throw new Error(result.reason);
+    // the 1 × 1 brick, its stud 0.2 above its 1.2 top
+    expect(result.extent.map((v) => Math.round(v * 1000) / 1000 + 0)).toEqual([-0.5, 0, -0.5, 0.5, 1.4, 0.5]);
+  });
+
   it('turns LDraw coordinates into studs with y up', () => {
     expect(toEditor([20, -24, 40])).toEqual([1, 1.2, -2]);
   });

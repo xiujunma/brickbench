@@ -2,9 +2,11 @@
  * Technic and click-hinge connections, read from the LDraw primitives that
  * draw them: pins (connect*, confric*), round pin holes (peghole*, beamhol*,
  * connhol*), axles and axle holes (axle*, axl*), and click hinges'
- * single fingers and forks of two (clh*). Each primitive in a part is a
- * piece of a connection; pieces along one line join up, so the peg-hole ends
- * on the two faces of a Technic brick make one hole through it.
+ * single fingers and forks of two (clh*), and the clips (clip*) and handle
+ * bars (phandle*, handle*) LDraw draws as primitives; bars drawn as plain
+ * cylinders are found by their size (barPiece). Each primitive in a part is
+ * a piece of a connection; pieces along one line join up, so the peg-hole
+ * ends on the two faces of a Technic brick make one hole through it.
  */
 import { CONNECTOR_KINDS } from '../../src/core/ldraw/format.ts';
 import type { Transform, V3 } from './parse.ts';
@@ -80,6 +82,63 @@ const HINGES: Readonly<Record<string, ConnectorPrimitive>> = {
 /** The hinge primitives and the pivot each turns about, for the verify test. */
 export const HINGE_PRIMITIVES: Readonly<Record<string, ConnectorPrimitive>> = HINGES;
 
+function rod(kind: 'bar' | 'clip', axis: V3, through: V3): ConnectorPrimitive {
+  return { kind, axis, through, either: false };
+}
+
+const ALONG_X: V3 = [1, 0, 0];
+const ALONG_Z: V3 = [0, 0, 1];
+
+/**
+ * Clips hold a bar along the line their inner surface, of a bar's radius
+ * (4 LDU), runs round; handles are bars. Found from where each primitive's
+ * round surfaces are centred (the verify test checks them against the
+ * library). The road-sign clip (clip4) holds a plate's edge, not a bar.
+ */
+const RODS: Readonly<Record<string, ConnectorPrimitive>> = {
+  clip1: rod('clip', ALONG_Y, ORIGIN),
+  clip2: rod('clip', ALONG_Y, [0, 0, -10]),
+  clip3: rod('clip', ALONG_X, [0, 2, 0]),
+  clip5: rod('clip', ALONG_Y, ORIGIN),
+  clip6: rod('clip', ALONG_X, [0, 2, 0]),
+  clip7: rod('clip', ALONG_Y, ORIGIN),
+  clip8: rod('clip', ALONG_Z, [0, -6, 0]),
+  clip9: rod('clip', ALONG_Y, [0, 0, -10]),
+  clip10: rod('clip', ALONG_Y, [0, 0, -10]),
+  clip11: rod('clip', ALONG_Z, [0, -6, 0]),
+  clip12: rod('clip', ALONG_Y, ORIGIN),
+  clip13: rod('clip', ALONG_Y, ORIGIN),
+  clip14: rod('clip', ALONG_Y, [0, 0, -10]),
+  clip15: rod('clip', ALONG_Y, ORIGIN),
+  clip16: rod('clip', ALONG_Y, ORIGIN),
+  phandle1: rod('bar', ALONG_X, [0, 2, 0]),
+  phandle2: rod('bar', ALONG_X, [0, 2, 0]),
+  handle: rod('bar', ALONG_X, [0, 0, 4]),
+  handle2: rod('bar', ALONG_X, [0, 0, 4]),
+};
+
+/** The clip and handle primitives and the line each holds a bar on, for the verify test. */
+export const ROD_PRIMITIVES: Readonly<Record<string, ConnectorPrimitive>> = RODS;
+
+/** A bar's radius, in LDU (3.18 mm), and the shortest stretch of one worth plugging into. */
+const BAR_RADIUS = 4;
+const SHORTEST_BAR = 8;
+
+/**
+ * A bar, when a reference draws one: a whole cylinder (4-4cyli or 4-4cylo)
+ * of a bar's radius, at least SHORTEST_BAR long, its surface facing out.
+ * Null for anything else, inside out (a hole) included.
+ */
+export function barPiece(file: string, matrix: Transform, inverted: boolean): FlatConnector | null {
+  if (inverted || !/^(48\/)?4-4cyl[io]\.dat$/.test(file.replace(/\\/g, '/').toLowerCase())) return null;
+  const [a, b, c, d, e, f, g, h, i] = matrix.m;
+  const radial = [Math.hypot(a, d, g), Math.hypot(c, f, i)];
+  const length = Math.hypot(b, e, h);
+  if (radial.some((r) => Math.abs(r - BAR_RADIUS) > 0.05) || length < SHORTEST_BAR) return null;
+  const [x, y, z] = matrix.t;
+  return { kind: 'bar', at: [x + b / 2, y + e / 2, z + h / 2], axis: [b / length, e / length, h / length], length, outward: 0 };
+}
+
 /** The connection a primitive draws, by its file name ("p/connect.dat" or "connect.dat"); undefined for any other file. */
 export function connectorPrimitive(name: string): ConnectorPrimitive | undefined {
   const base = name.replace(/^.*\//, '').replace(/\.dat$/, '');
@@ -88,7 +147,7 @@ export function connectorPrimitive(name: string): ConnectorPrimitive | undefined
   if (/^(peghole\d*|beamhol[e2]|connhol(e|\d+))$/.test(base)) return PIN_HOLE;
   if (/^(axle|axleend\d*|axles|axlesphe|axlebeam|axlecaph?\d*)$/.test(base)) return AXLE;
   if (/^(axlehol[2-9e]|axleho1[02]|axl\dhol[e\d]|axl\dho\d+|axl\dend)$/.test(base)) return AXLE_HOLE;
-  return HINGES[base];
+  return HINGES[base] ?? RODS[base];
 }
 
 function dot(a: V3, b: V3): number {
@@ -208,6 +267,8 @@ const JOIN_GAP: Readonly<Record<ConnectorKind, number | null>> = {
   arm: null,
   wrist: null,
   hand: null,
+  bar: 1,
+  clip: null,
 };
 /** Pieces of a connection lie on one line to within this, in LDU. */
 const ON_LINE = 0.5;

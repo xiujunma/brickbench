@@ -57,7 +57,7 @@ function isPair(a: ConnectorKind, b: ConnectorKind, p: ConnectorKind, q: Connect
  * What plugs into what: a pin into a pin hole, an axle into either kind of
  * hole, a hinge's single finger into a fork, and a minifigure's head on its
  * neck, hips under its waist, legs on the hips, arms at its shoulders and
- * hands at its wrists.
+ * hands at its wrists, and a bar in a clip or a minifigure's hand.
  */
 export function mates(a: ConnectorKind, b: ConnectorKind): boolean {
   const pairs: readonly (readonly [ConnectorKind, ConnectorKind])[] = [
@@ -70,6 +70,7 @@ export function mates(a: ConnectorKind, b: ConnectorKind): boolean {
     ['hip', 'leg'],
     ['shoulder', 'arm'],
     ['wrist', 'hand'],
+    ['bar', 'clip'],
   ];
   return pairs.some(([p, q]) => isPair(a, b, p, q));
 }
@@ -81,7 +82,7 @@ export function turnsFreely(a: ConnectorKind, b: ConnectorKind): boolean {
 
 /** Round connections, whose own turn about their axis means nothing to what plugs into them. */
 export function isRound(kind: ConnectorKind): boolean {
-  return kind === 'pin' || kind === 'pinhole' || kind === 'axle' || kind === 'axlehole';
+  return kind === 'pin' || kind === 'pinhole' || kind === 'axle' || kind === 'axlehole' || kind === 'bar';
 }
 
 /** How far a point lies from a connection's line. */
