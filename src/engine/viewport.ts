@@ -181,6 +181,16 @@ export class Viewport {
     return { x: forward.x, y: forward.y, z: forward.z };
   }
 
+  /** Turns the camera to look along a direction at what it looks at now, from as far away. */
+  lookAlong(direction: Vec3): void {
+    const forward = new Vector3(direction.x, direction.y, direction.z);
+    if (forward.lengthSq() < 1e-12) return;
+    const distance = this.camera.position.distanceTo(this.controls.target);
+    this.camera.position.copy(this.controls.target).addScaledVector(forward.normalize(), -distance);
+    this.controls.update();
+    this.requestRender();
+  }
+
   /** Camera "forward" flattened onto the ground, for camera-relative nudging. */
   groundForward(): { x: number; z: number } {
     const forward = new Vector3();

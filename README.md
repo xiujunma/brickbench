@@ -24,7 +24,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
 - **Files:** save and open `.brickbench.json`, or load the sample cottage. **File › Copy share link** puts the whole model in a link: whoever opens it gets their own copy, with no server in between (links to big models get too long, and the file is the way to send those).
 - **Open models from elsewhere:** LDraw files (`.ldr`, `.mpd`) and BrickLink Studio files (`.io`) open as BrickBench models, built in the model's own order, with a report on any parts that couldn't come in. Use File › Open, or drop a file on the window. See [Opening LDraw and Studio files](#opening-ldraw-and-studio-files).
 - **A desktop app** for macOS, Windows and Linux, with the parts library inside, a native menu, and LDraw and Studio files opened from Finder or Explorer. See [Desktop app](#desktop-app).
-- **Building instructions:** a printable PDF booklet with a cover, the parts list, then one page per step showing the parts to add and the model so far, with the new parts outlined.
+- **Building instructions:** a printable PDF booklet with a cover, the parts list, then one page per step showing the parts to add and the model so far, with the new parts outlined. Steps are planned for you, or arranged by hand, with sub-assemblies on pages of their own and a view for any step. See [Building instructions](#building-instructions).
 - **Time-lapse video:** a video of your model being built, each brick dropping into place while the camera circles, ready to share. See [Time-lapse video](#time-lapse-video).
 - **Exports:** LDraw (`.ldr`, opens in Studio, LeoCAD and LDView), glTF (`.glb`, at real-world scale for Blender), PNG, a time-lapse video (MP4 or WebM), and a parts list (CSV).
 - **Light that looks real.** Ambient occlusion darkens the seams and corners where bricks meet, in the view, in images and in videos (**Scene › Ambient occlusion**; on unless the computer draws 3D without a graphics card). **File › Photo (.png)…** path traces a still of the view: light bounces between the bricks, shadows soften and transparent bricks turn to glass, in seconds to minutes depending on quality and size.
@@ -59,6 +59,7 @@ Requires [Bun](https://bun.sh) 1.4 or later and a browser with WebGL 2. Bun runs
 | Save / open | | `⌘S` / `⌘O` |
 | Search parts / help | | `/` / `?` |
 | Choose a search result | | `↑` `↓`, `Enter` builds with it, `Esc` clears |
+| Previous / next instruction step (while arranging steps) | | `[` / `]` |
 
 On Windows and Linux, use Ctrl in place of ⌘.
 
@@ -68,6 +69,7 @@ Choose **File › Building instructions (.pdf)…**, or **Instructions** in the 
 
 - **Steps are planned for you.** "Bottom up" builds layer by layer and groups bricks that sit near each other, so every step can actually be built. "As you built it" follows the order you placed the bricks.
 - **Parts per step:** 3, 6, 10, 20 or 40. Big models need bigger steps; booklets are limited to 400 pages, which fits models up to about 15,000 bricks.
+- **Or arrange them yourself.** **Edit steps…** opens the steps in the 3D view, one at a time: what is built so far, the step's new parts outlined, and later steps faint. `[` and `]`, or the arrows beside the step's number, go from step to step. Select bricks to move them into the step on show or into a new step after it, or to make them a **sub-assembly**: built on pages of its own, named as you like, then added whole in one step. **Draw it from this view** gives a step a view of its own, say to show the back of the model. Every change is one step to undo, and your steps are saved with the model. **Done**, or `Esc`, goes back to building. The booklet then follows "Your steps"; bricks added since you arranged them are planned bottom up after them. A step adding more kinds of parts than a page can list is spread over several pages.
 - **Paper:** A4 or US Letter, landscape.
 - **Pictures use your current view.** Turn the model to show its best side before you start. Every page uses the same view and scale, so the model grows in place from page to page. New parts get an outline that stays the same width in every picture: blue on red, orange, yellow and tan bricks, orange on the rest.
 
@@ -87,7 +89,7 @@ The video is made in your browser and saved to your downloads: an MP4 (H.264), o
 
 ## Opening LDraw and Studio files
 
-**File › Open…** also opens models made elsewhere: LDraw files (`.ldr`, `.mpd`) from LeoCAD, MLCad or the [LDraw model repository](https://library.ldraw.org/omr) of official sets, and BrickLink Studio files (`.io`), old and new. Submodels are built where the model puts them, in their colours. Parts come in in the model's own order, so a time-lapse of an opened model follows its building steps.
+**File › Open…** also opens models made elsewhere: LDraw files (`.ldr`, `.mpd`) from LeoCAD, MLCad or the [LDraw model repository](https://library.ldraw.org/omr) of official sets, and BrickLink Studio files (`.io`), old and new. Submodels are built where the model puts them, in their colours. Parts come in in the model's own order, so a time-lapse of an opened model follows its building steps. Its steps (`0 STEP`) and submodels become the steps of its instructions too: each use of a submodel is a sub-assembly, built on pages of its own and added at the step that uses it.
 
 BrickBench builds upright parts, turned in quarter turns, on whole studs and plates. What doesn't fit stays out, and a report says what and why:
 
@@ -377,6 +379,17 @@ e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 
 `x`/`z` are in studs, `y` is in plates and `r` is quarter turns. Parts from the LDraw library are written as `ldraw:` plus their LDraw number, e.g. `ldraw:3001`. Colours are LDraw colour codes. Files are validated on load: unknown parts, bricks off the grid and bricks that overlap others are skipped, unknown colours are replaced, and you get a warning for each. Models are limited to 50,000 bricks and 2 million grid cells.
 
+A model with instruction steps of its own (arranged by hand, or from an opened LDraw file) also has an `instructions` field. Its steps name bricks by their place in `bricks`, counting from 0, and sub-assemblies by their place in `assemblies`; a `view` is a direction to look along (x, y, z), never straight up or down:
+
+```json
+"instructions": {
+  "steps": [{ "bricks": [0, 1] }, { "bricks": [4], "assembly": 0, "view": [1, -0.6, -1] }],
+  "assemblies": [{ "name": "Roof", "steps": [{ "bricks": [2] }, { "bricks": [3] }] }]
+}
+```
+
+Bricks it leaves out are planned bottom up after its steps. If it cannot be read, the model still opens, with a warning, and its steps are planned afresh.
+
 ## Adding a part
 
 1. Add it to `src/core/parts/catalog.ts`. The helpers (`rectangular`, `slope`, `round`, `arch`) cover the existing families; give the LDraw file and, if it isn't the default, the LDraw origin.
@@ -386,7 +399,6 @@ e2e/          Playwright tests (e2e-desktop/: the desktop app's)
 ## Not done yet
 
 - Connections beyond the stud grid: library parts snap to whole studs and plates, so hinges don't swing, Technic pins don't plug into holes, minifigures don't assemble and half-stud offsets (jumper plates) aren't possible
-- Editing instruction steps by hand, sub-assemblies and per-step camera angles (steps are planned automatically)
 - Accounts and a gallery (models are shared by file or by link for now)
 
 ## Privacy

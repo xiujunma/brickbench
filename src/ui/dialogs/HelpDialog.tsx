@@ -33,6 +33,7 @@ const KEYBOARD: readonly Row[] = [
   ['Save · open', keys(shortcut('S'), shortcut('O'))],
   ['Search parts', keys('/')],
   ['Cancel · stop building', keys('Esc')],
+  ['Previous · next instruction step', keys('[', ']')],
 ];
 
 function HelpList({ rows }: { readonly rows: readonly Row[] }) {

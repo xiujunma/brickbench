@@ -1,3 +1,4 @@
+import { inflateSync } from 'node:zlib';
 import { encode } from 'fast-png';
 import { describe, expect, it } from 'bun:test';
 import { BookletWriter, coverSubtitle, imageFormat, inventorySummary, type PartArt } from './bookletWriter';
@@ -9,11 +10,23 @@ function pngDataUrl(width = 6, height = 4): string {
   return `data:image/png;base64,${btoa(binary)}`;
 }
 
+/** The PDF byte for byte (TextDecoder's "latin1" is Windows-1252, which changes some bytes). */
 async function pdfSource(blob: Blob): Promise<string> {
-  return new TextDecoder('latin1').decode(await blob.arrayBuffer());
+  return Buffer.from(await blob.arrayBuffer()).toString('latin1');
 }
 
 const pageObjects = (source: string) => source.match(/\/Type \/Page(?!s)/g) ?? [];
+
+/** What each page draws: the PDF's page streams (compressed, unlike its pictures), inflated. */
+function drawings(source: string): string[] {
+  const streams = [...source.matchAll(/\bobj\s*(<<(?:(?!endobj)[\s\S])*?>>)\s*stream\r?\n([\s\S]*?)\r?\nendstream/g)];
+  return streams
+    .filter(([, dictionary = '']) => dictionary.includes('/FlateDecode') && !dictionary.includes('/Image'))
+    .map(([, , data = '']) => inflateSync(Buffer.from(data, 'latin1')).toString('latin1'))
+    .filter((stream) => / Do\b|\bTj\b/.test(stream));
+}
+
+const picturesDrawn = (page: string) => page.match(/ Do\b/g)?.length ?? 0;
 
 const picture = pngDataUrl();
 const parts: ReadonlyMap<string, PartArt> = new Map([
@@ -35,6 +48,21 @@ describe('BookletWriter', () => {
     const source = await pdfSource(writer.finish());
     expect(source.startsWith('%PDF-')).toBe(true);
     expect(pageObjects(source)).toHaveLength(4);
+  });
+
+  it('names a sub-assembly over its steps, and draws no parts box for a step that only adds one', async () => {
+    const writer = await BookletWriter.create('a4', meta, parts);
+    writer.addStep(1, picture, 1.2, [{ key: 'brick-2x4|4', count: 2 }], 'Roof');
+    writer.addStep(2, picture, 1.2, [], 'Add the Roof');
+    writer.addStep(3, picture, 1.2, [{ key: 'plate-1x1|1', count: 1 }]);
+    const pages = drawings(await pdfSource(writer.finish()));
+    expect(pages).toHaveLength(3);
+    expect(pages[0]).toContain('(Roof) Tj');
+    expect(pages[1]).toContain('(Add the Roof) Tj');
+    expect(pages[2]).not.toContain('Roof');
+    // the step's picture, and one for each kind of part in its box, on its rounded panel
+    expect(pages.map(picturesDrawn)).toEqual([2, 1, 2]);
+    expect(pages.map((page) => / c$/m.test(page))).toEqual([true, false, true]);
   });
 
   it('spreads a long parts list over several pages and uses US Letter when asked', async () => {

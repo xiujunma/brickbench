@@ -10,6 +10,8 @@ import { PartsListDialog } from '../ui/dialogs/PartsListDialog';
 import { TimelapseDialog } from '../ui/dialogs/TimelapseDialog';
 import { AgentPanel } from '../ui/panels/agent/AgentPanel';
 import { InspectorPanel } from '../ui/panels/InspectorPanel';
+import { StepsPanel } from '../ui/panels/StepsPanel';
+import { useEditor } from '../state/editorStore';
 import { PartsPanel } from '../ui/panels/PartsPanel';
 import { Stage } from '../ui/panels/Stage';
 import { StatusBar } from '../ui/panels/StatusBar';
@@ -22,6 +24,7 @@ export function App() {
   const [drawer, setDrawer] = useState<Drawer>(null);
   // the agent chat takes the inspector's place while it is open
   const [agentOpen, setAgentOpen] = useState(false);
+  const stepsOpen = useEditor((s) => s.stepEditor !== null);
   useAppShortcuts();
   useFileDrop();
 
@@ -36,7 +39,9 @@ export function App() {
       <div className="workspace">
         <PartsPanel onPicked={() => setDrawer((current) => (current === 'parts' ? null : current))} />
         <Stage />
-        {agentOpen ? (
+        {stepsOpen ? (
+          <StepsPanel />
+        ) : agentOpen ? (
           <AgentPanel
             onClose={() => {
               setAgentOpen(false);

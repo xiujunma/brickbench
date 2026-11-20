@@ -100,10 +100,14 @@ export class InstructionRenderer {
     return this.geometries.preload(partIds);
   }
 
-  /** Fixes the view for every picture: the finished model, seen along `direction`. */
-  setView(finished: readonly Brick[], direction: Vec3): void {
+  /**
+   * Fixes the view for the pictures that follow: `finished` (the model, or
+   * a sub-assembly) seen along `direction`, on the baseplate or without it.
+   */
+  setView(finished: readonly Brick[], direction: Vec3, ground = true): void {
     this.finished = finished;
     this.direction = direction;
+    this.ground.group.visible = ground;
   }
 
   /** Frames the finished model for a picture of this size; returns world units per pixel. */

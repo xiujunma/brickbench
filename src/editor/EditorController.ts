@@ -3,7 +3,8 @@ import { isOpaqueColor } from '../core/colors';
 import { PLATE_HEIGHT, type Vec3 } from '../core/grid';
 import { brickCellBox, brickOrigin, cellBoxToAabb } from '../core/model/geometry';
 import { allStuds, visibleStuds } from '../core/model/studs';
-import type { Brick } from '../core/model/types';
+import { getBricks } from '../core/model/model';
+import type { Brick, Model } from '../core/model/types';
 import type { PartLookup } from '../core/parts/types';
 import { materialize, payloadFromPart, reuseIds, type Payload } from '../core/placement/payload';
 import { pickBricks, type Hit } from '../core/placement/ray';
@@ -18,7 +19,8 @@ import type { MeshSource } from '../engine/meshStore';
 import { castsNoOcclusion } from '../engine/occlusionMark';
 import { Viewport, type Bounds3 } from '../engine/viewport';
 import { bricksFit, bricksOf, selectedBricks, spatialIndexFor, worldBounds } from '../state/selectors';
-import type { EditorState } from '../state/types';
+import { shownStep } from '../state/stepEditor';
+import type { EditorState, StepEditor } from '../state/types';
 import type { ViewPreferences } from '../state/viewPreferences';
 import { attachPartDrop } from './dragAndDrop';
 import { attachKeyboard } from './keyboard';
@@ -42,6 +44,14 @@ function quantize(bounds: Bounds3): Bounds3 {
   };
 }
 
+/** The model at a step: built already, added by the step, and still to come; and all three, for the pointer to reach. */
+interface StepLayers {
+  readonly before: readonly Brick[];
+  readonly added: readonly Brick[];
+  readonly after: readonly Brick[];
+  readonly shown: readonly Brick[];
+}
+
 /**
  * Connects the store to the 3D scene: keeps the instanced model, selection,
  * previews and ground in sync with state, and turns pointer and keyboard
@@ -54,12 +64,17 @@ export class EditorController {
   private readonly batches: BrickBatches;
   private readonly selection: BrickBatches;
   private readonly ghosts: BrickBatches;
+  /** With the step editor open: the bricks the step on show adds, outlined, and those later steps add, faint. */
+  private readonly stepAdded: BrickBatches;
+  private readonly stepLater: BrickBatches;
   private readonly hoverBox = new HoverBox();
   private readonly ground: Ground;
   private readonly pointer: PointerInput;
   private readonly cleanups: (() => void)[] = [];
   private lastPointer: { x: number; y: number } | null = null;
   private dragging = false;
+  /** The step layers last worked out, for the model and step they show: picking asks for them at every pointer move. */
+  private layers: { readonly model: Model; readonly editor: StepEditor; readonly layers: StepLayers } | null = null;
   private previewSuspended = false;
   private meshRefresh: number | null = null;
 
@@ -79,10 +94,21 @@ export class EditorController {
       this.batches = new BrickBatches(this.geometries, this.materials, lookup);
       this.selection = new BrickBatches(this.geometries, this.materials, lookup, 'selected');
       this.ghosts = new BrickBatches(this.geometries, this.materials, lookup, 'ghost');
+      this.stepAdded = new BrickBatches(this.geometries, this.materials, lookup, 'highlight');
+      this.stepLater = new BrickBatches(this.geometries, this.materials, lookup, 'ghost');
       this.ground = new Ground(this.geometries, this.materials);
-      this.viewport.world.add(this.ground.group, this.batches.group, this.selection.group, this.ghosts.group, this.hoverBox.object);
-      // the preview and the hover box are not really there: they darken nothing
+      this.viewport.world.add(
+        this.ground.group,
+        this.batches.group,
+        this.selection.group,
+        this.ghosts.group,
+        this.stepAdded.group,
+        this.stepLater.group,
+        this.hoverBox.object,
+      );
+      // the preview, steps still to come and the hover box are not really there: they darken nothing
       castsNoOcclusion(this.ghosts.group);
+      castsNoOcclusion(this.stepLater.group);
       castsNoOcclusion(this.hoverBox.object);
       if (view) {
         const apply = (preferences: ViewPreferences): void => this.viewport.setAmbientOcclusion(preferences.ambientOcclusion);
@@ -122,14 +148,14 @@ export class EditorController {
     if (this.meshRefresh !== null) return;
     this.meshRefresh = requestAnimationFrame(() => {
       this.meshRefresh = null;
-      for (const batches of [this.batches, this.selection, this.ghosts]) batches.refreshParts();
+      for (const batches of [this.batches, this.selection, this.ghosts, this.stepAdded, this.stepLater]) batches.refreshParts();
       this.viewport.requestRender();
     });
   }
 
   private onStateChange(state: EditorState, previous: EditorState): void {
     const modelChanged = state.history.present !== previous.history.present;
-    if (modelChanged || state.selection !== previous.selection) this.syncModel();
+    if (modelChanged || state.selection !== previous.selection || state.stepEditor !== previous.stepEditor) this.syncModel();
     if (state.settings !== previous.settings) this.syncGround();
     const buildChanged =
       state.tool !== previous.tool ||
@@ -147,17 +173,56 @@ export class EditorController {
     this.viewport.requestRender();
   }
 
-  /** Rebuilds the instanced model; selected bricks are drawn separately so they can move freely. */
+  /** With the step editor open, the model at the step on show: built, added now, and still to come; null otherwise. */
+  private stepLayers(state: EditorState): StepLayers | null {
+    const editor = state.stepEditor;
+    if (!editor) return null;
+    const model = state.history.present;
+    if (this.layers?.model === model && this.layers.editor === editor) return this.layers.layers;
+    const { view } = shownStep(model, editor, this.lookup);
+    const [before, added, after] = [view.before, view.current, view.after].map((ids) => getBricks(model, ids)) as [Brick[], Brick[], Brick[]];
+    const layers: StepLayers = { before, added, after, shown: [...before, ...added, ...after] };
+    this.layers = { model, editor, layers };
+    return layers;
+  }
+
+  /** The bricks the pointer can reach: all of them, or with the step editor open, those on show. */
+  private reachable(): readonly Brick[] {
+    return this.stepLayers(this.state)?.shown ?? bricksOf(this.state.history.present);
+  }
+
+  /**
+   * Rebuilds the instanced model; selected bricks are drawn separately so
+   * they can move freely. With the step editor open, only what the step
+   * shows: the bricks it adds outlined and those of later steps faint.
+   */
   syncModel(): void {
     const state = this.state;
     const model = state.history.present;
-    const bricks = bricksOf(model);
     const selection = state.selection;
-    const resting = selection.size === 0 ? bricks : bricks.filter((b) => !selection.has(b.id));
-    const index = spatialIndexFor(model, this.lookup);
-    const isOpaque = (id: string): boolean => isOpaqueColor(model.bricks.get(id)?.colorId ?? -1);
-    this.batches.update(resting, visibleStuds(bricks, index, this.lookup, isOpaque, selection));
-    if (!this.dragging) this.showSelection(selectedBricks(state));
+    const unselected = (bricks: readonly Brick[]): readonly Brick[] => (selection.size === 0 ? bricks : bricks.filter((b) => !selection.has(b.id)));
+    const layers = this.stepLayers(state);
+    if (layers) {
+      // studs are drawn all: those under a brick still to come show at this step
+      for (const [batches, bricks] of [
+        [this.batches, unselected(layers.before)],
+        [this.stepAdded, unselected(layers.added)],
+        [this.stepLater, unselected(layers.after)],
+      ] as const) {
+        batches.update(bricks, allStuds(bricks, this.lookup));
+      }
+    } else {
+      const bricks = bricksOf(model);
+      const index = spatialIndexFor(model, this.lookup);
+      const isOpaque = (id: string): boolean => isOpaqueColor(model.bricks.get(id)?.colorId ?? -1);
+      this.batches.update(unselected(bricks), visibleStuds(bricks, index, this.lookup, isOpaque, selection));
+      this.stepAdded.clear();
+      this.stepLater.clear();
+    }
+    if (!this.dragging) {
+      const shown = layers ? new Set(layers.shown.map((b) => b.id)) : null;
+      this.showSelection(shown ? selectedBricks(state).filter((b) => shown.has(b.id)) : selectedBricks(state));
+    }
     this.syncShadows();
     this.viewport.requestRender();
   }
@@ -182,7 +247,7 @@ export class EditorController {
 
   pick(clientX: number, clientY: number, options: { ground: boolean; exclude?: ReadonlySet<string> }): Hit | null {
     const ray = this.viewport.rayFromClient(clientX, clientY);
-    return pickBricks(ray, bricksOf(this.state.history.present), this.lookup, {
+    return pickBricks(ray, this.reachable(), this.lookup, {
       groundY: options.ground ? 0 : null,
       groundBounds: this.ground.bounds(),
       exclude: options.exclude,
@@ -333,7 +398,7 @@ export class EditorController {
   /** Ids of bricks whose centre projects inside a screen rectangle. */
   bricksInRect(left: number, top: number, right: number, bottom: number): string[] {
     const ids: string[] = [];
-    for (const brick of bricksOf(this.state.history.present)) {
+    for (const brick of this.reachable()) {
       const origin = brickOrigin(brick, this.lookup);
       const part = this.lookup(brick.partId);
       const centre: Vec3 = { x: origin.x, y: origin.y + ((part?.h ?? 1) * PLATE_HEIGHT) / 2, z: origin.z };
@@ -395,6 +460,11 @@ export class EditorController {
     return { position: { x, y, z }, target: { x: target.x, y: target.y, z: target.z }, fov: camera.fov, aspect: camera.aspect };
   }
 
+  /** Turns the camera to look along a direction, as a step of the instructions is drawn from. */
+  lookAlong(direction: Vec3): void {
+    this.viewport.lookAlong(direction);
+  }
+
   /** Camera direction flattened onto the ground, for camera-relative nudges. */
   groundForward(): { x: number; z: number } {
     return this.viewport.groundForward();
@@ -406,6 +476,8 @@ export class EditorController {
     this.batches.dispose();
     this.selection.dispose();
     this.ghosts.dispose();
+    this.stepAdded.dispose();
+    this.stepLater.dispose();
     this.hoverBox.dispose();
     this.ground.dispose();
     this.geometries.dispose();

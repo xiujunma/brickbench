@@ -34,11 +34,30 @@ function normalize(v: Vec3): Vec3 | null {
   return length > 1e-9 ? scale(v, 1 / length) : null;
 }
 
-/** Straight-down views have no "up" to keep pictures upright, so fall back to the default angle. */
+/** Steepest a picture may look down (or up), as the y of a unit view direction: steeper, it has too little "up" to stand upright. */
+export const STEEPEST_VIEW = 0.98;
+/** Less than this across the ground, and a direction's heading is lost in rounding. */
+const LEAST_HEADING = 1e-6;
+
+/**
+ * The direction a picture can be drawn from: `direction` at unit length,
+ * tilted up to the steepest view there is (keeping its heading) if it
+ * looks down more steeply. Null for no direction, or one straight up or
+ * down, which has no heading to keep.
+ */
+export function drawableDirection(direction: Vec3): Vec3 | null {
+  const forward = [direction.x, direction.y, direction.z].every(Number.isFinite) ? normalize(direction) : null;
+  if (!forward) return null;
+  const across = Math.hypot(forward.x, forward.z);
+  if (across <= LEAST_HEADING) return null;
+  if (Math.abs(forward.y) <= STEEPEST_VIEW) return forward;
+  const widen = Math.sqrt(1 - STEEPEST_VIEW ** 2) / across;
+  return { x: forward.x * widen, y: Math.sign(forward.y) * STEEPEST_VIEW, z: forward.z * widen };
+}
+
+/** A view without a heading has no "up" to keep pictures upright, so falls back to the default angle. */
 function usableDirection(direction: Vec3): Vec3 {
-  const forward = normalize(direction);
-  if (forward && Math.abs(forward.y) < 0.98) return forward;
-  return normalize(DEFAULT_VIEW_DIRECTION) ?? DEFAULT_VIEW_DIRECTION;
+  return drawableDirection(direction) ?? normalize(DEFAULT_VIEW_DIRECTION) ?? DEFAULT_VIEW_DIRECTION;
 }
 
 /**

@@ -19,6 +19,10 @@ export interface Placement {
   readonly groupName: string;
   /** The outermost submodel around it that was turned square to come in (see squareUp), if any. */
   readonly squared: string | null;
+  /** The submodels on the way to it, outermost first, as the model names them: one for each level of `group`. */
+  readonly submodels: readonly string[];
+  /** The building step of its line, and of each submodel's line on the way to it: the model's first, its own last. */
+  readonly steps: readonly number[];
   /** Its colour, "the parent's colour" resolved; the main colour code when nothing above gave one. */
   readonly colour: LDrawColour;
   /** Where it sits in the model, in LDU. */
@@ -91,6 +95,9 @@ interface Frame {
   readonly group: string;
   readonly groupName: string;
   readonly squared: string | null;
+  readonly submodels: readonly string[];
+  /** The steps of the submodels' lines on the way here. */
+  readonly steps: readonly number[];
 }
 
 /**
@@ -152,21 +159,24 @@ export function flatten(doc: LDrawDocument, isPart: (file: string) => boolean, l
             group: frame.group === '' ? String(index) : `${frame.group}/${index}`,
             groupName: line.file,
             squared: frame.squared ?? (square ? line.file : null),
+            submodels: [...frame.submodels, line.file],
+            steps: [...frame.steps, line.step],
           },
           depth + 1,
         );
         active.delete(key);
       } else if (!sub || sub.drawsShapes || sub.lines.length > 0) {
         // a part, a part the model brings along, or a file it does not hold (an empty submodel places nothing)
-        const { group, groupName, squared } = frame;
-        placements.push({ file: line.file, group, groupName, squared, colour, position: at, matrix: multiply(frame.matrix, line.matrix) });
+        const { group, groupName, squared, submodels } = frame;
+        const steps = [...frame.steps, line.step];
+        placements.push({ file: line.file, group, groupName, squared, submodels, steps, colour, position: at, matrix: multiply(frame.matrix, line.matrix) });
         if (placements.length > limits.maxParts) throw new TooBig('maxParts');
       }
     }
   };
 
   try {
-    visit(doc.main, { position: ORIGIN, matrix: IDENTITY, colour: { code: MAIN_COLOUR }, group: '', groupName: doc.main.name, squared: null }, 0);
+    visit(doc.main, { position: ORIGIN, matrix: IDENTITY, colour: { code: MAIN_COLOUR }, group: '', groupName: doc.main.name, squared: null, submodels: [], steps: [] }, 0);
   } catch (error: unknown) {
     if (!(error instanceof TooBig)) throw error;
     return {

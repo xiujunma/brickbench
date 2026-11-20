@@ -12,11 +12,41 @@ describe('readLDraw', () => {
     expect(doc.main.name).toBe('car.ldr');
     expect(doc.main.title).toBe('Little Car');
     expect(doc.main.lines).toEqual([
-      { colour: { code: 4 }, position: [40, -24, -20], matrix: IDENTITY, file: '3001.dat' },
-      { colour: { rgb: '#FF8000', transparent: false }, position: [0, -48, 0], matrix: [0, 0, -1, 0, 1, 0, 1, 0, 0], file: '3003.DAT' },
+      { colour: { code: 4 }, position: [40, -24, -20], matrix: IDENTITY, file: '3001.dat', step: 0 },
+      { colour: { rgb: '#FF8000', transparent: false }, position: [0, -48, 0], matrix: [0, 0, -1, 0, 1, 0, 1, 0, 0], file: '3003.DAT', step: 1 },
     ]);
     expect(doc.badLines).toBe(0);
     expect(doc.files.get('car.ldr')).toBe(doc.main);
+  });
+
+  it('counts the building steps of each file on its own, ROTSTEP ending one as STEP does', () => {
+    const doc = readLDraw(
+      [
+        '0 FILE main.ldr',
+        '1 16 0 0 0 1 0 0 0 1 0 0 0 1 3001.dat',
+        '0 STEP',
+        '0 step',
+        '1 16 0 0 0 1 0 0 0 1 0 0 0 1 roof.ldr',
+        '0 ROTSTEP 30 45 0 ABS',
+        '1 16 0 0 0 1 0 0 0 1 0 0 0 1 3003.dat',
+        // a remark that only starts like one is no step
+        '0 STEPS to follow',
+        '1 16 0 0 0 1 0 0 0 1 0 0 0 1 3004.dat',
+        '0 STEP',
+        '0 FILE roof.ldr',
+        '1 16 0 0 0 1 0 0 0 1 0 0 0 1 3039.dat',
+        '0 STEP',
+        '1 16 0 0 0 1 0 0 0 1 0 0 0 1 3040.dat',
+      ].join('\n'),
+      'house.mpd',
+    );
+    expect(doc.main.lines.map((line) => [line.file, line.step])).toEqual([
+      ['3001.dat', 0],
+      ['roof.ldr', 2],
+      ['3003.dat', 3],
+      ['3004.dat', 3],
+    ]);
+    expect(doc.files.get('roof.ldr')?.lines.map((line) => line.step)).toEqual([0, 1]);
   });
 
   it('keeps spaces in the names of submodels', () => {

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  FOOTER_HEIGHT,
   exceedsPageLimit,
   fitRect,
   inventoryPages,
   layoutCallout,
   pageGeometry,
   pageCount,
+  partsBoxCapacity,
   stepPageLayout,
   toPdfText,
 } from './layout';
@@ -56,6 +58,22 @@ describe('stepPageLayout', () => {
     expect(layout.image.x + layout.image.w).toBeLessThanOrEqual(page.width - page.margin + 1e-9);
     expect(layout.image.y + layout.image.h).toBeLessThanOrEqual(page.height - page.margin + 1e-9);
     expect(layout.number.y).toBeLessThan(layout.callout.box.y);
+  });
+
+  it('fits as many kinds of part in a step’s box as it says it can, and no more', () => {
+    for (const size of ['a4', 'letter'] as const) {
+      const page = pageGeometry(size);
+      const capacity = partsBoxCapacity(page);
+      // more than the 40 parts an automatically planned step can add
+      expect(capacity).toBeGreaterThanOrEqual(40);
+      const bottom = (kinds: number) => {
+        const { box } = stepPageLayout(page, Array.from({ length: kinds }, (_, i) => ({ key: `p${i}`, count: 1 })), 1.6).callout;
+        return box.y + box.h;
+      };
+      const floor = page.height - page.margin - FOOTER_HEIGHT;
+      expect(bottom(capacity)).toBeLessThanOrEqual(floor + 1e-9);
+      expect(bottom(capacity + 1)).toBeGreaterThan(floor);
+    }
   });
 });
 

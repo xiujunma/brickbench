@@ -1,7 +1,9 @@
 import { getColor } from '../core/colors';
 import type { Vec3 } from '../core/grid';
-import { coverImageArea, pageCount, pageGeometry, stepImageArea, type PageSize, type PartCount } from '../core/instructions/layout';
-import { planSteps, type StepOrder } from '../core/instructions/steps';
+import { coverImageArea, pageCount, pageGeometry, partsBoxCapacity, stepImageArea, type PageSize, type PartCount } from '../core/instructions/layout';
+import type { InstructionPlan } from '../core/instructions/plan';
+import { bookletPlan, bookletSteps, type BookletOrder, type BookletStep } from '../core/instructions/planView';
+import { DEFAULT_STEP_OPTIONS } from '../core/instructions/steps';
 import type { SceneSettings } from '../core/io/modelFile';
 import { buildPartsList } from '../core/io/partsList';
 import type { Brick } from '../core/model/types';
@@ -15,16 +17,17 @@ import { BookletWriter, type PartArt } from './bookletWriter';
 
 export interface InstructionOptions {
   readonly pageSize: PageSize;
+  /** For steps planned automatically, and for bricks the user's steps leave out. */
   readonly partsPerStep: number;
-  readonly order: StepOrder;
+  readonly order: BookletOrder;
   /** Outline the parts each step adds. */
   readonly highlight: boolean;
 }
 
 export const DEFAULT_INSTRUCTION_OPTIONS: InstructionOptions = {
   pageSize: 'a4',
-  partsPerStep: 6,
-  order: 'layers',
+  partsPerStep: DEFAULT_STEP_OPTIONS.partsPerStep,
+  order: DEFAULT_STEP_OPTIONS.order,
   highlight: true,
 };
 
@@ -34,6 +37,14 @@ export interface InstructionSource {
   readonly settings: SceneSettings;
   /** Direction the pictures are drawn from: the editor camera's current view. */
   readonly direction: Vec3;
+  /** The steps as the user arranged them, if they have. */
+  readonly plan?: InstructionPlan | undefined;
+}
+
+/** What a step page says above its picture: the sub-assembly it builds, or that it adds one. */
+function captionOf(page: BookletStep): string | undefined {
+  if (!page.assembly) return undefined;
+  return page.assembly.adds ? `Add the ${page.assembly.name}` : page.assembly.name;
 }
 
 export interface InstructionProgress {
@@ -137,7 +148,7 @@ interface Drawing {
   readonly lookup: PartLookup;
   readonly pictures: InstructionRenderer;
   readonly thumbnails: ThumbnailRenderer;
-  readonly steps: ReturnType<typeof planSteps>;
+  readonly steps: readonly BookletStep[];
   readonly inventory: readonly PartCount[];
   readonly advance: (message: string) => Promise<void>;
 }
@@ -168,12 +179,18 @@ async function drawBooklet(d: Drawing): Promise<BookletWriter> {
   const area = stepImageArea(page);
   const stepAspect = area.w / area.h;
   const stepHeight = Math.round(STEP_PIXELS / stepAspect);
-  let built: readonly Brick[] = [];
-  for (const [index, step] of d.steps.entries()) {
-    const picture = d.pictures.renderStep(built, step.added, STEP_PIXELS, stepHeight);
-    writer.addStep(index + 1, picture, stepAspect, countParts(step.added, d.lookup));
-    built = [...built, ...step.added];
-    await d.advance(`Drawing step ${index + 1} of ${d.steps.length}…`);
+  let framed: { readonly frame: readonly Brick[]; readonly view: Vec3 } | null = null;
+  for (const step of d.steps) {
+    // a sub-assembly is framed on its own, and a step may be drawn from a view of its own
+    const view = step.view ?? d.source.direction;
+    if (!framed || framed.frame !== step.frame || framed.view !== view) {
+      // a sub-assembly is built in the hand, off the baseplate
+      d.pictures.setView(step.frame, view, step.assembly?.adds !== false);
+      framed = { frame: step.frame, view };
+    }
+    const picture = d.pictures.renderStep(step.built, step.added, STEP_PIXELS, stepHeight);
+    writer.addStep(step.number, picture, stepAspect, countParts(step.parts, d.lookup), captionOf(step));
+    await d.advance(`Drawing step ${step.number} of ${d.steps.length}…`);
   }
   return writer;
 }
@@ -191,7 +208,9 @@ export async function createInstructionsPdf(
   meshes: MeshSource | null = null,
 ): Promise<Blob> {
   if (source.bricks.length === 0) throw new Error('Place some bricks before making instructions.');
-  const steps = planSteps(source.bricks, lookup, options);
+  const bricks = new Map(source.bricks.map((b) => [b.id, b]));
+  // a step with more kinds of part than its parts box shows goes over several pages
+  const steps = bookletSteps(bookletPlan(bricks, source.plan, options, lookup), bricks, partsBoxCapacity(pageGeometry(options.pageSize)));
   const inventory = countParts(source.bricks, lookup);
   const total = inventory.length + steps.length + 2;
   let done = 0;
@@ -213,6 +232,7 @@ export async function createInstructionsPdf(
     renderer = new InstructionRenderer(lookup, { baseplate: source.settings, highlight: options.highlight, meshes });
     onProgress?.({ done, total, message: 'Loading parts…' });
     await loadParts([geometries, renderer], source.bricks, signal);
+    // the cover shows the whole model from the booklet's view; each step sets its own
     renderer.setView(source.bricks, source.direction);
     const writer = await drawBooklet({ source, options, lookup, pictures: renderer, thumbnails, steps, inventory, advance });
     onProgress?.({ done, total, message: 'Saving the PDF…' });

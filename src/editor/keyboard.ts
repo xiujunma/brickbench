@@ -94,12 +94,22 @@ function plain(controller: EditorController, event: KeyboardEvent, key: string):
       if (controller.cancelGesture()) return true;
       if (state.pastePayload) state.setTool('select');
       else if (state.selection.size > 0) state.clearSelection();
+      // nothing else to stop: done arranging steps
+      else if (state.stepEditor) state.closeSteps();
       else if (state.tool !== 'select') state.setTool('select');
       else return false;
       return true;
     case 'f':
       controller.frameSelection();
       return true;
+    // the step editor's previous and next step
+    case '[':
+    case ']': {
+      if (!state.stepEditor) return false;
+      const { at } = state.stepEditor;
+      state.goToStep({ ...at, index: at.index + (key === ']' ? 1 : -1) });
+      return true;
+    }
     case 'home':
       controller.resetView();
       return true;

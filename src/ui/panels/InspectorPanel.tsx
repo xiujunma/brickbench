@@ -6,6 +6,7 @@ import { getEngine } from '../../editor/engineRegistry';
 import { useEditor } from '../../state/editorStore';
 import { distinctPieces, selectedBricks } from '../../state/selectors';
 import { Icon } from '../components/Icon';
+import { summarize } from './partSummary';
 import { cssVars, shortcut, withAlpha } from '../platform';
 import { useStock } from '../useStock';
 import { useThumbnail } from '../thumbnails';
@@ -57,29 +58,7 @@ function ColorSection() {
   );
 }
 
-interface SummaryRow {
-  readonly key: string;
-  readonly name: string;
-  readonly hex: string;
-  readonly count: number;
-}
-
 const SUMMARY_ROWS = 5;
-
-function summarize(bricks: readonly Brick[]): SummaryRow[] {
-  const rows = new Map<string, SummaryRow>();
-  for (const brick of bricks) {
-    const key = `${brick.partId}|${brick.colorId}`;
-    const row = rows.get(key);
-    rows.set(key, {
-      key,
-      name: getPart(brick.partId)?.name ?? brick.partId,
-      hex: getColor(brick.colorId)?.hex ?? '#999999',
-      count: (row?.count ?? 0) + 1,
-    });
-  }
-  return [...rows.values()].sort((a, b) => b.count - a.count).slice(0, SUMMARY_ROWS);
-}
 
 function rotateCurrent(): void {
   const engine = getEngine();
@@ -182,7 +161,7 @@ function BuildingSection() {
 function SelectionSection({ bricks }: { readonly bricks: readonly Brick[] }) {
   const duplicate = useEditor((s) => s.duplicateSelection);
   const remove = useEditor((s) => s.deleteSelection);
-  const rows = summarize(bricks);
+  const rows = summarize(bricks, SUMMARY_ROWS);
   const hidden = bricks.length - rows.reduce((sum, row) => sum + row.count, 0);
 
   return (

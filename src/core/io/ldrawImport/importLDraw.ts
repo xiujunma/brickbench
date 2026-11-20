@@ -3,7 +3,8 @@
  * as a BrickBench model, and reports what could not come in: parts
  * BrickBench lacks, parts tipped over or off the stud grid, and parts that
  * collide once on the grid. Parts come in in the model's own order, so its
- * building steps become the order a time-lapse builds it in.
+ * building steps become the order a time-lapse builds it in, and its steps
+ * and submodels those of its instructions (see seedPlan).
  */
 import { getColor } from '../../colors';
 import { GRID_LIMIT, MAX_LAYER, cleanZero, rotatedSize, type Rotation } from '../../grid';
@@ -18,6 +19,7 @@ import { toPalette, type PaletteMatch } from './colours';
 import { flatten, type Placement } from './flatten';
 import { createPartResolver, isModelFile, isPrimitive, numberOfFile, type PartResolver, type ResolvedPart } from './match';
 import { readLDraw, type LDrawFile } from './read';
+import { seedPlan, type SteppedBrick } from './seedPlan';
 import { gridSpotOf, latticeOf, quarterTurnOf, snapToLattice, type GridSpot, type Lattice } from './toGrid';
 
 /**
@@ -102,6 +104,9 @@ interface Candidate {
   readonly group: string;
   readonly groupName: string;
   readonly squared: string | null;
+  /** The submodels and steps of the lines leading to it (see Placement). */
+  readonly submodels: readonly string[];
+  readonly steps: readonly number[];
 }
 
 /** A candidate on a whole grid cell, and whether its submodel was moved to get there. */
@@ -162,8 +167,8 @@ function toCandidate(placement: Placement, resolver: PartResolver, lookup: PartL
   if (r === null) return { reason: 'turned', label };
   const spot = gridSpotOf(part, placement.position, r);
   if (!spot) return { reason: 'missing', label };
-  const { group, groupName, squared } = placement;
-  return { part, resolved, label, r, spot, colour: toPalette(placement.colour), group, groupName, squared };
+  const { group, groupName, squared, submodels, steps } = placement;
+  return { part, resolved, label, r, spot, colour: toPalette(placement.colour), group, groupName, squared, submodels, steps };
 }
 
 /** `own` shifted by whole cells to lie as close to `model` as it can: at most half a cell off along each axis. */
@@ -348,11 +353,19 @@ export function importLDraw(text: string, fileName: string, context: ImportConte
     else report.cameIn(on);
   }
 
-  const { bricks } = collected.value;
+  const { bricks, ids } = collected.value;
+  const model = modelFromBricks(bricks);
+  // the steps of the bricks that came in, in the model's order
+  const stepped = settled.flatMap(({ on }, i): SteppedBrick[] => {
+    const id = ids[i];
+    const { group, submodels, steps } = on.candidate;
+    return id ? [{ id, group, submodels, steps }] : [];
+  });
+  const plan = seedPlan(stepped, { bricks: model.bricks, lookup: context.lookup });
   return {
     ok: true,
     value: {
-      doc: { name: modelName(doc.main, fileName), model: modelFromBricks(bricks), settings: sceneFor(bricks, context.lookup) },
+      doc: { name: modelName(doc.main, fileName), model: plan ? { ...model, plan } : model, settings: sceneFor(bricks, context.lookup) },
       report: report.build(placements.length, bricks.length, doc.badLines, skipped),
     },
   };

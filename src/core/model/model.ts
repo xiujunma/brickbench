@@ -33,7 +33,7 @@ export function addBricks(model: Model, bricks: readonly Brick[]): Model {
     if (next.has(brick.id)) throw new Error(`Duplicate brick id: ${brick.id}`);
     next.set(brick.id, brick);
   }
-  return { bricks: next };
+  return { ...model, bricks: next };
 }
 
 export function removeBricks(model: Model, ids: Iterable<string>): Model {
@@ -41,7 +41,7 @@ export function removeBricks(model: Model, ids: Iterable<string>): Model {
   if (doomed.length === 0) return model;
   const next = new Map(model.bricks);
   for (const id of doomed) next.delete(id);
-  return { bricks: next };
+  return { ...model, bricks: next };
 }
 
 /** Inserts or replaces bricks by id. */
@@ -49,7 +49,7 @@ export function replaceBricks(model: Model, bricks: readonly Brick[]): Model {
   if (bricks.length === 0) return model;
   const next = new Map(model.bricks);
   for (const brick of bricks) next.set(brick.id, brick);
-  return { bricks: next };
+  return { ...model, bricks: next };
 }
 
 function mapBricks(model: Model, ids: Iterable<string>, update: (brick: Brick) => Brick): Model {

@@ -130,14 +130,32 @@ export interface StepPageLayout {
   readonly footerY: number;
 }
 
+/** Width of a step's parts box. */
+const CALLOUT_WIDTH = STEP_COLUMN - 4;
+
+/** Height a step's parts box may take: from under the step number down to the footer. */
+function calloutRoom(page: PageGeometry): number {
+  return page.height - page.margin - FOOTER_HEIGHT - (page.margin + CALLOUT_TOP);
+}
+
+/**
+ * Most kinds of part a step's parts box can show, at their smallest: a step
+ * that adds more needs more than one page (see bookletSteps).
+ */
+export function partsBoxCapacity(page: PageGeometry): number {
+  const columns = Math.floor((CALLOUT_WIDTH - 2 * CALLOUT_PAD + CALLOUT_GAP) / (CALLOUT_MIN_THUMB + CALLOUT_GAP));
+  const rows = Math.floor((calloutRoom(page) - 2 * CALLOUT_PAD + CALLOUT_GAP) / (CALLOUT_MIN_THUMB + CALLOUT_LABEL + CALLOUT_GAP));
+  return Math.max(1, columns) * Math.max(1, rows);
+}
+
 export function stepPageLayout(page: PageGeometry, items: readonly PartCount[], imageAspect: number): StepPageLayout {
   const top = page.margin;
   const calloutOrigin = { x: page.margin, y: top + CALLOUT_TOP };
-  const room = page.height - page.margin - FOOTER_HEIGHT - calloutOrigin.y;
+  const room = calloutRoom(page);
   // shrink the parts when a step needs many different ones
-  let callout = layoutCallout(items, calloutOrigin, STEP_COLUMN - 4);
+  let callout = layoutCallout(items, calloutOrigin, CALLOUT_WIDTH);
   for (let thumb = CALLOUT_THUMB - 1; callout.box.h > room && thumb >= CALLOUT_MIN_THUMB; thumb -= 1) {
-    callout = layoutCallout(items, calloutOrigin, STEP_COLUMN - 4, thumb);
+    callout = layoutCallout(items, calloutOrigin, CALLOUT_WIDTH, thumb);
   }
   return {
     number: { x: page.margin, y: top + STEP_NUMBER_DROP },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { Vec3 } from '../grid';
-import { DEFAULT_VIEW_DIRECTION, frameView } from './camera';
+import { DEFAULT_VIEW_DIRECTION, STEEPEST_VIEW, drawableDirection, frameView } from './camera';
 
 const dot = (a: Vec3, b: Vec3) => a.x * b.x + a.y * b.y + a.z * b.z;
 const sub = (a: Vec3, b: Vec3): Vec3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
@@ -38,6 +38,23 @@ describe('frameView', () => {
   it('never zooms in closer than the minimum width', () => {
     const frame = frameView({ min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 1 } }, DEFAULT_VIEW_DIRECTION, 1, { margin: 0, minHalfWidth: 3 });
     expect(frame.halfWidth).toBeCloseTo(3);
+  });
+
+  it('tilts a view looking down too steeply up to the steepest there is, keeping its heading', () => {
+    const steep = drawableDirection({ x: 0.03, y: -2, z: -0.04 });
+    expect(steep?.y).toBeCloseTo(-STEEPEST_VIEW);
+    expect(Math.hypot(steep?.x ?? 0, steep?.y ?? 0, steep?.z ?? 0)).toBeCloseTo(1);
+    // the same heading: three parts across to four parts back
+    expect((steep?.x ?? 0) / (steep?.z ?? 1)).toBeCloseTo(-0.75);
+    expect(frameView({ min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 1 } }, { x: 0.03, y: -2, z: -0.04 }, 1).forward.y).toBeCloseTo(-STEEPEST_VIEW);
+    // a view no steeper than that stays as it is, at unit length
+    const level = drawableDirection({ x: 0, y: -1, z: -1 });
+    expect(level?.x).toBe(0);
+    expect(level?.y).toBeCloseTo(-Math.SQRT1_2);
+    expect(level?.z).toBeCloseTo(-Math.SQRT1_2);
+    for (const none of [{ x: 0, y: -1, z: 0 }, { x: 0, y: 0, z: 0 }, { x: Number.NaN, y: -1, z: 0 }, { x: Number.POSITIVE_INFINITY, y: 0, z: 0 }]) {
+      expect(drawableDirection(none)).toBeNull();
+    }
   });
 
   it('falls back to the default angle for a missing or vertical direction', () => {

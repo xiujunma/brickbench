@@ -2,6 +2,8 @@ import { createStore, type StoreApi } from 'zustand/vanilla';
 import { DEFAULT_COLOR_ID, getColor } from '../core/colors';
 import { normalizeRotation, type Vec3 } from '../core/grid';
 import { createHistory, pushHistory, redo, squashSince, undo } from '../core/history';
+import { clampRef } from '../core/instructions/plan';
+import { DEFAULT_STEP_OPTIONS } from '../core/instructions/steps';
 import { DEFAULT_SCENE } from '../core/io/modelFile';
 import { rotateGroup } from '../core/model/geometry';
 import type { IdFactory } from '../core/model/ids';
@@ -11,6 +13,7 @@ import { DEFAULT_PART_ID } from '../core/parts/catalog';
 import type { PartLookup } from '../core/parts/types';
 import { materialize, payloadFromBricks, payloadFromPart, rotatePayload, type Payload } from '../core/placement/payload';
 import { bricksFit, selectedBricks } from './selectors';
+import { planContext, resolvedPlan, selectionOnShow } from './stepEditor';
 import type { DialogId, EditorData, EditorState, SelectMode, ToastTone } from './types';
 
 export const DEFAULT_NAME = 'Untitled model';
@@ -46,6 +49,7 @@ export function initialData(): EditorData {
     toasts: [],
     dialog: null,
     lastSavedAt: null,
+    stepEditor: null,
   };
 }
 
@@ -117,12 +121,19 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
         set((s) =>
           s.tool === tool
             ? s
-            : { tool, pastePayload: tool === 'build' ? s.pastePayload : null, hoverBrickId: null, placementValid: null },
+            : {
+                tool,
+                pastePayload: tool === 'build' ? s.pastePayload : null,
+                hoverBrickId: null,
+                placementValid: null,
+                // the step editor works with the selection; another tool goes back to building
+                stepEditor: tool === 'select' ? s.stepEditor : null,
+              },
         ),
 
       setActivePart: (partId) => {
         if (!lookup(partId)) return;
-        set({ activePartId: partId, tool: 'build', pastePayload: null });
+        set({ activePartId: partId, tool: 'build', pastePayload: null, stepEditor: null });
       },
 
       setActiveColor: (colorId) => {
@@ -165,7 +176,13 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
 
       clearSelection: () => set((s) => (s.selection.size === 0 ? s : { selection: EMPTY_SELECTION })),
 
-      selectAll: () => set({ selection: new Set(model().bricks.keys()), tool: 'select', pastePayload: null }),
+      selectAll: () =>
+        set((s) => {
+          const all = new Set(s.history.present.bricks.keys());
+          // inside a sub-assembly, all of it
+          const selection = s.stepEditor ? selectionOnShow(all, s.history.present, s.stepEditor, lookup) : all;
+          return { selection, tool: 'select', pastePayload: null };
+        }),
 
       deleteSelection: () => {
         const { selection } = get();
@@ -260,6 +277,7 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
           pastePayload: null,
           lastSavedAt: null,
           dialog: closeImportReport(s.dialog),
+          stepEditor: null,
         })),
 
       loadDocument: (doc) =>
@@ -270,6 +288,7 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
           selection: EMPTY_SELECTION,
           pastePayload: null,
           dialog: closeImportReport(s.dialog),
+          stepEditor: null,
         })),
 
       setName: (name) => {
@@ -291,6 +310,31 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
       openDialog: (dialog) => set({ dialog }),
       closeDialog: (dialog) => set((s) => (s.dialog === null || (dialog && s.dialog !== dialog) ? s : { dialog: null })),
       markSaved: (at) => set({ lastSavedAt: at }),
+
+      editSteps: (auto = DEFAULT_STEP_OPTIONS) =>
+        set({ stepEditor: { at: { assembly: null, index: 0 }, auto }, tool: 'select', pastePayload: null, hoverBrickId: null, placementValid: null }),
+      closeSteps: () => set((s) => (s.stepEditor ? { stepEditor: null } : s)),
+      goToStep: (at) =>
+        set((s) => {
+          if (!s.stepEditor) return s;
+          const model = s.history.present;
+          const stepEditor = { ...s.stepEditor, at: clampRef(resolvedPlan(model, lookup, s.stepEditor.auto), at) };
+          return { stepEditor, selection: selectionOnShow(s.selection, model, stepEditor, lookup) };
+        }),
+      editPlan: (edit) => {
+        const state = get();
+        if (!state.stepEditor) return;
+        const current = state.history.present;
+        const plan = resolvedPlan(current, lookup, state.stepEditor.auto);
+        const edited = edit(plan, planContext(current, lookup, state.stepEditor.auto));
+        const stepEditor = { ...state.stepEditor, at: edited.at };
+        if (edited.plan === plan) {
+          set({ stepEditor, selection: selectionOnShow(state.selection, current, stepEditor, lookup) });
+          return;
+        }
+        const next = { ...current, plan: edited.plan };
+        commit(next, { stepEditor, selection: selectionOnShow(state.selection, next, stepEditor, lookup) });
+      },
     };
   });
 }

@@ -15,7 +15,17 @@ function placements(lines: readonly string[], isPart = isDat, limits = LIMITS): 
 describe('flatten', () => {
   it('passes the parts of a single-file model through as they are', () => {
     expect(placements(['1 4 40 -24 -20 1 0 0 0 1 0 0 0 1 3001.dat'])).toEqual([
-      { file: '3001.dat', group: '', groupName: 'm.mpd', squared: null, colour: { code: 4 }, position: [40, -24, -20], matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1] },
+      {
+        file: '3001.dat',
+        group: '',
+        groupName: 'm.mpd',
+        squared: null,
+        submodels: [],
+        steps: [0],
+        colour: { code: 4 },
+        position: [40, -24, -20],
+        matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+      },
     ]);
   });
 
@@ -36,6 +46,26 @@ describe('flatten', () => {
     expect(parts.map((p) => [p.group, p.groupName])).toEqual([
       ['0', 'Bogie'],
       ['1', 'Bogie'],
+    ]);
+  });
+
+  it('tells each part the steps of the lines leading to it, and the submodels they use', () => {
+    const parts = placements([
+      '0 FILE main.ldr',
+      '1 4 0 0 0 1 0 0 0 1 0 0 0 1 3001.dat',
+      '0 STEP',
+      '1 16 0 0 0 1 0 0 0 1 0 0 0 1 car.ldr',
+      '0 FILE car.ldr',
+      '0 STEP',
+      '1 16 0 0 0 1 0 0 0 1 0 0 0 1 Wheels.ldr',
+      '0 FILE wheels.ldr',
+      '0 STEP',
+      '0 STEP',
+      '1 0 0 0 0 1 0 0 0 1 0 0 0 1 3003.dat',
+    ]);
+    expect(parts.map((p) => [p.steps, p.submodels])).toEqual([
+      [[0], []],
+      [[1, 1, 2], ['car.ldr', 'Wheels.ldr']],
     ]);
   });
 
@@ -143,7 +173,7 @@ describe('flatten', () => {
 
 describe('isSubmodel', () => {
   const file = (over: Partial<Parameters<typeof isSubmodel>[0]>) => ({ name: 'f', title: '', lines: [], drawsShapes: false, declared: null, ...over });
-  const line = (name: string) => ({ colour: { code: 16 }, position: [0, 0, 0] as const, matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1] as M3, file: name });
+  const line = (name: string) => ({ colour: { code: 16 }, position: [0, 0, 0] as const, matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1] as M3, file: name, step: 0 });
   const known = (name: string): boolean => name === '3001.dat';
 
   it('goes by what the file declares itself to be', () => {

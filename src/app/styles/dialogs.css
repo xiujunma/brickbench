@@ -97,6 +97,18 @@
   max-width: 420px;
 }
 
+/* the step order, with the way to arrange the steps by hand beside it */
+.order-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.order-row .field {
+  flex: 1 1 260px;
+}
+
 .check {
   display: flex;
   align-items: center;

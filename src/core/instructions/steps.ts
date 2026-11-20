@@ -14,6 +14,8 @@ export interface StepOptions {
   readonly partsPerStep: number;
 }
 
+export const DEFAULT_STEP_OPTIONS: StepOptions = { order: 'layers', partsPerStep: 6 };
+
 export interface BuildStep {
   /** Bricks this step adds to the model. */
   readonly added: readonly Brick[];

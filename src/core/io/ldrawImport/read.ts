@@ -18,6 +18,8 @@ export interface PartLine {
   readonly matrix: M3;
   /** The part or submodel file, as the line names it ("3001.dat", "motor bogie"). */
   readonly file: string;
+  /** The building step it is in, counting from 0: the `0 STEP` lines before it in its file. */
+  readonly step: number;
 }
 
 /** What a file says it is in its `0 !LDRAW_ORG` line: a part (or a piece of one), a model, or nothing. */
@@ -55,6 +57,8 @@ const FILE_LINE = /^0\s+FILE\s+(.+)$/;
 /** NOFILE ends a file; !DATA starts embedded data (a texture), part of no model. */
 const END_OF_FILE = /^0\s+(?:NOFILE|!DATA)\b/;
 const LDRAW_ORG = /^0\s+!LDRAW_ORG\s+(\S+)/i;
+/** The end of a building step; ROTSTEP also turns the view for the next, which BrickBench leaves be. */
+const STEP_LINE = /^0\s+(?:ROT)?STEP\b/i;
 
 interface Builder {
   readonly name: string;
@@ -64,6 +68,8 @@ interface Builder {
   readonly lines: PartLine[];
   drawsShapes: boolean;
   declared: DeclaredKind;
+  /** The step the lines read now are in. */
+  step: number;
 }
 
 interface Reading {
@@ -74,14 +80,14 @@ interface Reading {
   badLines: number;
 }
 
-function readPartLine(line: string): PartLine | null {
+function readPartLine(line: string, step: number): PartLine | null {
   const match = PART_LINE.exec(line);
   if (!match?.[1] || !match[2] || !match[3]) return null;
   const colour = readColour(match[1]);
   const numbers = match[2].trim().split(/\s+/).map(Number);
   if (!colour || numbers.length !== 12 || !numbers.every(Number.isFinite)) return null;
   const [x = 0, y = 0, z = 0, ...m] = numbers;
-  return { colour, position: [x, y, z], matrix: m as unknown as M3, file: match[3].trim() };
+  return { colour, position: [x, y, z], matrix: m as unknown as M3, file: match[3].trim(), step };
 }
 
 /** "Unofficial_Part", "Subpart", "48_Primitive", "Shortcut" → part; "Model", "Unofficial_Model" → model. */
@@ -95,7 +101,7 @@ function built(builder: Builder): LDrawFile {
 }
 
 function open(reading: Reading, name: string, implicit: boolean): Builder {
-  const builder: Builder = { name, implicit, title: null, lines: [], drawsShapes: false, declared: null };
+  const builder: Builder = { name, implicit, title: null, lines: [], drawsShapes: false, declared: null, step: 0 };
   reading.first ??= builder;
   reading.current = builder;
   return builder;
@@ -122,8 +128,9 @@ function addLine(builder: Builder, line: string, reading: Reading): void {
     if (builder.title === null) builder.title = NOT_A_TITLE.test(comment) ? '' : comment;
     const org = LDRAW_ORG.exec(line);
     if (org?.[1]) builder.declared = declaredKind(org[1]);
+    if (STEP_LINE.test(line)) builder.step += 1;
   } else if (line.startsWith('1')) {
-    const part = readPartLine(line);
+    const part = readPartLine(line, builder.step);
     if (part) builder.lines.push(part);
     else reading.badLines += 1;
   } else if (SHAPE_LINE.test(line)) {

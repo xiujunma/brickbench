@@ -2,6 +2,9 @@ import type { Rotation, Vec3 } from '../core/grid';
 import type { History } from '../core/history';
 import type { BaseplateSize, ModelDocument, SceneSettings } from '../core/io/modelFile';
 import type { Brick, Model } from '../core/model/types';
+import type { InstructionPlan, PlanContext, StepRef } from '../core/instructions/plan';
+import type { Edited } from '../core/instructions/planEdits';
+import type { StepOptions } from '../core/instructions/steps';
 import type { Payload } from '../core/placement/payload';
 
 export type Tool = 'select' | 'build' | 'paint' | 'erase';
@@ -35,6 +38,15 @@ export interface EditorData {
   readonly toasts: readonly Toast[];
   readonly dialog: DialogId | null;
   readonly lastSavedAt: number | null;
+  /** The step editor for building instructions, while it is open. */
+  readonly stepEditor: StepEditor | null;
+}
+
+export interface StepEditor {
+  /** The step on show, in the model or one of its sub-assemblies. */
+  readonly at: StepRef;
+  /** How the steps the user has not arranged are planned. */
+  readonly auto: StepOptions;
 }
 
 export interface EditorActions {
@@ -80,6 +92,12 @@ export interface EditorActions {
   /** Closes the open dialog; with an id, only if that dialog is the one open. */
   closeDialog(dialog?: DialogId): void;
   markSaved(at: number): void;
+  /** Opens the step editor at the first step; steps not arranged yet are planned with `auto`. */
+  editSteps(auto?: StepOptions): void;
+  closeSteps(): void;
+  goToStep(at: StepRef): void;
+  /** Changes the plan as it stands, as one step to undo, and goes to the step the edit names. */
+  editPlan(edit: (plan: InstructionPlan, context: PlanContext) => Edited): void;
 }
 
 export type EditorState = EditorData & EditorActions;

@@ -15,6 +15,8 @@ const PATHS = {
   search: 'M11 17.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Z M20 20l-4.3-4.3',
   close: 'M6 6l12 12 M18 6 6 18',
   chevron: 'M6.5 9.5 12 15l5.5-5.5',
+  chevronLeft: 'M14.5 6.5 9 12l5.5 5.5',
+  chevronRight: 'M9.5 6.5 15 12l-5.5 5.5',
   plus: 'M12 5v14 M5 12h14',
   minus: 'M5 12h14',
   folder: 'M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z',

@@ -152,21 +152,29 @@ export class BookletWriter {
     });
   }
 
-  addStep(number: number, image: string, imageAspect: number, items: readonly PartCount[]): void {
+  /** A step's page: its number, the parts it adds, its picture, and a caption such as the sub-assembly it builds. */
+  addStep(number: number, image: string, imageAspect: number, items: readonly PartCount[], caption?: string): void {
     this.newPage();
     const layout = stepPageLayout(this.page, items, imageAspect);
     this.style(40, 'bold', INK);
     this.doc.text(String(number), layout.number.x, layout.number.y);
 
-    const box = layout.callout.box;
-    this.panel(box.x, box.y, box.w, box.h, 2.5);
-    this.style(9, 'bold', INK);
-    for (const cell of layout.callout.cells) {
-      this.partImage(cell.key, cell.thumb.x, cell.thumb.y, cell.thumb.w);
-      this.doc.text(`${cell.count}×`, cell.label.x, cell.label.y, { align: 'center' });
+    // a step that adds a sub-assembly whole may add no loose parts
+    if (items.length > 0) {
+      const box = layout.callout.box;
+      this.panel(box.x, box.y, box.w, box.h, 2.5);
+      this.style(9, 'bold', INK);
+      for (const cell of layout.callout.cells) {
+        this.partImage(cell.key, cell.thumb.x, cell.thumb.y, cell.thumb.w);
+        this.doc.text(`${cell.count}×`, cell.label.x, cell.label.y, { align: 'center' });
+      }
     }
 
     this.doc.addImage(image, imageFormat(image), layout.image.x, layout.image.y, layout.image.w, layout.image.h, `step:${number}`);
+    if (caption) {
+      this.style(11, 'bold', INK);
+      this.doc.text(this.fit(caption, 60), layout.image.x, layout.image.y + 5);
+    }
     this.footer(`${this.meta.title} · step ${number} of ${this.meta.steps}`);
   }
 

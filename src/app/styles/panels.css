@@ -837,3 +837,116 @@
   color: var(--danger);
   font-weight: 600;
 }
+
+/* ---- the step editor ---------------------------------------------------- */
+
+.step-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.step-nav strong {
+  font-size: var(--text-md);
+}
+
+.step-assembly {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.step-assembly label {
+  display: grid;
+  gap: 4px;
+  font-size: var(--text-xs);
+  color: var(--ink-2);
+}
+
+/* the sub-assembly's name: a title to edit, like the model's */
+.step-assembly input {
+  height: 32px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: var(--text-md);
+  font-weight: 600;
+  transition: border-color var(--dur-fast) ease;
+}
+
+.step-assembly input:hover {
+  border-color: var(--line-strong);
+}
+
+.step-assembly input:focus {
+  border-color: var(--line-strong);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.step-adds {
+  margin: 0 0 8px;
+  font-size: var(--text-sm);
+}
+
+.action-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+/* a long label wraps, rather than pushing the panel wider */
+.action-column > .btn {
+  height: auto;
+  min-height: 32px;
+  padding-block: 6px;
+  white-space: normal;
+  text-align: center;
+}
+
+.step-list {
+  /* positioned, so its buttons' offsets are measured from it */
+  position: relative;
+  display: grid;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.step-list button {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  background: none;
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.step-list button:hover {
+  background: var(--surface-sunken);
+}
+
+.step-list button[aria-current='step'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.step-list .mono {
+  min-width: 2.5ch;
+  color: var(--ink-3);
+}
+

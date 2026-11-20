@@ -6,6 +6,8 @@ import { createOccupancy, isOutOfBounds } from '../model/spatial';
 import { allBricks, modelFromBricks } from '../model/model';
 import type { Brick, Model } from '../model/types';
 import type { PartLookup } from '../parts/types';
+import type { InstructionPlan } from '../instructions/plan';
+import { instructionsSchema, planFromRecord, planToRecord } from './planFile';
 
 export const FILE_FORMAT = 'brickbench.model';
 export const FILE_VERSION = 1;
@@ -51,6 +53,8 @@ const fileSchema = z.object({
   name: z.string().max(120),
   settings: settingsSchema.optional(),
   bricks: z.array(brickSchema).max(MAX_BRICKS),
+  /** Building instructions as arranged by hand; read on their own, so a damaged plan costs only itself. */
+  instructions: z.unknown().optional(),
 });
 
 export type Result<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: string };
@@ -65,12 +69,15 @@ export interface ParsedDocument {
 }
 
 export function serializeDocument(doc: ModelDocument): string {
+  const bricks = allBricks(doc.model);
+  const instructions = doc.model.plan ? planToRecord(doc.model.plan, bricks.map((b) => b.id)) : null;
   const file: z.infer<typeof fileSchema> = {
     format: FILE_FORMAT,
     version: FILE_VERSION,
     name: doc.name,
     settings: { ...doc.settings },
-    bricks: allBricks(doc.model).map((b) => ({ part: b.partId, color: b.colorId, x: b.x, y: b.y, z: b.z, r: b.r })),
+    bricks: bricks.map((b) => ({ part: b.partId, color: b.colorId, x: b.x, y: b.y, z: b.z, r: b.r })),
+    ...(instructions ? { instructions } : {}),
   };
   return JSON.stringify(file);
 }
@@ -97,6 +104,8 @@ export interface RejectedRecord {
 
 export interface CollectedBricks {
   readonly bricks: Brick[];
+  /** The brick each record became, in file order; null for one left out. */
+  readonly ids: readonly (string | null)[];
   readonly warnings: string[];
   readonly unknownParts: string[];
   readonly skipped: number;
@@ -115,8 +124,11 @@ export function collectBricks(records: readonly BrickRecord[], lookup: PartLooku
   let recolored = 0;
   const occupancy = createOccupancy(lookup);
   const bricks: Brick[] = [];
+  const ids: (string | null)[] = [];
 
   for (const record of records) {
+    // until it is in, the record became nothing
+    ids.push(null);
     if (!lookup(record.part)) {
       unknownParts.add(record.part);
       skipped.unknown += 1;
@@ -147,7 +159,9 @@ export function collectBricks(records: readonly BrickRecord[], lookup: PartLooku
       return { ok: false, error: `This model is too big to open: it fills more than ${MAX_CELLS.toLocaleString('en')} grid cells.` };
     }
     if (!knownColor) recolored += 1;
-    bricks.push({ ...candidate, id: nextId() });
+    const id = nextId();
+    ids[ids.length - 1] = id;
+    bricks.push({ ...candidate, id });
   }
 
   const warnings: string[] = [];
@@ -160,7 +174,19 @@ export function collectBricks(records: readonly BrickRecord[], lookup: PartLooku
   }
   if (recolored > 0) warnings.push(`Recoloured ${plural(recolored, 'brick')} that used unknown colours.`);
   const skippedCount = skipped.unknown + skipped.outside + skipped.overlapping;
-  return { ok: true, value: { bricks, warnings, unknownParts: [...unknownParts], skipped: skippedCount, rejected } };
+  return { ok: true, value: { bricks, ids, warnings, unknownParts: [...unknownParts], skipped: skippedCount, rejected } };
+}
+
+/** A file's building instructions, when it has any it can still use; a damaged plan is left out with a warning. */
+function readPlan(raw: unknown, ids: readonly (string | null)[], warnings: string[]): InstructionPlan | null {
+  if (raw === undefined) return null;
+  const parsed = instructionsSchema.safeParse(raw);
+  if (!parsed.success) {
+    warnings.push('The building steps in this file could not be read, so they will be planned again.');
+    return null;
+  }
+  const plan = planFromRecord(parsed.data, ids);
+  return plan.steps.length > 0 ? plan : null;
 }
 
 /** Parses and validates a model file. Anything the editor cannot use is dropped or replaced, with warnings. */
@@ -185,13 +211,15 @@ export function parseDocument(text: string, lookup: PartLookup, nextId: IdFactor
   const warnings = [...collected.value.warnings];
   const baseplateColor = getColor(settings.baseplateColor) ? settings.baseplateColor : DEFAULT_SCENE.baseplateColor;
   if (baseplateColor !== settings.baseplateColor) warnings.push('The baseplate colour was not recognised, so the default was used.');
+  const plan = readPlan(parsed.data.instructions, collected.value.ids, warnings);
+  const model = modelFromBricks(collected.value.bricks);
 
   return {
     ok: true,
     value: {
       doc: {
         name: parsed.data.name,
-        model: modelFromBricks(collected.value.bricks),
+        model: plan ? { ...model, plan } : model,
         settings: { ...settings, baseplateColor },
       },
       warnings,
