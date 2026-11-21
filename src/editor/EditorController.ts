@@ -38,6 +38,13 @@ function ghostIds(): () => string {
   return () => `ghost-${n++}`;
 }
 
+/** The bricks but those with `ids`: the ones being dragged are not in their own way. */
+function* without(bricks: Iterable<Brick>, ids: ReadonlySet<string>): Generator<Brick> {
+  for (const brick of bricks) {
+    if (!ids.has(brick.id)) yield brick;
+  }
+}
+
 /** Rounds bounds outwards so the shadow camera does not jitter with every new brick. */
 function quantize(bounds: Bounds3): Bounds3 {
   const down = (v: number) => Math.floor(v / SHADOW_STEP) * SHADOW_STEP;
@@ -278,12 +285,12 @@ export class EditorController {
     const model = this.state.history.present;
     const ray = ids ? this.viewport.rayFromClient(clientX, clientY) : undefined;
     const under = hit.brickId === null ? undefined : model.bricks.get(hit.brickId);
-    // at a pin, hole, axle or hinge under the cursor, a part with one to match plugs into it
+    // at a pin, hole, axle or hinge under the cursor, a part with one to match plugs into it, where no other part already is
     const turned: ConnectTurn = ids ? { spin: 0, flipped: false } : { spin: spinOf(this.state.buildRotation), flipped: facingOf(this.state.buildRotation) !== '+y' };
-    const plugged = under ? attachToConnector(hit, under, payload, turned, this.lookup) : null;
+    const plugged = under ? attachToConnector(hit, under, payload, turned, this.lookup, without(model.bricks.values(), moving)) : null;
     if (plugged) {
       const bricks = materialize(plugged.payload, plugged.offset, ids ? reuseIds(ids) : ghostIds());
-      return { offset: plugged.offset, payload: plugged.payload, valid: bricksFit(model, bricks, this.lookup, moving) };
+      return { offset: plugged.offset, payload: plugged.payload, valid: plugged.free && bricksFit(model, bricks, this.lookup, moving) };
     }
     // on studs facing out of the face under the cursor, sideways or down, the payload turns to meet them
     const attached = under ? attachToStuds(hit, under, payload, this.lookup) : null;

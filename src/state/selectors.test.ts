@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { PLATE_HEIGHT } from '../core/grid';
 import { modelFromBricks } from '../core/model/model';
+import { connectorLookup } from '../core/model/connectorTestParts';
 import { makeBrick } from '../core/model/testUtils';
 import { getPart } from '../core/parts/catalog';
 import { bricksFit, bricksOf, distinctPieces, selectedBricks, spatialIndexFor, worldBounds } from './selectors';
@@ -44,6 +45,32 @@ describe('selectors', () => {
     expect(bricksFit(model, [makeBrick({ id: 'n', x: 2 })], getPart, new Set(['a', 'b']))).toBe(true);
     expect(bricksFit(model, [makeBrick({ id: 'n', partId: 'nope' })], getPart)).toBe(false);
     expect(bricksFit(model, [makeBrick({ id: 'n', y: -3 })], getPart)).toBe(false);
+  });
+
+  it('lets no part stand in the very box a loose part stands in, which collisions do not see, unless the two are plugged together', () => {
+    const SQUARE = [1, 0, 0, 0, 1, 0, 0, 0, 1] as const;
+    const QUARTER = [0, 0, 1, 0, 1, 0, -1, 0, 0] as const;
+    // a head, loose as one set on a neck is
+    const head = makeBrick({ id: 'head', partId: 'head', y: 5, m: SQUARE });
+    const withHead = modelFromBricks([head]);
+    // another in the same place: loose, on the grid, or turned a quarter in the same box
+    expect(bricksFit(withHead, [{ ...head, id: 'n' }], connectorLookup)).toBe(false);
+    expect(bricksFit(withHead, [makeBrick({ id: 'n', partId: 'head', y: 5 })], connectorLookup)).toBe(false);
+    expect(bricksFit(withHead, [{ ...head, id: 'n', m: QUARTER }], connectorLookup)).toBe(false);
+    // a loose part where one stands on the grid
+    expect(bricksFit(modelFromBricks([makeBrick({ id: 'head', partId: 'head', y: 5 })]), [{ ...head, id: 'n' }], connectorLookup)).toBe(false);
+    // beside it, a plate higher, or a part of another size at the same corner, is none of that; nor is the head itself, moved
+    expect(bricksFit(withHead, [{ ...head, id: 'n', x: 1 }], connectorLookup)).toBe(true);
+    expect(bricksFit(withHead, [{ ...head, id: 'n', y: 6 }], connectorLookup)).toBe(true);
+    expect(bricksFit(withHead, [{ ...head, id: 'n', partId: 'bush' }], connectorLookup)).toBe(true);
+    expect(bricksFit(withHead, [{ ...head, y: 5 }], connectorLookup, new Set(['head']))).toBe(true);
+    // a part the library no longer has stands in nobody's way
+    expect(bricksFit(modelFromBricks([{ ...head, partId: 'gone' }]), [{ ...head, id: 'n' }], connectorLookup)).toBe(true);
+    // a 2 × 2 turntable's top fills the box its base does, plugged into it; a second top fills the first's
+    const base = makeBrick({ id: 'base', partId: 'turn-base' });
+    const top = makeBrick({ id: 'top', partId: 'turn-top', m: SQUARE });
+    expect(bricksFit(modelFromBricks([base]), [top], connectorLookup)).toBe(true);
+    expect(bricksFit(modelFromBricks([base, top]), [{ ...top, id: 'n' }], connectorLookup)).toBe(false);
   });
 
   it('measures world bounds with headroom for studs', () => {

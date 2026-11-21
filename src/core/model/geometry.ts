@@ -195,6 +195,35 @@ export function brickCellBox(brick: PlacedPart, lookup: PartLookup): CellBox {
   return toCells(shift(turnBox(brickTurn(brick), localBox(part, wholeBox(part))), originLdu(brick, part)));
 }
 
+/** How near two boxes' corners must be to be the same, in LDraw units. */
+const SAME_CORNER = 0.01;
+
+/** The corners of the box a placed part fills, in LDraw units, at whatever angle it stands. */
+function boxCorners(brick: PlacedPart, part: PartDef): Vec3[] {
+  const box = localBox(part, wholeBox(part));
+  const origin = originLdu(brick, part);
+  const turn = brickTurn(brick);
+  return [box.x0, box.x1].flatMap((x) =>
+    [box.y0, box.y1].flatMap((y) =>
+      [box.z0, box.z1].map((z) => {
+        const corner = rotateBy(turn, { x, y, z });
+        return { x: origin.x + corner.x, y: origin.y + corner.y, z: origin.z + corner.z };
+      }),
+    ),
+  );
+}
+
+/**
+ * Whether two placed parts fill one and the same box, however each is
+ * turned in it: two heads on one neck do, and so do the top and the base of
+ * a 2 × 2 turntable, a plate high between them.
+ */
+export function sameBox(a: PlacedPart, b: PlacedPart, lookup: PartLookup): boolean {
+  const theirs = boxCorners(b, requirePart(lookup, b.partId));
+  const isTheirs = (p: Vec3): boolean => theirs.some((q) => Math.abs(p.x - q.x) < SAME_CORNER && Math.abs(p.y - q.y) < SAME_CORNER && Math.abs(p.z - q.z) < SAME_CORNER);
+  return boxCorners(a, requirePart(lookup, a.partId)).every(isTheirs);
+}
+
 /** World-grid boxes of the cells a brick actually fills (arches leave their opening out). */
 export function brickSolids(brick: Brick, lookup: PartLookup): CellBox[] {
   return brickLduSolids(brick, lookup).map(toCells);

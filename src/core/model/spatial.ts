@@ -1,6 +1,7 @@
 import { GRID_LIMIT, LDU_PER_UNIT, MAX_LAYER, type Vec3 } from '../grid';
 import type { PartLookup } from '../parts/types';
-import { LDU_PER_PLATE, LDU_PER_STUD, WHOLE_CELL, brickCellBox, brickCellQuarters, brickLduSolids, isLoose, isOnGrid, type LduBox, brickFloor } from './geometry';
+import { pluggedTogether } from './connections';
+import { LDU_PER_PLATE, LDU_PER_STUD, WHOLE_CELL, brickCellBox, brickCellQuarters, brickLduSolids, isLoose, isOnGrid, sameBox, type LduBox, brickFloor } from './geometry';
 import type { Brick } from './types';
 
 /**
@@ -277,6 +278,29 @@ export function collides(
   ignore: ReadonlySet<string> = new Set(),
 ): boolean {
   return candidates.some((brick) => firstOverlap(index, brick, lookup, ignore) !== undefined);
+}
+
+/** How near two bricks' places must be for them to be worth comparing box for box: x and z in studs, y in plates. */
+const SAME_PLACE = 1e-3;
+
+/**
+ * Whether a brick would stand exactly where one of `others` does, in one and
+ * the same box, with nothing to tell it so: one of the two is loose, and
+ * loose parts take no part in collisions. A second head set on the stud of a
+ * neck that has a head is that, and so is a loose part pasted where it was
+ * copied from. Two parts plugged together may fill one box, as the top and
+ * base of a 2 × 2 turntable do. Bricks in `ignore`, and parts the library
+ * does not have, are in nobody's way.
+ */
+export function doubles(brick: Brick, others: Iterable<Brick>, lookup: PartLookup, ignore: ReadonlySet<string> = new Set()): boolean {
+  const near = (a: number, b: number): boolean => Math.abs(a - b) < SAME_PLACE;
+  for (const other of others) {
+    // a box turned any way starts where the box around it does: bricks that do not start in one place cannot fill one box
+    if (!near(other.x, brick.x) || !near(other.y, brick.y) || !near(other.z, brick.z)) continue;
+    if (other.id === brick.id || ignore.has(other.id) || !(isLoose(brick) || isLoose(other)) || !lookup(other.partId)) continue;
+    if (sameBox(brick, other, lookup) && !pluggedTogether(brick, other, lookup)) return true;
+  }
+  return false;
 }
 
 /** Whether a brick reaches out of the build area: below the ground (by its shape, for a loose part at an angle), above the top, or past an edge. */

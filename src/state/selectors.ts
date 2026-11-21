@@ -1,7 +1,7 @@
 import { PLATE_HEIGHT } from '../core/grid';
-import { brickWorldBoxes } from '../core/model/geometry';
+import { brickWorldBoxes, isLoose } from '../core/model/geometry';
 import { allBricks, getBricks } from '../core/model/model';
-import { buildSpatialIndex, collides, isOutOfBounds, type SpatialIndex } from '../core/model/spatial';
+import { buildSpatialIndex, collides, doubles, isOutOfBounds, type SpatialIndex } from '../core/model/spatial';
 import type { Brick, Model } from '../core/model/types';
 import type { PartLookup } from '../core/parts/types';
 import type { EditorState } from './types';
@@ -28,6 +28,7 @@ function recentCache<V>(): (model: Model, compute: () => V) => V {
 const indexCache = recentCache<SpatialIndex>();
 const listCache = recentCache<Brick[]>();
 const varietyCache = recentCache<number>();
+const looseCache = recentCache<Brick[]>();
 
 /** Spatial index of a model, built once per model snapshot. */
 export function spatialIndexFor(model: Model, lookup: PartLookup): SpatialIndex {
@@ -51,10 +52,20 @@ export function selectedBricks(state: Pick<EditorState, 'history' | 'selection'>
   return getBricks(currentModel(state), state.selection);
 }
 
-/** True when the bricks are on the grid and only overlap bricks in `ignore`. */
+/** A model's loose parts: the few that collisions do not see. */
+function looseBricksOf(model: Model): Brick[] {
+  return looseCache(model, () => bricksOf(model).filter(isLoose));
+}
+
+/**
+ * True when the bricks are in the build area, only overlap bricks in
+ * `ignore`, and none would stand in the very box another brick stands in
+ * where collisions do not see it: a loose part's, or as a loose part.
+ */
 export function bricksFit(model: Model, bricks: readonly Brick[], lookup: PartLookup, ignore: ReadonlySet<string> = new Set()): boolean {
   if (bricks.some((b) => !lookup(b.partId) || isOutOfBounds(b, lookup))) return false;
-  return !collides(spatialIndexFor(model, lookup), bricks, lookup, ignore);
+  if (collides(spatialIndexFor(model, lookup), bricks, lookup, ignore)) return false;
+  return !bricks.some((brick) => doubles(brick, isLoose(brick) ? model.bricks.values() : looseBricksOf(model), lookup, ignore));
 }
 
 export interface WorldBounds {

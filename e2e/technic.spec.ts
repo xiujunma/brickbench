@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { chooseLibraryPart, counts, findSpot, freshEditor, plugNear, savedBricks, viewportCentre } from './helpers';
+import { chooseLibraryPart, counts, findSpot, freshEditor, plugNear, savedBricks, spotsAround, viewportCentre } from './helpers';
 
 test.describe('Technic, hinges and minifigures', () => {
   test('plugs a pin into a beam, a beam onto the pin, and swings it on the pin', async ({ page }) => {
@@ -82,10 +82,18 @@ test.describe('Technic, hinges and minifigures', () => {
     // centred on the torso, which is two studs wide to the head's one
     expect((head?.x ?? 0) - (torso?.x ?? 0)).toBeCloseTo(0.5, 6);
 
+    // the neck takes one head: at the torso a second shows where it would go, with no room there, and is not built
+    const coords = page.locator('.status-coords');
+    const taken = await findSpot(page, onNeck ?? centre, /Y\s*9(?![\d.])/);
+    expect(taken).not.toBeNull();
+    await expect(page.locator('.status-hint.is-blocked')).toBeVisible();
+    await page.mouse.click(taken?.x ?? 0, taken?.y ?? 0);
+    await expect(page.getByText('There is no room for that there.')).toBeVisible();
+    await expect(counts(page)).toHaveText('3 bricks');
+
     // selected, R turns the head 15° on its neck: in Select, the status bar shows where the part under the cursor stands, the head's 9 plates up
     await page.keyboard.press('Escape');
     await page.keyboard.press('v');
-    const coords = page.locator('.status-coords');
     let overHead: { x: number; y: number } | null = null;
     for (let dy = 0; dy <= 60 && !overHead; dy += 4) {
       await page.mouse.move(onNeck?.x ?? 0, (onNeck?.y ?? 0) - dy);
@@ -166,10 +174,17 @@ test.describe('Technic, hinges and minifigures', () => {
     expect([top?.x, top?.y, top?.z]).toEqual([base?.x, 1, base?.z]);
     expect(top?.m?.[4]).toBeCloseTo(1, 6);
 
+    // put together, the hinge is a brick like any other: nowhere on it does a second top go into the base, where the first is
+    const coords = page.locator('.status-coords');
+    const inBase = `X${top?.x} Y${top?.y} Z${top?.z}`;
+    for (const spot of spotsAround(onBase ?? centre, 36)) {
+      await page.mouse.move(spot.x, spot.y);
+      expect(((await coords.textContent()) ?? '').trim()).not.toBe(inBase);
+    }
+
     // selected, R swings the top 15° about the hinge, along the brick's length
     await page.keyboard.press('Escape');
     await page.keyboard.press('v');
-    const coords = page.locator('.status-coords');
     let overTop: { x: number; y: number } | null = null;
     for (let dy = 0; dy <= 60 && !overTop; dy += 4) {
       await page.mouse.move(onBase?.x ?? 0, (onBase?.y ?? 0) - dy);

@@ -81,6 +81,71 @@ export function engaged(a: WorldConnector, b: WorldConnector): boolean {
   return Math.min(a.length / 2, s + b.length / 2) - Math.max(-a.length / 2, s - b.length / 2) > ON_LINE;
 }
 
+/** Whether two placed parts are plugged together: a connection of one in a connection of the other. */
+export function pluggedTogether(a: PlacedPart, b: PlacedPart, lookup: PartLookup): boolean {
+  const theirs = brickConnectors(b, lookup);
+  return theirs.length > 0 && brickConnectors(a, lookup).some((mine) => theirs.some((other) => engaged(mine, other)));
+}
+
+/**
+ * A stretch of a connection's line that another connection lies along: from
+ * where to where along its axis, from its middle, in world units, and
+ * whether that one points the same way along the line (1) or the other.
+ */
+export interface Stretch {
+  readonly from: number;
+  readonly to: number;
+  readonly way: 1 | -1;
+}
+
+/**
+ * How far parts may reach into each other along a connection, or fall short
+ * of filling it, and still fit, in world units. It lies between the two
+ * that must be told apart: LDraw draws an axle a twentieth of a stud short
+ * of its length, so parts set along one from its end stand that far out of
+ * step with those set by the studs; and the shortest connections there are,
+ * the mouths of a hole a slot breaks, are a tenth of a stud long. And it is
+ * off the quarter LDraw units parts are drawn on, so that no two parts
+ * overlap by just this, to fit in one place and not in the next.
+ */
+const PLAY = 0.07;
+
+/** The play a stretch of `length` has: PLAY, or most of the stretch, when it is shorter than that. */
+export function playOf(length: number): number {
+  return Math.min(PLAY, 0.7 * length);
+}
+
+/** The stretch of `line`'s own line that a connection on it lies along. */
+export function stretchOn(line: WorldConnector, other: WorldConnector): Stretch {
+  const s = dot(minus(other.at, line.at), line.axis);
+  return { from: s - other.length / 2, to: s + other.length / 2, way: dot(other.axis, line.axis) < 0 ? -1 : 1 };
+}
+
+/** Whether two stretches of one line are in each other's way: overlapping by more than the play the shorter has. */
+export function inTheWay(a: Stretch, b: Stretch): boolean {
+  const overlap = Math.min(a.to, b.to) - Math.max(a.from, b.from);
+  return overlap > playOf(Math.min(a.to - a.from, b.to - b.from));
+}
+
+/** The stretches of a connection that parts plugged into it take: one for each of `around` that is. */
+export function takenOn(socket: WorldConnector, around: readonly WorldConnector[]): Stretch[] {
+  return around.filter((other) => engaged(socket, other)).map((other) => stretchOn(socket, other));
+}
+
+/**
+ * Whether a connection has room for one more part: for a plug lying along
+ * the stretch `plug` of it, besides those along the stretches `taken`. The
+ * plug must be clear of the others, but on the axle across a minifigure's
+ * hips: a leg hangs on each end of that, yet LDraw draws both legs about
+ * the middle of the hips, so both legs' joints lie on the middle of the
+ * axle. Each points to its own leg's side: the axle has room for a leg that
+ * points the way no leg on it does.
+ */
+export function hasRoom(socket: WorldConnector, plug: Stretch, taken: readonly Stretch[]): boolean {
+  if (socket.kind === 'hip') return !taken.some((other) => other.way === plug.way);
+  return !taken.some((other) => inTheWay(plug, other));
+}
+
 /** How a group of parts is held by the rest: by joints on one line it can swing about, rigidly, or not by any connection. */
 export type Hold = { readonly kind: 'joint'; readonly axis: Vec3; readonly pivot: Vec3 } | { readonly kind: 'rigid' } | { readonly kind: 'none' };
 
@@ -97,6 +162,20 @@ function stacked(a: Brick, b: Brick, lookup: PartLookup): boolean {
 }
 
 type Box = ReturnType<typeof brickCellBox>;
+
+/**
+ * The connections of the bricks that may be plugged into `brick`: of those
+ * of `others` whose boxes come within a cell of its own, itself left out.
+ */
+export function connectionsAround(brick: Brick, others: Iterable<Brick>, lookup: PartLookup): WorldConnector[] {
+  const box = brickCellBox(brick, lookup);
+  const found: WorldConnector[] = [];
+  for (const other of others) {
+    if (other.id === brick.id || !lookup(other.partId)?.connectors?.length) continue;
+    if (overlaps(brickCellBox(other, lookup), box, 1)) found.push(...brickConnectors(other, lookup));
+  }
+  return found;
+}
 
 /** A connection of the group's, with the box of the part it is on, and whether that part is loose: plugged in, not standing on the grid. */
 interface Own {

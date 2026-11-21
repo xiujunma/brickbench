@@ -5,7 +5,7 @@ import { brickCellBox, brickFloor, isLoose } from '../model/geometry';
 import { isOutOfBounds } from '../model/spatial';
 import { connectorLookup as lookup } from '../model/connectorTestParts';
 import { makeBrick } from '../model/testUtils';
-import { turnOf } from '../orientation';
+import { turnOf, type Turn } from '../orientation';
 import type { Brick } from '../model/types';
 import { attachToConnector, type ConnectTurn } from './connect';
 import { materialize, payloadFromPart } from './payload';
@@ -17,14 +17,39 @@ function hit(point: Vec3, normal: Vec3, brickId: string): Hit {
   return { kind: 'brick', brickId, point, normal, t: 1, base: 0 };
 }
 
-/** Builds `partId` plugged into `target` at the cursor, or null. */
-function plug(target: Brick, partId: string, point: Vec3, normal: Vec3, turned: ConnectTurn = STILL, id = 'new'): Brick | null {
+/** Where `partId` plugs into `target` at the cursor, and whether it has room there, or null; `others` are the bricks already there besides the target. */
+function ask(target: Brick, partId: string, point: Vec3, normal: Vec3, turned: ConnectTurn, id: string, others: readonly Brick[]): { readonly brick: Brick; readonly free: boolean } | null {
   const part = lookup(partId);
   if (!part) throw new Error(partId);
-  const attached = attachToConnector(hit(point, normal, target.id), target, payloadFromPart(part, 4, 0), turned, lookup);
-  if (!attached) return null;
-  const [brick] = materialize(attached.payload, attached.offset, () => id);
-  return brick ?? null;
+  const attached = attachToConnector(hit(point, normal, target.id), target, payloadFromPart(part, 4, 0), turned, lookup, [target, ...others]);
+  const [brick] = attached ? materialize(attached.payload, attached.offset, () => id) : [];
+  return attached && brick ? { brick, free: attached.free } : null;
+}
+
+/** Builds `partId` plugged into `target` at the cursor, where it has room; null where it does not plug in, or has none. */
+function plug(target: Brick, partId: string, point: Vec3, normal: Vec3, turned: ConnectTurn = STILL, id = 'new', others: readonly Brick[] = []): Brick | null {
+  const asked = ask(target, partId, point, normal, turned, id, others);
+  return asked?.free ? asked.brick : null;
+}
+
+/** As `plug`, with the bricks already plugged in around the target. */
+function plugAmong(others: readonly Brick[], target: Brick, partId: string, point: Vec3, normal: Vec3, id = 'new'): Brick | null {
+  return plug(target, partId, point, normal, STILL, id, others);
+}
+
+/**
+ * What a part asked for among `others` is told: 'room' where it plugs in,
+ * 'none' where it would but another part is there, 'not here' where it does
+ * not plug in at all and builds on the target like any brick.
+ */
+function answer(others: readonly Brick[], target: Brick, partId: string, point: Vec3, normal: Vec3): 'room' | 'none' | 'not here' {
+  const asked = ask(target, partId, point, normal, STILL, 'new', others);
+  return asked === null ? 'not here' : asked.free ? 'room' : 'none';
+}
+
+/** The connection of `brick` that is plugged into one of `into`'s. */
+function connectionIn(brick: Brick, into: Brick) {
+  return brickConnectors(brick, lookup).find((mine) => brickConnectors(into, lookup).some((theirs) => engaged(mine, theirs)));
 }
 
 /** A brick's box in the world, in studs on every axis, to 0.001. */
@@ -125,7 +150,7 @@ describe('what does not plug in', () => {
     if (!pinPart) throw new Error('pin');
     const single = payloadFromPart(pinPart, 4, 0);
     const pair = { ...single, bricks: [...single.bricks, ...single.bricks] };
-    expect(attachToConnector(hit({ x: 0.55, y: 1.2, z: 1.45 }, UP, 'beam'), beam, pair, STILL, lookup)).toBeNull();
+    expect(attachToConnector(hit({ x: 0.55, y: 1.2, z: 1.45 }, UP, 'beam'), beam, pair, STILL, lookup, [beam])).toBeNull();
   });
 });
 
@@ -290,5 +315,259 @@ describe('the older hinges and turntables', () => {
     turnOf(1).forEach((v, i) => expect(top.m?.[i]).toBeCloseTo(v, 9));
     const turned = plug(base, 'turn-top', { x: 1.2, y: 0.4, z: 0.9 }, UP, { spin: 1, flipped: false });
     turnOf(2).forEach((v, i) => expect(Math.abs(turned?.m?.[i] ?? 9)).toBeCloseTo(Math.abs(v), 9));
+  });
+});
+
+describe('connections another part already takes', () => {
+  const DOWN = { x: 0, y: -1, z: 0 };
+  const OUT = { x: 1, y: 0, z: 0 };
+  const BACK = { x: -1, y: 0, z: 0 };
+  const FRONT = { x: 0, y: 0, z: 1 };
+
+  it('takes no second pin in a hole a pin fills, from either side, and still takes one in the next hole', () => {
+    const over = { x: 0.55, y: 1.2, z: 1.45 };
+    const pin = plug(beam, 'pin', over, UP, STILL, 'pin') as Brick;
+    expect(answer([pin], beam, 'pin', over, UP)).toBe('none');
+    // it shows where it would have gone: where the first is
+    expect(ask(beam, 'pin', over, UP, STILL, 'new', [pin])?.brick).toEqual({ ...pin, id: 'new' });
+    // from below neither: a pin's end is as long as the hole
+    expect(answer([pin], beam, 'pin', { x: 0.5, y: 0, z: 1.5 }, DOWN)).toBe('none');
+    const next = plugAmong([pin], beam, 'pin', { x: 0.55, y: 1.2, z: 2.45 }, UP);
+    expect(next && pluggedInto(next, beam)).toBe(true);
+    // the pin being moved is not in its own way
+    expect(plugAmong([], beam, 'pin', over, UP)).not.toBeNull();
+  });
+
+  it('takes a pin in each end of a hole two studs long, and stops an axle at the pin already in it', () => {
+    // the joiner's hole runs along X from 0 to 2, half a stud up
+    const joiner = makeBrick({ id: 'joiner', partId: 'pin-joiner' });
+    const right = plug(joiner, 'pin', { x: 2, y: 0.55, z: 0.5 }, OUT, STILL, 'right') as Brick;
+    expect(connectionIn(right, joiner)?.at.x).toBeCloseTo(1.5, 9);
+    const left = plugAmong([right], joiner, 'pin', { x: 0, y: 0.55, z: 0.5 }, BACK, 'left');
+    expect(left && connectionIn(left, joiner)?.at.x).toBeCloseTo(0.5, 9);
+    // an axle goes through an empty hole to its far face; here, as far as the pin: half way
+    expect(box(plug(joiner, 'axle', { x: 0, y: 0.55, z: 0.5 }, BACK) as Brick).x).toEqual([-2, 2]);
+    const axle = plugAmong([right], joiner, 'axle', { x: 0, y: 0.55, z: 0.5 }, BACK, 'axle') as Brick;
+    expect(box(axle).x).toEqual([-3, 1]);
+    // and then the hole is full
+    expect(answer([right, axle], joiner, 'axle', { x: 0, y: 0.55, z: 0.5 }, BACK)).toBe('none');
+    expect(answer([right, axle], joiner, 'pin', { x: 0, y: 0.55, z: 0.5 }, BACK)).toBe('none');
+  });
+
+  it('sets a second beam on a long pin against the first, and a third nowhere', () => {
+    // the pin's two studs run along X from its collar at 2.013 to its tip at 0.013
+    const long = makeBrick({ id: 'long', partId: 'long-pin' });
+    const over = { x: 1, y: 0.8, z: 0.5 };
+    const first = plug(long, 'beam', over, UP, STILL, 'first') as Brick;
+    expect(connectionIn(first, long)?.at.x).toBeCloseTo(1.513, 9);
+    const second = plugAmong([first], long, 'beam', over, UP, 'second') as Brick;
+    expect(connectionIn(second, long)?.at.x).toBeCloseTo(0.513, 9);
+    expect(answer([first, second], long, 'beam', over, UP)).toBe('none');
+    // with the first gone, the second's place stays taken and the first's is free again
+    const again = plugAmong([second], long, 'beam', over, UP);
+    expect(again && connectionIn(again, long)?.at.x).toBeCloseTo(1.513, 9);
+  });
+
+  it('sets two thin liftarms on one end of a pin, and no beam where only half a stud is left', () => {
+    const pin = plug(beam, 'pin', { x: 0.55, y: 1.2, z: 1.45 }, UP, STILL, 'pin') as Brick;
+    // the pin's free end stands from 1 to 2 studs up
+    const at = { x: 0.9, y: 1.6, z: 1.5 };
+    const first = plugAmong([beam], pin, 'thin-beam', at, OUT, 'first') as Brick;
+    expect(connectionIn(first, pin)?.at.y).toBeCloseTo(1.25, 9);
+    const second = plugAmong([beam, first], pin, 'thin-beam', at, OUT, 'second') as Brick;
+    expect(connectionIn(second, pin)?.at.y).toBeCloseTo(1.75, 9);
+    expect(answer([beam, first, second], pin, 'thin-beam', at, OUT)).toBe('none');
+    expect(answer([beam, first], pin, 'beam', at, OUT)).toBe('none');
+  });
+
+  it('slides a bush along an axle to the nearest place clear of what is on it, within a stud', () => {
+    const brick = makeBrick({ id: 'brick', partId: 'technic-brick' });
+    // the axle runs along Z from 0, in the brick's hole, to 4
+    const axle = plug(brick, 'axle', { x: 1.05, y: 0.75, z: 1 }, FRONT, STILL, 'axle') as Brick;
+    const at = (z: number) => ({ x: 1.3, y: 0.7, z });
+    const first = plugAmong([brick], axle, 'bush', at(2.8), OUT, 'first') as Brick;
+    expect(connectionIn(first, axle)?.at.z).toBeCloseTo(3, 9);
+    // asked for the same place, the next goes beside it
+    const second = plugAmong([brick, first], axle, 'bush', at(2.8), OUT, 'second') as Brick;
+    expect(connectionIn(second, axle)?.at.z).toBeCloseTo(2, 9);
+    // and with those two and the brick on it, the axle has no stud left free
+    expect(answer([brick, first, second], axle, 'bush', at(2.8), OUT)).toBe('none');
+    // asked for where the brick is, a bush goes against the brick
+    const low = plugAmong([brick, first], axle, 'bush', at(0.6), OUT, 'low') as Brick;
+    expect(connectionIn(low, axle)?.at.z).toBeCloseTo(1.5, 9);
+    // but no further than a stud from where it was asked for: the place free beyond that bush is too far from the brick
+    expect(answer([brick, low], axle, 'bush', at(0.5), OUT)).toBe('none');
+    expect(connectionIn(plugAmong([brick, low], axle, 'bush', at(2.4), OUT) as Brick, axle)?.at.z).toBeCloseTo(2.5, 9);
+  });
+
+  it('takes one head on a neck, one bar in a clip and one in an open stud: a second has no room', () => {
+    const torso = makeBrick({ id: 'torso', partId: 'torso', r: 1 });
+    const head = plug(torso, 'head', { x: 0.55, y: 2, z: 1.05 }, UP, STILL, 'head') as Brick;
+    expect(answer([head], torso, 'head', { x: 0.55, y: 2, z: 1.05 }, UP)).toBe('none');
+
+    const plate = makeBrick({ id: 'plate', partId: 'clip-plate' });
+    const bar = plug(plate, 'bar', { x: 0.55, y: 0.35, z: 2 }, FRONT, STILL, 'bar') as Brick;
+    expect(answer([bar], plate, 'bar', { x: 0.55, y: 0.35, z: 2 }, FRONT)).toBe('none');
+
+    const round = makeBrick({ id: 'round', partId: 'round-brick' });
+    const standing = plug(round, 'bar', { x: 0.55, y: 1.4, z: 0.5 }, UP, STILL, 'standing') as Brick;
+    expect(answer([standing], round, 'bar', { x: 0.55, y: 1.4, z: 0.5 }, UP)).toBe('none');
+  });
+
+  it('leaves a hinge or a turntable that is put together to be built on like any brick: a second top does not plug in', () => {
+    const base = makeBrick({ id: 'base', partId: 'hinge-base' });
+    const top = plug(base, 'hinge-top', { x: 1, y: 1.2, z: 0.5 }, UP, STILL, 'top') as Brick;
+    expect(answer([], base, 'hinge-top', { x: 1, y: 0.6, z: 1 }, FRONT)).toBe('room');
+    expect(answer([top], base, 'hinge-top', { x: 1, y: 0.6, z: 1 }, FRONT)).toBe('not here');
+    // nor a second base at the top
+    expect(answer([base], top, 'hinge-base', { x: 1, y: 1, z: 1 }, FRONT)).toBe('not here');
+
+    const turntable = makeBrick({ id: 'turntable', partId: 'turn-base' });
+    const turning = plug(turntable, 'turn-top', { x: 1.2, y: 0.4, z: 0.9 }, UP, STILL, 'turning') as Brick;
+    expect(answer([turning], turntable, 'turn-top', { x: 2, y: 0.2, z: 0.9 }, OUT)).toBe('not here');
+
+    const three = makeBrick({ id: 'three', partId: 'fingers-3' });
+    const two = plug(three, 'fingers-2', { x: 2.5, y: 0.4, z: 0.5 }, UP, STILL, 'two') as Brick;
+    expect(answer([two], three, 'fingers-2', { x: 2.5, y: 0.4, z: 0.5 }, UP)).toBe('not here');
+  });
+
+  it('hangs a second arm from the shoulder that is free, when the cursor is in reach of both', () => {
+    const torso = makeBrick({ id: 'torso', partId: 'torso' });
+    // on the torso's front, a little towards its -X shoulder
+    const chest = { x: 0.9, y: 1.15, z: 1 };
+    const first = plug(torso, 'arm', chest, FRONT, STILL, 'first') as Brick;
+    expect(connectionIn(first, torso)?.at.x).toBeLessThan(1);
+    const second = plugAmong([first], torso, 'arm', chest, FRONT, 'second') as Brick;
+    expect(connectionIn(second, torso)?.at.x).toBeGreaterThan(1);
+    expect(answer([first, second], torso, 'arm', chest, FRONT)).toBe('none');
+  });
+
+  it('seats a second torso on no hips that have one, and a part with two pins only in holes that are both free', () => {
+    const hips = makeBrick({ id: 'hips', partId: 'hips' });
+    const torso = plug(hips, 'torso', { x: 0.45, y: 2.8, z: 0.5 }, UP, STILL, 'torso') as Brick;
+    expect(answer([torso], hips, 'torso', { x: 1.55, y: 2.8, z: 0.5 }, UP)).toBe('none');
+
+    // two pins a stud apart, over the beam's middle hole: one goes in there, the other in a hole beside it
+    const over = { x: 0.55, y: 1.2, z: 1.45 };
+    const holes = (brick: Brick): number[] =>
+      brickConnectors(brick, lookup)
+        .filter((mine) => brickConnectors(beam, lookup).some((theirs) => engaged(mine, theirs)))
+        .map((mine) => Math.round(mine.at.z * 10) / 10)
+        .sort();
+    const alone = plug(beam, 'double-pin', over, UP) as Brick;
+    expect(holes(alone)).toHaveLength(2);
+    const beside = holes(alone).find((z) => z !== 1.5) ?? 0;
+    // with a pin in that one, it takes the hole on the other side
+    const pin = plug(beam, 'pin', { x: 0.55, y: 1.2, z: beside - 0.05 }, UP, STILL, 'pin') as Brick;
+    expect(holes(pin)).toEqual([beside]);
+    expect(holes(plugAmong([pin], beam, 'double-pin', over, UP) as Brick)).toEqual(beside < 1.5 ? [1.5, 2.5] : [0.5, 1.5]);
+    // turned half round with R, its other pin comes to the hole the pin fills: no room like that
+    const halfRound = { spin: 2, flipped: false };
+    expect(ask(beam, 'double-pin', over, UP, halfRound, 'new', [pin])?.free).toBe(false);
+    expect(ask(beam, 'double-pin', over, UP, halfRound, 'new', [])?.free).toBe(true);
+    expect(ask(beam, 'double-pin', over, UP, STILL, 'new', [pin])?.free).toBe(true);
+  });
+
+  it('hangs a minifigure’s two legs on the one axle across its hips, each on its own side, and no third', () => {
+    // LDraw draws both legs' joints on the middle of the hips' axle, two studs long: it has room for the two
+    const hips = makeBrick({ id: 'hips', partId: 'bare-hips', y: 6 });
+    const front = { x: 1, y: 6 * PLATE_HEIGHT + 0.44, z: 1 };
+    const right = plug(hips, 'leg-right', front, FRONT, STILL, 'right') as Brick;
+    const left = plugAmong([right], hips, 'leg-left', front, FRONT, 'left') as Brick;
+    // side by side under the hips, a stud and a hair apart as LDraw sets them
+    expect(Math.abs(left.x - right.x)).toBeCloseTo(1.025, 9);
+    expect(pluggedInto(left, hips)).toBe(true);
+    expect(answer([right, left], hips, 'leg-left', front, FRONT)).toBe('none');
+    expect(answer([right, left], hips, 'leg-right', front, FRONT)).toBe('none');
+    // a second leg of the same side has no room, however R turns it about the axle
+    expect(answer([right], hips, 'leg-right', front, FRONT)).toBe('none');
+    for (const spin of [1, 2, 3]) expect(ask(hips, 'leg-left', front, FRONT, { spin, flipped: false }, 'new', [left])?.free).toBe(false);
+    // the left leg turned over with T comes to the right leg's side: free, until the right leg is there
+    expect(ask(hips, 'leg-left', front, FRONT, { spin: 0, flipped: true }, 'new', [])?.free).toBe(true);
+    expect(ask(hips, 'leg-left', front, FRONT, { spin: 0, flipped: true }, 'new', [right])?.free).toBe(false);
+  });
+
+  it('hangs each leg on its own side of hips that lie on their side, upside down or a little tilted', () => {
+    const turn = (degrees: number): Turn => {
+      const [c, s] = [Math.cos((degrees * Math.PI) / 180), Math.sin((degrees * Math.PI) / 180)];
+      // about X, the way the hips' axle runs
+      return [1, 0, 0, 0, c, -s, 0, s, c];
+    };
+    const standing: Brick[] = [5, 6, 7, 9, 15, 16, 22].map((r) => makeBrick({ id: 'hips', partId: 'bare-hips', x: 4, y: 30, z: 4, r }));
+    const tilted: Brick[] = [1, 5, 90].map((degrees) => ({ ...makeBrick({ id: 'hips', partId: 'bare-hips', x: 4, y: 30, z: 4 }), m: turn(degrees) }));
+    for (const hips of [...standing, ...tilted]) {
+      const [, , axle] = brickConnectors(hips, lookup);
+      if (!axle) throw new Error('no axle');
+      // each leg's joint points to the leg's own side: a right leg's against the axle, a left leg's along it, as on hips standing upright
+      const side = (leg: Brick): number => {
+        const joint = connectionIn(leg, hips);
+        return joint ? Math.sign(joint.axis.x * axle.axis.x + joint.axis.y * axle.axis.y + joint.axis.z * axle.axis.z) : 0;
+      };
+      const right = plug(hips, 'leg-right', axle.at, UP, STILL, 'right') as Brick;
+      expect(side(right)).toBe(-1);
+      expect(answer([right], hips, 'leg-right', axle.at, UP)).toBe('none');
+      const left = plugAmong([right], hips, 'leg-left', axle.at, UP, 'left') as Brick;
+      expect(side(left)).toBe(1);
+      expect(answer([right, left], hips, 'leg-left', axle.at, UP)).toBe('none');
+    }
+  });
+
+  it('takes one arm on a hand, though the hand’s pin is twice as long as an arm’s wrist', () => {
+    const hand = makeBrick({ id: 'hand', partId: 'hand' });
+    const over = { x: 0.55, y: 0.3, z: 0.95 };
+    const right = plug(hand, 'arm-right', over, UP, STILL, 'right') as Brick;
+    expect(pluggedInto(right, hand)).toBe(true);
+    expect(answer([right], hand, 'arm-left', over, UP)).toBe('none');
+    expect(answer([right], hand, 'arm-right', over, UP)).toBe('none');
+  });
+
+  it('keeps a hole clear of what is on the next piece of a pin drawn in pieces', () => {
+    // the long end of the pin: two pieces, from x 1 to 2 and from 2 to 3
+    const long = makeBrick({ id: 'long', partId: 'triple-pin' });
+    const brick = plug(long, 'technic-brick', { x: 2.5, y: 0.8, z: 0.5 }, UP, STILL, 'brick') as Brick;
+    expect(connectionIn(brick, long)?.at.x).toBeCloseTo(2.5, 9);
+    // a hole two studs long, asked for at the first piece, would reach over the second, where the brick is
+    expect(answer([brick], long, 'pin-joiner', { x: 1.6, y: 0.8, z: 0.5 }, UP)).toBe('none');
+    // a beam has the first piece to itself
+    const beside = plugAmong([brick], long, 'beam', { x: 1.6, y: 0.8, z: 0.5 }, UP) as Brick;
+    expect(connectionIn(beside, long)?.at.x).toBeCloseTo(1.5, 9);
+  });
+
+  it('finds room for a part turned over with T clear of what was in its way', () => {
+    // a pin in the joiner's right end; the long pin's stub of axle goes through from there to the joiner's far face
+    const joiner = makeBrick({ id: 'joiner', partId: 'pin-joiner' });
+    const right = plug(joiner, 'pin', { x: 2, y: 0.55, z: 0.5 }, OUT, STILL, 'right') as Brick;
+    const mouth = { x: 0, y: 0.55, z: 0.5 };
+    // from the left, its stub stops at the pin and its long end stands out to the left: room
+    expect(answer([right], joiner, 'long-pin', mouth, BACK)).toBe('room');
+    // asked for at the right, where the pin is, its long end would lie through the pin; turned over, it stands out of the far end
+    const at = { x: 2, y: 0.55, z: 0.5 };
+    expect(ask(joiner, 'long-pin', at, OUT, STILL, 'new', [right])?.free).toBe(false);
+    expect(ask(joiner, 'long-pin', at, OUT, { spin: 0, flipped: true }, 'new', [right])?.free).toBe(true);
+  });
+
+  it('answers the same wherever in the world a hole only a tenth of a stud deep is', () => {
+    for (const x of [0, 3, 7, 11, 13]) {
+      for (const z of [0, 5, 9]) {
+        // the joiner's left mouth is at x, half a stud up
+        const joiner = makeBrick({ id: 'joiner', partId: 'slot-joiner', x, z });
+        const mouth = { x, y: 0.55, z: z + 0.5 };
+        const pin = plug(joiner, 'pin', mouth, BACK, STILL, 'pin') as Brick;
+        expect(connectionIn(pin, joiner)?.at.x).toBeCloseTo(x + 0.5, 9);
+        // a pin the other way through that mouth would run through the first
+        expect(answer([pin], joiner, 'pin', { ...mouth, x: x + 0.1 }, BACK)).toBe('none');
+        // and an axle has no hole left to go into: it is not set down outside it
+        expect(answer([pin], joiner, 'axle', mouth, BACK)).toBe('none');
+      }
+    }
+  });
+
+  it('sets a part with a hole a tenth of a stud deep on a pin, after the liftarm already on it', () => {
+    const pin = plug(beam, 'pin', { x: 0.55, y: 1.2, z: 1.45 }, UP, STILL, 'pin') as Brick;
+    const at = { x: 0.9, y: 1.6, z: 1.5 };
+    const liftarm = plugAmong([beam], pin, 'thin-beam', at, OUT, 'liftarm') as Brick;
+    const joiner = plugAmong([beam, liftarm], pin, 'slot-joiner', at, OUT, 'joiner') as Brick;
+    // its mouth right above the liftarm, which takes the pin's end from 1 to 1.5 studs up
+    expect(connectionIn(joiner, pin)?.at.y).toBeCloseTo(1.55, 9);
   });
 });

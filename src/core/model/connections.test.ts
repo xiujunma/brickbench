@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { type Vec3 } from '../grid';
 import { attachToConnector } from '../placement/connect';
 import { materialize, payloadFromPart } from '../placement/payload';
-import { brickConnectors, engaged, holdOf, mates, turnsFreely } from './connections';
+import { brickConnectors, engaged, hasRoom, holdOf, inTheWay, mates, stretchOn, turnsFreely, type Stretch, type WorldConnector } from './connections';
 import { connectorLookup as lookup } from './connectorTestParts';
 import { makeBrick } from './testUtils';
 import type { Brick } from './types';
@@ -14,7 +14,7 @@ const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1] as const;
 function plug(target: Brick, partId: string, point: Vec3, normal: Vec3, id: string): Brick {
   const part = lookup(partId);
   if (!part) throw new Error(partId);
-  const attached = attachToConnector({ kind: 'brick', brickId: target.id, point, normal, t: 1, base: 0 }, target, payloadFromPart(part, 4, 0), { spin: 0, flipped: false }, lookup);
+  const attached = attachToConnector({ kind: 'brick', brickId: target.id, point, normal, t: 1, base: 0 }, target, payloadFromPart(part, 4, 0), { spin: 0, flipped: false }, lookup, []);
   const [brick] = attached ? materialize(attached.payload, attached.offset, () => id) : [];
   if (!brick) throw new Error(`${partId} did not plug in`);
   return brick;
@@ -72,6 +72,39 @@ describe('connections of placed parts', () => {
     if (!inside || !standing) throw new Error('pin ends');
     expect(holes.filter((hole) => engaged(inside, hole))).toHaveLength(1);
     expect(holes.some((hole) => engaged(standing, hole))).toBe(false);
+  });
+});
+
+describe('room along a connection', () => {
+  it('tells parts side by side from parts in each other’s way, the same wherever in the world they are', () => {
+    for (let x = -30; x <= 30; x += 0.7) {
+      const at = (from: number, length: number): Stretch => ({ from: x + from, to: x + from + length, way: 1 });
+      // a twentieth of a stud into each other, as parts set along an axle LDraw draws that much short: side by side
+      expect(inTheWay(at(0, 1), at(0.95, 1))).toBe(false);
+      expect(inTheWay(at(0, 0.1), at(0.05, 0.1))).toBe(false);
+      // a tenth of a stud into each other, the whole of the shortest connections there are: in the way
+      expect(inTheWay(at(0, 1), at(0.9, 1))).toBe(true);
+      expect(inTheWay(at(0, 0.1), at(0, 0.1))).toBe(true);
+      // and so are those three quarters on each other
+      expect(inTheWay(at(0, 0.1), at(0.025, 0.1))).toBe(true);
+    }
+  });
+
+  it('gives a hole room for what is clear of what is in it, and a minifigure’s hips room for a leg each side', () => {
+    const along = (kind: WorldConnector['kind'], x: number, length: number, way: 1 | -1 = 1): WorldConnector => ({ kind, at: { x, y: 0, z: 0 }, axis: { x: way, y: 0, z: 0 }, length });
+    const hole = along('pinhole', 0, 2);
+    const inLeft = stretchOn(hole, along('pin', -0.5, 1));
+    expect(inLeft).toEqual({ from: -1, to: 0, way: 1 });
+    expect(hasRoom(hole, stretchOn(hole, along('pin', 0.5, 1, -1)), [inLeft])).toBe(true);
+    expect(hasRoom(hole, stretchOn(hole, along('axle', 0, 2)), [inLeft])).toBe(false);
+    // both legs' joints lie on the middle of the hips' axle: one that points the other way is on the other side of it
+    const hip = along('hip', 0, 2);
+    const right = stretchOn(hip, along('leg', 0, 1, -1));
+    expect(hasRoom(hip, stretchOn(hip, along('leg', 0, 1)), [right])).toBe(true);
+    expect(hasRoom(hip, stretchOn(hip, along('leg', 0, 1, -1)), [right])).toBe(false);
+    // a neck is no such thing: a second head, even upside down, is where the first is
+    const neck = along('neck', 0, 0.2);
+    expect(hasRoom(neck, stretchOn(neck, along('head', 0, 0.2, -1)), [stretchOn(neck, along('head', 0, 0.2))])).toBe(false);
   });
 });
 

@@ -15,6 +15,7 @@ function part(id: string, w: number, d: number, h: number, connectors: readonly 
 const X = { x: 1, y: 0, z: 0 };
 const NEG_X = { x: -1, y: 0, z: 0 };
 const Y = { x: 0, y: 1, z: 0 };
+const NEG_Y = { x: 0, y: -1, z: 0 };
 const Z = { x: 0, y: 0, z: 1 };
 const NEG_Z = { x: 0, y: 0, z: -1 };
 
@@ -40,6 +41,49 @@ export const AXLE = part('axle', 4, 1, 2, [{ kind: 'axle', at: { x: 0, y: 0.3, z
 /** A Technic bush: an axle hole a stud long, from front to back. */
 export const BUSH = part('bush', 1, 1, 2, [{ kind: 'axlehole', at: { x: 0, y: 0.45, z: 0 }, axis: Z, length: 1 }]);
 
+/** A round pin joiner, as LDraw 75535: one hole two studs long, which takes a pin's end at each of its own. */
+export const PIN_JOINER = part('pin-joiner', 2, 1, 3, [{ kind: 'pinhole', at: { x: 0, y: 0.5, z: 0 }, axis: NEG_X, length: 2 }]);
+
+/**
+ * A round pin joiner with a slot, as LDraw 62462: the slot breaks its hole,
+ * so LDraw draws only the hole's two mouths, each a tenth of a stud deep.
+ */
+export const SLOT_JOINER = {
+  ...part('slot-joiner', 2, 1, 3, [
+    { kind: 'pinhole', at: { x: -0.95, y: 0.5, z: 0 }, axis: X, length: 0.1 },
+    { kind: 'pinhole', at: { x: 0.95, y: 0.5, z: 0 }, axis: NEG_X, length: 0.1 },
+  ]),
+  extent: { min: { x: -1, y: 0, z: -0.5 }, max: { x: 1, y: 1, z: 0.5 } },
+};
+
+/** A long axle pin, as LDraw 11214: a pin two studs long out from its collar, which takes two beams, and a stub of axle the other way. */
+export const LONG_PIN = part('long-pin', 3, 1, 2, [
+  { kind: 'pin', at: { x: -0.487, y: 0.4, z: 0 }, axis: NEG_X, length: 2 },
+  { kind: 'axle', at: { x: 1, y: 0.4, z: 0 }, axis: NEG_X, length: 0.975 },
+]);
+
+/** A long pin, as LDraw 6558: LDraw draws its long end as two pins a stud long, one after the other, and its short end as a third. */
+export const TRIPLE_PIN = part('triple-pin', 3, 1, 2, [
+  { kind: 'pin', at: { x: -1, y: 0.39, z: 0 }, axis: NEG_X, length: 1 },
+  { kind: 'pin', at: { x: 0, y: 0.39, z: 0 }, axis: X, length: 1 },
+  { kind: 'pin', at: { x: 1, y: 0.39, z: 0 }, axis: X, length: 1 },
+]);
+
+/** A double pin, as LDraw 32138: two pins a stud apart, one over the other, on each side of its body. */
+export const DOUBLE_PIN = part('double-pin', 3, 1, 5, [
+  { kind: 'pin', at: { x: -1, y: 1.45, z: 0 }, axis: NEG_X, length: 1 },
+  { kind: 'pin', at: { x: -1, y: 0.45, z: 0 }, axis: NEG_X, length: 1 },
+  { kind: 'pin', at: { x: 1, y: 1.45, z: 0 }, axis: X, length: 1 },
+  { kind: 'pin', at: { x: 1, y: 0.45, z: 0 }, axis: X, length: 1 },
+]);
+
+/** A thin liftarm, as LDraw 6632: half a stud thick, a pin hole in its middle and an axle hole at each end. */
+export const THIN_BEAM = part('thin-beam', 1, 3, 1, [
+  { kind: 'pinhole', at: { x: 0, y: 0.25, z: 0 }, axis: NEG_Y, length: 0.5 },
+  { kind: 'axlehole', at: { x: 0, y: 0.25, z: 1 }, axis: NEG_Y, length: 0.5 },
+  { kind: 'axlehole', at: { x: 0, y: 0.25, z: -1 }, axis: NEG_Y, length: 0.5 },
+]);
+
 /** Hinge bricks 1 × 2 with a click hinge on their +X end: one finger, and the fork it fits. */
 export const FINGER = part('finger', 3, 1, 3, [{ kind: 'finger', at: { x: 1, y: 0.7, z: 0 }, axis: Z, length: 0.9 }]);
 export const FORK = part('fork', 3, 1, 3, [{ kind: 'fork', at: { x: 1, y: 0.7, z: 0 }, axis: Z, length: 0.85 }]);
@@ -61,11 +105,65 @@ export const HIPS = part('hips', 2, 1, 7, [
   { kind: 'hips', at: { x: 0.5, y: 2, z: 0 }, axis: Y, length: 0.275 },
 ]);
 
+/**
+ * Minifigure hips on their own, as LDraw 3815b: their two studs on top, and
+ * one axle right across for both legs, two studs long.
+ */
+export const BARE_HIPS = part('bare-hips', 2, 1, 4, [
+  { kind: 'hips', at: { x: -0.5, y: 1.038, z: 0 }, axis: NEG_Y, length: 0.275 },
+  { kind: 'hips', at: { x: 0.5, y: 1.038, z: 0 }, axis: NEG_Y, length: 0.275 },
+  { kind: 'hip', at: { x: 0, y: 0.438, z: 0 }, axis: X, length: 2 },
+]);
+
+/**
+ * A minifigure's right and left legs, as LDraw 3816c and 3817c. LDraw draws
+ * both about the middle of the hips, so each one's joint lies beside it,
+ * half a stud towards the other leg: on the hips' axle the two joints fill
+ * the same stud, the legs either side of it.
+ */
+export const LEG_RIGHT = {
+  ...part('leg-right', 1, 1, 5, [{ kind: 'leg', at: { x: 0.513, y: 1.4, z: -0.062 }, axis: NEG_X, length: 1 }]),
+  extent: { min: { x: -0.45, y: 0, z: -0.5 }, max: { x: 0.45, y: 1.84, z: 0.5 } },
+};
+export const LEG_LEFT = {
+  ...part('leg-left', 1, 1, 5, [{ kind: 'leg', at: { x: -0.512, y: 1.4, z: -0.062 }, axis: X, length: 1 }]),
+  extent: { min: { x: -0.45, y: 0, z: -0.5 }, max: { x: 0.45, y: 1.84, z: 0.5 } },
+};
+
 /** A minifigure head, its joint at the middle of its underside. */
 export const HEAD = part('head', 1, 1, 3, [{ kind: 'head', at: { x: 0, y: 0, z: 0 }, axis: Y, length: 0.2 }]);
 
 /** A minifigure's right arm, by its shoulder pin, which its body hangs out and down from. */
 export const ARM = part('arm', 1, 1, 4, [{ kind: 'arm', at: { x: 0.4, y: 1.4, z: 0 }, axis: X, length: 0.3 }]);
+
+/**
+ * A minifigure's right and left arms and a hand, as LDraw 3818, 3819 and
+ * 3820: the arm's wrist is a socket shorter than the pin of the hand that
+ * turns in it.
+ */
+const ARM_EXTENT = { min: { x: -0.43, y: 0, z: -0.5 }, max: { x: 0.43, y: 1.45, z: 0.5 } };
+const WRIST_AXIS = { x: 0, y: Math.SQRT1_2, z: -Math.SQRT1_2 };
+export const ARM_RIGHT = {
+  ...part('arm-right', 1, 1, 4, [
+    { kind: 'arm', at: { x: 0.077, y: 1.122, z: -0.173 }, axis: X, length: 0.3 },
+    { kind: 'wrist', at: { x: -0.173, y: 0.177, z: 0.322 }, axis: WRIST_AXIS, length: 0.3 },
+  ]),
+  extent: ARM_EXTENT,
+};
+export const ARM_LEFT = {
+  ...part('arm-left', 1, 1, 4, [
+    { kind: 'arm', at: { x: -0.077, y: 1.122, z: -0.173 }, axis: NEG_X, length: 0.3 },
+    { kind: 'wrist', at: { x: 0.173, y: 0.177, z: 0.322 }, axis: WRIST_AXIS, length: 0.3 },
+  ]),
+  extent: ARM_EXTENT,
+};
+export const HAND = {
+  ...part('hand', 1, 2, 2, [
+    { kind: 'hand', at: { x: 0, y: 0.231, z: -0.063 }, axis: NEG_Z, length: 0.65 },
+    { kind: 'clip', at: { x: 0, y: 0.272, z: 0.432 }, axis: { x: 0, y: 0.968, z: 0.25 }, length: 0.55 },
+  ]),
+  extent: { min: { x: -0.3, y: 0, z: -0.72 }, max: { x: 0.3, y: 0.62, z: 0.72 } },
+};
 
 /** A bar 3 studs long, upright, as LDraw 87994: a fifth of a stud across, well inside its cells. */
 export const BAR = {
@@ -137,9 +235,48 @@ export const FINGERS_BOTH = part('fingers-both', 8, 1, 1, [
 export const ROUND_BRICK = part('round-brick', 1, 1, 3, [{ kind: 'barhole', at: { x: 0, y: 1.3, z: 0 }, axis: Y, length: 0.2 }]);
 
 const TECHNIC = new Map(
-  [PIN, BEAM, TECHNIC_BRICK, AXLE, BUSH, FINGER, FORK, TORSO, HIPS, HEAD, ARM, BAR, CLIP_PLATE, HANDLE_PLATE, ANTENNA, SWORD, ROUND_BRICK, HINGE_BASE, HINGE_TOP, TURN_BASE, TURN_TOP, TURN_BASE_4, TURN_TOP_4, SWIVEL_BASE, SWIVEL_TOP, FINGERS_3, FINGERS_2, FINGERS_BOTH].map(
-    (p) => [p.id, p],
-  ),
+  [
+    PIN,
+    BEAM,
+    TECHNIC_BRICK,
+    AXLE,
+    BUSH,
+    PIN_JOINER,
+    SLOT_JOINER,
+    LONG_PIN,
+    TRIPLE_PIN,
+    DOUBLE_PIN,
+    THIN_BEAM,
+    FINGER,
+    FORK,
+    TORSO,
+    HIPS,
+    BARE_HIPS,
+    LEG_RIGHT,
+    LEG_LEFT,
+    HEAD,
+    ARM,
+    ARM_RIGHT,
+    ARM_LEFT,
+    HAND,
+    BAR,
+    CLIP_PLATE,
+    HANDLE_PLATE,
+    ANTENNA,
+    SWORD,
+    ROUND_BRICK,
+    HINGE_BASE,
+    HINGE_TOP,
+    TURN_BASE,
+    TURN_TOP,
+    TURN_BASE_4,
+    TURN_TOP_4,
+    SWIVEL_BASE,
+    SWIVEL_TOP,
+    FINGERS_3,
+    FINGERS_2,
+    FINGERS_BOTH,
+  ].map((p) => [p.id, p]),
 );
 
 /** The test parts, and the built-in catalogue's. */
