@@ -1,4 +1,5 @@
 import { describe, expect, it, spyOn, vi } from 'bun:test';
+import { LDRAW_INDEX_VERSION } from '../core/ldraw/format';
 import { getPart } from '../core/parts/catalog';
 import type { Fetch } from '../engine/meshStore';
 import { createPartLibrary, usesLibraryParts } from './library';
@@ -47,7 +48,8 @@ describe('part library', () => {
       .fn<Fetch>()
       .mockRejectedValueOnce(new TypeError('offline'))
       .mockResolvedValueOnce(json('{not json'))
-      .mockResolvedValueOnce(json({ ...INDEX, version: 13 }))
+      // a library from a later version of the app than this one reads
+      .mockResolvedValueOnce(json({ ...INDEX, version: LDRAW_INDEX_VERSION + 1 }))
       .mockResolvedValueOnce(json('', 500))
       .mockResolvedValueOnce(json(INDEX));
     const library = createPartLibrary('/', fetch);

@@ -51,7 +51,10 @@ export type SideStudEntry = readonly [number, number, number, number];
  * hinge plates' two fingers and three, the base and top of a 1 × 2 hinge
  * brick, of a 1 × 4 hinge plate that swivels, of a 2 × 2 and of a 4 × 4
  * turntable, and a flat 4 × 4 turntable base and the round plate that
- * snaps into it.
+ * snaps into it; the four fingers of a car roof, a canopy or a hinged
+ * panel and the five of its holder; the base and top of a folding hinge
+ * plate; a control stick's base and the stick; and the tongue and yoke of
+ * a 1 × 8 hinge brick's two halves.
  */
 export const CONNECTOR_KINDS = [
   'pin',
@@ -85,6 +88,14 @@ export const CONNECTOR_KINDS = [
   'turntop4',
   'turnflat',
   'turnsnap',
+  'fingers4',
+  'fingers5',
+  'foldbase',
+  'foldtop',
+  'stickbase',
+  'stick',
+  'tongue',
+  'yoke',
 ] as const;
 
 /**
@@ -148,12 +159,14 @@ export interface LDrawIndexEntry {
  * plates, version 7 studs on parts' sides, version 8 Technic and
  * click-hinge connections, version 9 minifigures' joints, version 10 bars
  * and clips, and the extent of parts' shapes, version 11 the open studs
- * bars stand in, version 12 the older hinges and turntables.
+ * bars stand in, version 12 the older hinges and turntables, version 13
+ * the rarer hinges: car roofs and canopies, folding hinge plates, control
+ * sticks and 1 × 8 hinge bricks.
  */
-export const LDRAW_INDEX_VERSION = 12;
+export const LDRAW_INDEX_VERSION = 13;
 
 /** Index formats the app reads: in a version 1 library every part fills its whole box. */
-export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const;
 
 /** Most side studs an index entry lists: a brick with studs all round its sides has a few dozen. */
 export const MAX_SIDE_STUDS = 128;

@@ -5,7 +5,7 @@ import { brickCellBox, brickFloor, isLoose } from '../model/geometry';
 import { isOutOfBounds } from '../model/spatial';
 import { connectorLookup as lookup } from '../model/connectorTestParts';
 import { makeBrick } from '../model/testUtils';
-import { turnOf, type Turn } from '../orientation';
+import { multiplyTurns, turnOf, type Turn } from '../orientation';
 import type { Brick } from '../model/types';
 import { attachToConnector, type ConnectTurn } from './connect';
 import { materialize, payloadFromPart } from './payload';
@@ -315,6 +315,150 @@ describe('the older hinges and turntables', () => {
     turnOf(1).forEach((v, i) => expect(top.m?.[i]).toBeCloseTo(v, 9));
     const turned = plug(base, 'turn-top', { x: 1.2, y: 0.4, z: 0.9 }, UP, { spin: 1, flipped: false });
     turnOf(2).forEach((v, i) => expect(Math.abs(turned?.m?.[i] ?? 9)).toBeCloseTo(Math.abs(v), 9));
+  });
+});
+
+describe('the rarer hinges', () => {
+  /** The cursor at a brick's first connection, as from above. */
+  const at = (target: Brick): Vec3 => {
+    const [joint] = brickConnectors(target, lookup);
+    if (!joint) throw new Error(`${target.partId} has no connection`);
+    return joint.at;
+  };
+  const turnedAs = (brick: Brick | null, turn: Turn): void => {
+    if (!brick?.m) throw new Error('not plugged in');
+    turn.forEach((v, i) => expect(brick.m?.[i]).toBeCloseTo(v, 9));
+  };
+
+  it('lays a car roof beside the plate that holds it, and over the holder two bricks tall, on the grid with either', () => {
+    // the plate's five fingers stand out of its side, at its own height: the roof's four go between them, the roof lying on from there
+    const plate = makeBrick({ id: 'plate', partId: 'roof-plate' });
+    const roof = plug(plate, 'roof', { x: 2, y: 0.4, z: 1.2 }, UP);
+    if (!roof) throw new Error('no roof');
+    expect(box(roof)).toEqual({ x: [0, 4], y: [0, 0.4], z: [1, 5] });
+    turnedAs(roof, turnOf(0));
+    expect(pluggedInto(roof, plate)).toBe(true);
+    // the holder's stand along one edge of its top: the roof lies over the holder and three studs on, its underside on the holder's top
+    const holder = makeBrick({ id: 'holder', partId: 'roof-holder' });
+    const over = plug(holder, 'roof', { x: 2, y: 2.8, z: 0.2 }, UP);
+    if (!over) throw new Error('no roof');
+    expect(box(over)).toEqual({ x: [0, 4], y: [2.4, 2.8], z: [0, 4] });
+    turnedAs(over, turnOf(0));
+    expect(pluggedInto(over, holder)).toBe(true);
+    // the holder's fingers lie inside the box the plate is picked by: a cursor on the side of that box, four fifths of a stud from them, is at them
+    const fromBeside = plug(plate, 'roof', { x: 2, y: 0.2, z: 2 }, { x: 0, y: 0, z: 1 });
+    expect(fromBeside && box(fromBeside)).toEqual({ x: [0, 4], y: [0, 0.4], z: [1, 5] });
+    // a roof goes into no hinge plate's three fingers, and a hinge plate's two into no roof holder
+    expect(plug(makeBrick({ id: 'three', partId: 'fingers-3' }), 'roof', { x: 2.5, y: 0.4, z: 0.5 }, UP)).toBeNull();
+    expect(plug(plate, 'fingers-2', { x: 2, y: 0.4, z: 1.2 }, UP)).toBeNull();
+  });
+
+  it('turns a hinged part as what holds it is turned: half round, on its side or upside down', () => {
+    // however the half already there stands, the other goes on as LDraw draws the two together, not the most upright way in the world
+    const AS_DRAWN = turnOf(0);
+    const HALF_ROUND = turnOf(2);
+    const pairs = [
+      ['roof-plate', 'roof', AS_DRAWN],
+      ['roof-holder', 'roof', AS_DRAWN],
+      ['hinge-base', 'hinge-top', AS_DRAWN],
+      ['fold-base', 'fold-top', AS_DRAWN],
+      ['fold-top', 'fold-base', AS_DRAWN],
+      ['stick-base', 'stick', AS_DRAWN],
+      ['turn-base', 'turn-top', AS_DRAWN],
+      ['turn-base-4', 'turn-top-4', AS_DRAWN],
+      ['turn-flat', 'turn-snap', AS_DRAWN],
+      ['swivel-base', 'swivel-top', AS_DRAWN],
+      // the halves of a 1 × 8 hinge brick face each other: the second goes on turned half round about the first one's own upright
+      ['tongue-brick', 'yoke-brick', HALF_ROUND],
+      ['yoke-brick', 'tongue-brick', HALF_ROUND],
+    ] as const;
+    for (const [holder, hinged, rest] of pairs) {
+      for (let r = 0; r < 24; r++) {
+        const target = makeBrick({ id: 'target', partId: holder, y: 20, r });
+        const placed = plug(target, hinged, at(target), UP);
+        if (!placed?.m) throw new Error(`no ${hinged} on a ${holder} turned ${r}`);
+        const near = (v: number): number => Math.round(v * 1e6) / 1e6 + 0;
+        expect(`${hinged} on ${holder} ${r}: ${placed.m.map(near).join(' ')}`).toBe(`${hinged} on ${holder} ${r}: ${multiplyTurns(turnOf(r), rest).map(near).join(' ')}`);
+        expect(pluggedInto(placed, target)).toBe(true);
+      }
+    }
+    // a roof on a plate turned half round lies on from the plate's other side
+    const plate = makeBrick({ id: 'plate', partId: 'roof-plate', r: 2 });
+    const roof = plug(plate, 'roof', at(plate), UP);
+    expect(roof && box(roof)).toEqual({ x: [0, 4], y: [0, 0.4], z: [-3, 1] });
+  });
+
+  it('stands a roof on its hinge with R, and turns it over with T', () => {
+    const plate = makeBrick({ id: 'plate', partId: 'roof-plate' });
+    const up = plug(plate, 'roof', { x: 2, y: 0.4, z: 1.2 }, UP, { spin: 1, flipped: false });
+    if (!up?.m) throw new Error('not turned');
+    expect(up.m[4]).toBeCloseTo(0, 9);
+    expect(pluggedInto(up, plate)).toBe(true);
+    const over = plug(plate, 'roof', { x: 2, y: 0.4, z: 1.2 }, UP, { spin: 0, flipped: true });
+    if (!over?.m) throw new Error('not turned over');
+    expect(over.m[4]).toBeCloseTo(-1, 9);
+    expect(pluggedInto(over, plate)).toBe(true);
+    // on the same side of the plate still
+    expect(box(over).z).toEqual([1, 5]);
+  });
+
+  it('closes a folding hinge plate, the top on its base in the base’s own box, whichever half is there first', () => {
+    const base = makeBrick({ id: 'base', partId: 'fold-base' });
+    const top = plug(base, 'fold-top', at(base), UP);
+    if (!top) throw new Error('no top');
+    expect(box(top)).toEqual(box(base));
+    turnedAs(top, turnOf(0));
+    expect(pluggedInto(top, base)).toBe(true);
+    const first = makeBrick({ id: 'top', partId: 'fold-top', y: 2 });
+    const under = plug(first, 'fold-base', at(first), UP);
+    expect(under && box(under)).toEqual(box(first));
+    // a hinge brick's top is no folding plate's
+    expect(plug(base, 'hinge-top', at(base), UP)).toBeNull();
+  });
+
+  it('stands a control stick in its base, upright, its pivot in the base’s', () => {
+    const base = makeBrick({ id: 'base', partId: 'stick-base' });
+    const stick = plug(base, 'stick', { x: 0.5, y: 0.8, z: 0.5 }, UP);
+    if (!stick) throw new Error('no stick');
+    expect(box(stick)).toEqual({ x: [0, 1], y: [0.3, 2.3], z: [0, 1] });
+    turnedAs(stick, turnOf(0));
+    expect(pluggedInto(stick, base)).toBe(true);
+    // a bar is no control stick, and a stick stands in no open stud
+    expect(plug(base, 'bar', { x: 0.5, y: 0.8, z: 0.5 }, UP)).toBeNull();
+    expect(plug(makeBrick({ id: 'round', partId: 'round-brick' }), 'stick', { x: 0.5, y: 1.4, z: 0.5 }, UP)).toBeNull();
+  });
+
+  it('joins the halves of a 1 × 8 hinge brick end to end, the second turned half round, as LDraw’s complete one is', () => {
+    const tongue = makeBrick({ id: 'tongue', partId: 'tongue-brick' });
+    const yoke = plug(tongue, 'yoke-brick', at(tongue), UP);
+    if (!yoke) throw new Error('no second half');
+    // the first fills x 0 to 5, its knuckle in the last of those; the second's knuckle goes round it, its brick on from there
+    expect(box(yoke)).toEqual({ x: [3, 8], y: [0, 2], z: [0, 1] });
+    turnedAs(yoke, turnOf(2));
+    expect(pluggedInto(yoke, tongue)).toBe(true);
+    // and the other way about
+    const first = makeBrick({ id: 'yoke', partId: 'yoke-brick' });
+    const second = plug(first, 'tongue-brick', at(first), UP);
+    expect(second && box(second)).toEqual({ x: [3, 8], y: [0, 2], z: [0, 1] });
+    turnedAs(second, turnOf(2));
+    // two of one half do not join
+    expect(plug(tongue, 'tongue-brick', at(tongue), UP)).toBeNull();
+  });
+
+  it('leaves a holder with its roof on to be built on like any brick: a second roof does not plug in', () => {
+    const plate = makeBrick({ id: 'plate', partId: 'roof-plate' });
+    const roof = plug(plate, 'roof', { x: 2, y: 0.4, z: 1.2 }, UP, STILL, 'roof') as Brick;
+    expect(answer([roof], plate, 'roof', { x: 2, y: 0.4, z: 1.2 }, UP)).toBe('not here');
+    const base = makeBrick({ id: 'base', partId: 'stick-base' });
+    const stick = plug(base, 'stick', { x: 0.5, y: 0.8, z: 0.5 }, UP, STILL, 'stick') as Brick;
+    expect(answer([stick], base, 'stick', { x: 0.5, y: 0.8, z: 0.5 }, UP)).toBe('not here');
+    // nor a third half onto a 1 × 8 hinge brick, nor a second top onto a folding hinge plate
+    const tongue = makeBrick({ id: 'tongue', partId: 'tongue-brick' });
+    const yoke = plug(tongue, 'yoke-brick', at(tongue), UP, STILL, 'yoke') as Brick;
+    expect(answer([yoke], tongue, 'yoke-brick', at(tongue), UP)).toBe('not here');
+    const fold = makeBrick({ id: 'fold', partId: 'fold-base' });
+    const top = plug(fold, 'fold-top', at(fold), UP, STILL, 'top') as Brick;
+    expect(answer([top], fold, 'fold-top', at(fold), UP)).toBe('not here');
   });
 });
 

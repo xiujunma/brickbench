@@ -199,6 +199,52 @@ test.describe('Technic, hinges and minifigures', () => {
     expect((await savedBricks(page, 2))[1]?.m?.[0]).toBeCloseTo(1, 6);
   });
 
+  test('hinges a car roof on the plate that holds it, and lifts it off the ground', async ({ page }) => {
+    // starts the editor and searches the library twice
+    test.slow();
+    await freshEditor(page);
+    await page.getByRole('button', { name: 'Library', exact: true }).click();
+    await expect(page.locator('#library-category')).toBeVisible();
+
+    // a 1 × 4 plate with a car roof holder beside it, on the baseplate
+    await chooseLibraryPart(page, '4315');
+    const centre = await viewportCentre(page);
+    await page.mouse.click(centre.x, centre.y);
+    await expect(counts(page)).toHaveText('1 brick');
+
+    // the roof goes on by the fingers along its edge, between the holder's: lying on from the plate, on the ground like it, right way up
+    await chooseLibraryPart(page, '4213');
+    const onHolder = await plugNear(page, centre, /Y\s*0(?![\d.])/, 1);
+    expect(onHolder).not.toBeNull();
+    const [holder, roof] = await savedBricks(page, 2);
+    expect(roof?.partId).toBe('ldraw:4213');
+    // as wide as the plate, from the plate's own stud on: the holder's fingers fill the stud beside it
+    expect([roof?.x, roof?.y, roof?.z]).toEqual([holder?.x, 0, (holder?.z ?? 0) + 1]);
+    expect(roof?.m?.[0]).toBeCloseTo(1, 6);
+    expect(roof?.m?.[4]).toBeCloseTo(1, 6);
+
+    // selected, R lifts it about its fingers, 15° at a time: its far edge rises off the ground, and across the car it has not turned
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('v');
+    const overRoof = await findSpot(page, onHolder ?? centre, new RegExp(`X${roof?.x} Y0 Z${roof?.z}(?![\\d.])`));
+    expect(overRoof).not.toBeNull();
+    await page.mouse.click(overRoof?.x ?? 0, overRoof?.y ?? 0);
+    await expect(counts(page)).toContainText('1 selected');
+    await page.keyboard.press('r');
+    await expect.poll(async () => (await savedBricks(page, 2))[1]?.m?.[4]).toBeCloseTo(Math.cos(Math.PI / 12), 6);
+    const lifted = (await savedBricks(page, 2))[1];
+    expect(lifted?.m?.[0]).toBeCloseTo(1, 6);
+    // up: the roof's length, which lay level, now climbs
+    expect(lifted?.m?.[5]).toBeCloseTo(Math.sin(Math.PI / 12), 6);
+
+    // ⇧R lays it back on the ground, and no further: down through the baseplate it will not go
+    await page.keyboard.press('Shift+R');
+    await expect.poll(async () => (await savedBricks(page, 2))[1]?.m?.[4]).toBeCloseTo(1, 6);
+    await page.keyboard.press('Shift+R');
+    await expect(page.getByText('There is no room to turn the selection there.')).toBeVisible();
+    expect((await savedBricks(page, 2))[1]?.m?.[4]).toBeCloseTo(1, 6);
+  });
+
   test('puts a 4 × 4 turntable together and turns its top', async ({ page }) => {
     // starts the editor and searches the library twice
     test.slow();

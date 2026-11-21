@@ -2,12 +2,14 @@ import { describe, expect, it } from 'bun:test';
 import { DEFAULT_SCENE } from '../core/io/modelFile';
 import { allBricks, modelFromBricks } from '../core/model/model';
 import { brickConnectors } from '../core/model/connections';
-import { brickCellBox } from '../core/model/geometry';
+import { brickCellBox, brickFloor } from '../core/model/geometry';
 import { connectorLookup } from '../core/model/connectorTestParts';
 import { makeBrick } from '../core/model/testUtils';
 import type { Brick } from '../core/model/types';
 import { turnAbout } from '../core/orientation';
 import { getPart } from '../core/parts/catalog';
+import { attachToConnector } from '../core/placement/connect';
+import { materialize, payloadFromPart } from '../core/placement/payload';
 import { createEditorStore } from './store';
 import type { EditorState } from './types';
 
@@ -132,7 +134,42 @@ describe('selection', () => {
     expect(hole?.at.z).toBeCloseTo(1.5, 9);
   });
 
-  it('won’t swing a part on a hinge down through the ground', () => {
+  it('lifts a car roof on its holder, and the top of a folding hinge plate, with R, whichever way they face', () => {
+    for (const [holder, hinged] of [['roof-plate', 'roof'], ['fold-base', 'fold-top']] as const) {
+      for (const r of [0, 1, 2, 3]) {
+        let n = 0;
+        const store = createEditorStore({ lookup: connectorLookup, nextId: () => `id${n++}` });
+        // the half that holds, on the ground, and the other on it as it goes on: lying flat, low over the ground
+        const base = makeBrick({ id: 'base', partId: holder, x: 10, z: 10, r });
+        const [joint] = brickConnectors(base, connectorLookup);
+        const part = connectorLookup(hinged);
+        if (!joint || !part) throw new Error(holder);
+        const on = attachToConnector({ kind: 'brick', brickId: 'base', point: joint.at, normal: { x: 0, y: 1, z: 0 }, t: 1, base: 0 }, base, payloadFromPart(part, 4, 0), { spin: 0, flipped: false }, connectorLookup, [base]);
+        const [lid] = on ? materialize(on.payload, on.offset, () => 'lid') : [];
+        if (!lid) throw new Error(`${hinged} did not go on`);
+        store.getState().loadDocument({ name: 'hinge', settings: DEFAULT_SCENE, model: modelFromBricks([base, lid]) });
+        store.getState().select(['lid'], 'replace');
+        const flat = brickCellBox(lid, connectorLookup);
+        // back from lying flat is down through the ground: refused, the model left as it was
+        const before = store.getState().history.present;
+        expect(`${hinged} ${r} back: ${store.getState().rotateSelection(-1)}`).toBe(`${hinged} ${r} back: false`);
+        expect(store.getState().history.present).toBe(before);
+        // R lifts it: its far edge rises, nothing of it sinks
+        expect(`${hinged} ${r}: ${store.getState().rotateSelection(1)}`).toBe(`${hinged} ${r}: true`);
+        const lifted = store.getState().history.present.bricks.get('lid') as Brick;
+        expect(brickCellBox(lifted, connectorLookup).y1).toBeGreaterThan(flat.y1 + 1);
+        // round about its hinge, it does not: only the corner of its box beyond the hinge dips
+        expect(brickFloor(lifted, connectorLookup)).toBeGreaterThanOrEqual(-1e-9);
+        // and ⇧R lays it back where it lay
+        expect(store.getState().rotateSelection(-1)).toBe(true);
+        const back = store.getState().history.present.bricks.get('lid') as Brick;
+        const near = (v: number): number => Math.round(v * 1e9) / 1e9 + 0;
+        expect([back.x, back.y, back.z, ...(back.m ?? [])].map(near)).toEqual([lid.x, lid.y, lid.z, ...(lid.m ?? [])].map(near));
+      }
+    }
+  });
+
+  it('swings a part on a hinge up off the ground, and won’t swing it down through it', () => {
     let n = 0;
     const store = createEditorStore({ lookup: connectorLookup, nextId: () => `id${n++}` });
     // a hinge brick on the ground, the other half of the hinge flat beside it
@@ -140,12 +177,19 @@ describe('selection', () => {
     const finger = { id: 'finger', partId: 'finger', colorId: 4, x: 2, y: 0, z: 0, r: 2, m: turnAbout({ x: 0, y: 1, z: 0 }, Math.PI) };
     store.getState().loadDocument({ name: 'hinge', settings: DEFAULT_SCENE, model: modelFromBricks([fork, finger]) });
     store.getState().select(['finger'], 'replace');
-    const before = store.getState().history.present;
-    const down = [store.getState().rotateSelection(1), store.getState().rotateSelection(-1)].indexOf(false);
-    expect(down).not.toBe(-1);
-    // whichever way is down was refused, and left the model as it was
-    if (down === 0) expect(store.getState().history.present).toBe(before);
-    for (const brick of store.getState().history.present.bricks.values()) expect(brickCellBox(brick, connectorLookup).y0).toBeGreaterThanOrEqual(0);
+    // R lifts it, clear of the ground though the corner of its box beyond the hinge dips under it
+    expect(store.getState().rotateSelection(1)).toBe(true);
+    const lifted = store.getState().history.present.bricks.get('finger') as Brick;
+    expect(brickCellBox(lifted, connectorLookup).y1).toBeGreaterThan(4);
+    expect(brickCellBox(lifted, connectorLookup).y0).toBeLessThan(0);
+    expect(brickFloor(lifted, connectorLookup)).toBeGreaterThanOrEqual(-1e-9);
+    // ⇧R lays it back as it lay; and on down through the ground it will not go: refused, the model left as it was
+    expect(store.getState().rotateSelection(-1)).toBe(true);
+    const flat = store.getState().history.present;
+    const [back] = allBricks(flat).filter((brick) => brick.id === 'finger');
+    expect([back?.x, back?.y, back?.z].map((v) => Math.round((v ?? 9) * 1e9) / 1e9 + 0)).toEqual([finger.x, finger.y, finger.z]);
+    expect(store.getState().rotateSelection(-1)).toBe(false);
+    expect(store.getState().history.present).toBe(flat);
   });
 
   it('deletes the selection and keeps selections valid through undo and redo', () => {

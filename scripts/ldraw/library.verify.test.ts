@@ -51,17 +51,15 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
   const joinsOf = (file: string, source: LibrarySource = library): FlatConnector[] => allConnectors(new Flattener(source).flatten(file).connectors);
   /** The kinds of connection a file's part ends up with: where another part can plug in. */
   const freeOf = (file: string): string => finishConnectors(new Flattener(library).flatten(file).connectors).map((j) => j.kind).join(' ');
-  /** Pairs of joints of these kinds that sit together (to half an LDraw unit) along one line. */
-  const together = (joints: readonly FlatConnector[], a: FlatConnector['kind'], b: FlatConnector['kind']): number =>
+  /** Pairs of joints of these kinds that sit together (to half an LDraw unit) along one line; pointing the same way along it, when `sameWay`. */
+  const together = (joints: readonly FlatConnector[], a: FlatConnector['kind'], b: FlatConnector['kind'], sameWay = false): number =>
     joints
       .filter((j) => j.kind === a)
       .filter((j) =>
-        joints.some(
-          (k) =>
-            k.kind === b &&
-            Math.hypot(j.at[0] - k.at[0], j.at[1] - k.at[1], j.at[2] - k.at[2]) < 0.5 &&
-            Math.abs(j.axis[0] * k.axis[0] + j.axis[1] * k.axis[1] + j.axis[2] * k.axis[2]) > 0.999,
-        ),
+        joints.some((k) => {
+          const along = j.axis[0] * k.axis[0] + j.axis[1] * k.axis[1] + j.axis[2] * k.axis[2];
+          return k.kind === b && Math.hypot(j.at[0] - k.at[0], j.at[1] - k.at[1], j.at[2] - k.at[2]) < 0.5 && (sameWay ? along : Math.abs(along)) > 0.999;
+        }),
       ).length;
 
   const ROUND = /^(?:48\\|8\\)?\d+-\d+(?:edge|cyli|cylc|cylo|cyls|disc|ndis|con\d+|ring\d*|chrd|tndis|sphe)\.dat$/i;
@@ -82,11 +80,12 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     return [x - along * ux, y - along * uy, z - along * uz].map((v) => Math.round(v * 100) / 100 + 0).join(',');
   };
   /**
-   * The line most of the round surfaces a file is drawn with turn about,
-   * among those along `axis` (of radius `radius` only, when given); studs
-   * are left out. This is how a pivot is read off a part's drawing.
+   * The lines the round surfaces a file is drawn with turn about, among
+   * those along `axis` (of radius `radius` only, when given), the line of
+   * the most surfaces first; studs are left out. This is how a pivot is
+   * read off a part's drawing.
    */
-  const pivotOf = (file: string, axis: readonly [number, number, number], radius?: number): string | undefined => {
+  const pivotsOf = (file: string, axis: readonly [number, number, number], radius?: number): string[] => {
     const found = new Map<string, number>();
     const walk = (name: string, at: Transform): void => {
       for (const line of parseLDraw(library.read(name)?.text ?? '')) {
@@ -104,7 +103,29 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
       }
     };
     walk(file, { m: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0] });
-    return [...found.entries()].sort((p, q) => q[1] - p[1])[0]?.[0];
+    return [...found.entries()].sort((p, q) => q[1] - p[1]).map(([line]) => line);
+  };
+  const pivotOf = (file: string, axis: readonly [number, number, number], radius?: number): string | undefined => pivotsOf(file, axis, radius)[0];
+  /**
+   * Whether a file is drawn with a rod at `s` along a joint's line from its
+   * middle: a surface `radius` from the line, facing out from it. A seat a
+   * rod turns in is that far from the line too, and faces in.
+   */
+  const rodAt = (file: string, joint: FlatConnector, s: number, radius = 4): boolean => {
+    let out = 0;
+    for (const { a, b, c } of new Flattener(library).flatten(file).triangles) {
+      const corners = [a, b, c].map((p) => {
+        const off = [p[0] - joint.at[0], p[1] - joint.at[1], p[2] - joint.at[2]] as const;
+        const along = off[0] * joint.axis[0] + off[1] * joint.axis[1] + off[2] * joint.axis[2];
+        return { along, radial: [off[0] - along * joint.axis[0], off[1] - along * joint.axis[1], off[2] - along * joint.axis[2]] as const };
+      });
+      if (corners.some(({ radial }) => Math.abs(Math.hypot(...radial) - radius) > 0.3)) continue;
+      if (Math.min(...corners.map(({ along }) => along)) > s || Math.max(...corners.map(({ along }) => along)) < s) continue;
+      const [u, v] = [[b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const, [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const];
+      const normal = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]] as const;
+      for (const { radial } of corners) out += normal[0] * radial[0] + normal[1] * radial[1] + normal[2] * radial[2];
+    }
+    return out > 0;
   };
 
   it.each(CATALOGUE)('%s fits the grid like the built-in part', (file, w, d, h, origin) => {
@@ -184,9 +205,15 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
 
   it('sets the older hinges and the turntables turning where their parts’ round surfaces are centred, and where LDraw’s assembled ones put their halves', () => {
     for (const [file, joints] of Object.entries(HINGE_JOINTS)) {
-      for (const joint of joints) expect(`${file} ${pivotOf(file, joint.axis)}`).toBe(`${file} ${lineThrough(joint.at, joint.axis)}`);
+      // a file with two pivots (a canopy extender's fingers at one end, its holder's at the other, both across it) turns about those two lines
+      const [first] = joints;
+      if (!first) throw new Error(file);
+      const set = joints.map((joint) => lineThrough(joint.at, joint.axis)).sort();
+      expect(`${file} ${pivotsOf(file, first.axis).slice(0, joints.length).sort().join(' | ')}`).toBe(`${file} ${set.join(' | ')}`);
     }
-    // LDraw's own assembled hinges and turntables: each brings its two halves' joints together
+    // LDraw's own assembled hinges and turntables: each brings its two halves' joints together, pointing the same way, which is how one
+    // half goes onto the other at rest. A complete 1 × 8 hinge brick's second half is turned half round, a complete control stick's
+    // stick set 2 LDU up its base
     const assembled: readonly (readonly [string, FlatConnector['kind'], FlatConnector['kind']])[] = [
       ['3937c01.dat', 'hingebase', 'hingetop'],
       ['73983.dat', 'swivelbase', 'swiveltop'],
@@ -195,8 +222,14 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
       ['3403c01.dat', 'turnbase4', 'turntop4'],
       ['30516c01.dat', 'turnbase4', 'turntop4'],
       ['61485c01.dat', 'turnflat', 'turnsnap'],
+      ['3149ec01.dat', 'foldbase', 'foldtop'],
+      ['3149dc01.dat', 'foldbase', 'foldtop'],
+      ['3324ec01.dat', 'foldbase', 'foldtop'],
+      ['3324dc01.dat', 'foldbase', 'foldtop'],
+      ['73587a.dat', 'stickbase', 'stick'],
+      ['652c01.dat', 'tongue', 'yoke'],
     ];
-    for (const [file, base, top] of assembled) expect(`${file} ${together(joinsOf(file), base, top)}`).toBe(`${file} 1`);
+    for (const [file, base, top] of assembled) expect(`${file} ${together(joinsOf(file), base, top, true)}`).toBe(`${file} 1`);
     // the 2 × 2 hinge top and the locking 4 × 4 turntable top are drawn from the plain ones, and turn as they do
     expect(joinsOf('6134.dat').map((j) => j.kind)).toContain('hingetop');
     expect(joinsOf('30658.dat').map((j) => j.kind)).toContain('turntop4');
@@ -207,12 +240,71 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(joinsOf('2430.dat').map((j) => j.kind)).toEqual(['swiveltop']);
   });
 
+  it('tells the four fingers of roofs, canopies and panels from the five of their holders, by where each is a rod about its pivot', () => {
+    // along the pivot from its middle: the holder's fingers at 0, ±20 and ±38 LDU, the roof's between them at ±10 and ±29. Where the
+    // other half's fingers go, a part is drawn with nothing, or with the seat they turn in
+    const places = [-38, -29, -20, -10, 0, 10, 20, 29, 38];
+    const drawn = { fingers4: '.+.+.+.+.', fingers5: '+.+.+.+.+' };
+    let checked = 0;
+    for (const [file, joints] of Object.entries(HINGE_JOINTS)) {
+      for (const joint of joints) {
+        if (joint.kind !== 'fingers4' && joint.kind !== 'fingers5') continue;
+        expect(`${file} ${joint.kind} ${places.map((s) => (rodAt(file, joint, s) ? '+' : '.')).join('')}`).toBe(`${file} ${joint.kind} ${drawn[joint.kind]}`);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(15);
+    // every part of the kind has them: roofs, a hinged tile and slope, a panel and a canopy half, windscreens and canopies, and the
+    // extender, which has a holder's five as well; and the three holders
+    const withFingers = ['4213', '2349a', '2349b', '2873', '4857', '2582', '6084', '30161', '2620', '2483', '4474', '2507', '30083', '2337'];
+    for (const id of withFingers) expect(`${id} ${freeOf(`${id}.dat`).split(' ').filter((kind) => kind === 'fingers4').length}`).toBe(`${id} 1`);
+    for (const id of ['4214', '4625', '4315', '2337']) expect(`${id} ${freeOf(`${id}.dat`).split(' ').filter((kind) => kind === 'fingers5').length}`).toBe(`${id} 1`);
+    // a part's fingers point -X with the part behind them (towards -Z), as a roof is, and +X with it before them, as a panel is: so
+    // each goes onto a holder reaching on from it. A screen that stands on its fingers, no more to one side than the other, may point either way
+    for (const [file, joints] of Object.entries(HINGE_JOINTS)) {
+      for (const joint of joints.filter((j) => j.kind === 'fingers4')) {
+        const depths = new Flattener(library).flatten(file).triangles.flatMap((t) => [t.a[2], t.b[2], t.c[2]]);
+        const middle = (Math.min(...depths) + Math.max(...depths)) / 2 - joint.at[2];
+        if (Math.abs(middle) > 5) expect(`${file} ${Math.sign(middle)}`).toBe(`${file} ${Math.sign(joint.axis[0])}`);
+      }
+    }
+    // a hinge tile's two fingers are where a hinge plate's two are, which LDraw draws with a primitive
+    const [tile] = joinsOf('4531.dat').filter((j) => j.kind === 'fingers2');
+    const [plate] = joinsOf('4276b.dat').filter((j) => j.kind === 'fingers2');
+    expect(tile).toEqual(plate as FlatConnector);
+    for (const s of [-8, -4, 0, 4, 8]) expect(`4531 ${s} ${rodAt('4531.dat', tile as FlatConnector, s)}`).toBe(`4531 ${s} ${rodAt('4276b.dat', plate as FlatConnector, s)}`);
+    // the halves keep their joints, and a canopy extender both of its
+    expect(freeOf('4213.dat')).toBe('fingers4');
+    expect(freeOf('4315.dat')).toBe('fingers5');
+    expect(freeOf('2337.dat')).toBe('fingers4 fingers5');
+    // patterned roofs and tiles are drawn from the plain ones, and hinge as they do
+    expect(joinsOf('2873d01.dat').map((j) => j.kind)).toContain('fingers4');
+    // printed canopies, panels and windscreens are drawn from the file the plain one's shape is in, not from the plain one: each has
+    // the plain one's fingers, once, pointing the same way
+    const printed: Readonly<Record<string, readonly string[]>> = {
+      '2507.dat': ['2507p01.dat', '2507p61.dat', '2507p6u.dat', '2507pa1.dat', '2507pa2.dat'],
+      '2582.dat': ['2582p68.dat', '2582p6u.dat', '2582pa0.dat', '2582pa1.dat', '2582ps0.dat'],
+      '4474.dat': ['4474p61.dat'],
+      '2483.dat': ['2483p50.dat'],
+      '30083.dat': ['30083ps0.dat'],
+      '30161.dat': ['30161pa1.dat'],
+      '2349a.dat': ['2349b.dat'],
+    };
+    const fingersOf = (file: string) => joinsOf(file).filter((j) => j.kind === 'fingers4');
+    for (const [plain, prints] of Object.entries(printed)) {
+      expect(`${plain} ${fingersOf(plain).length}`).toBe(`${plain} 1`);
+      for (const print of prints) expect(`${print} ${JSON.stringify(fingersOf(print))}`).toBe(`${print} ${JSON.stringify(fingersOf(plain))}`);
+    }
+  });
+
   it('leaves a ready-made assembly without the joints its own halves take', () => {
     // a complete hinge brick keeps only its top's two open studs; complete swivelling hinge plates and turntables keep nothing
     expect(freeOf('3937c01.dat')).toBe('barhole barhole');
     for (const file of ['73983.dat', '3680c01.dat', '3403c01.dat', '30516c01.dat', '61485c01.dat']) expect(`${file}: ${freeOf(file)}`).toBe(`${file}: `);
     // the turntable on a hinge plate keeps the plate's fingers
     expect(freeOf('4508c01.dat')).toBe('fingers3');
+    // complete folding hinge plates, 1 × 8 hinge bricks and control sticks keep nothing: they stack like any part
+    for (const file of ['3149ec01.dat', '3324dc01.dat', '652c01.dat', '73587a.dat']) expect(`${file}: ${freeOf(file)}`).toBe(`${file}: `);
     // a torso with its arms and hands on keeps its neck, its waist and its hands' grips; hips with their legs on, the two studs a torso goes on
     expect(freeOf('76382.dat')).toBe('neck waist waist clip clip');
     expect(freeOf('73200b-f1.dat')).toBe('hips hips');

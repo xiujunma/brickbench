@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { getPart, registerLibraryParts } from '../parts/catalog';
 import { isLDrawPartId, parseLDrawIndex, toPartDef } from './catalogIndex';
-import type { LDrawIndexEntry } from './format';
+import { LDRAW_INDEX_VERSION, type LDrawIndexEntry } from './format';
 import { categoriesOf } from './categories';
 
 const BRICK: LDrawIndexEntry = {
@@ -84,10 +84,13 @@ describe('library index', () => {
     // a torso's neck, as version 9 lists them
     const torso: LDrawIndexEntry = { ...BRICK, id: '973', name: 'Minifig Torso', connectors: [[6, 0, 1.6, 0, 0, -1, 0, 0.2]] };
     expect(toPartDef(parseLDrawIndex({ version: 9, generated: '', parts: [torso] }).parts[0] as LDrawIndexEntry).connectors?.[0]?.kind).toBe('neck');
+    // a car roof's fingers and a control stick, as version 13 lists them
+    const roof: LDrawIndexEntry = { ...BRICK, id: '4213', name: 'Hinge Car Roof 4 × 4', connectors: [[31, 0, 0.2, -1.8, 1, 0, 0, 3.6], [36, 0, 0, 0, 1, 0, 0, 0.2]] };
+    expect(toPartDef(parseLDrawIndex({ version: 13, generated: '', parts: [roof] }).parts[0] as LDrawIndexEntry).connectors?.map((c) => c.kind)).toEqual(['fingers4', 'stick']);
     expect(toPartDef(BRICK)).not.toHaveProperty('connectors');
     // no such kind, no axis, no length
     for (const connector of [
-      [31, 0, 0, 0, 1, 0, 0, 1],
+      [39, 0, 0, 0, 1, 0, 0, 1],
       [0, 0, 0, 0, 0, 0, 0, 1],
       [0, 0, 0, 0, 1, 0, 0, 0],
     ]) {
@@ -104,7 +107,7 @@ describe('library index', () => {
   });
 
   it('rejects damaged or unexpected indexes with a readable message', () => {
-    expect(() => parseLDrawIndex({ version: 13, generated: '', parts: [] })).toThrow(/damaged/);
+    expect(() => parseLDrawIndex({ version: LDRAW_INDEX_VERSION + 1, generated: '', parts: [] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, id: '../evil' }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, w: 0 }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex('nope')).toThrow(/damaged/);

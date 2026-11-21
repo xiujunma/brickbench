@@ -3,10 +3,10 @@
  * into each other, and the joints a group of parts hangs by: the line it
  * can swing about when every connection holding it turns freely about one.
  */
-import type { Vec3 } from '../grid';
+import { PLATE_HEIGHT, type Vec3 } from '../grid';
 import { rotateBy, type Turn } from '../orientation';
-import type { Connector, ConnectorKind, PartLookup } from '../parts/types';
-import { brickCellBox, brickOrigin, brickTurn, isLoose, isOnGrid, type PlacedPart } from './geometry';
+import type { Connector, ConnectorKind, PartDef, PartLookup } from '../parts/types';
+import { ROUND_PIVOTS, brickCellBox, brickOrigin, brickTurn, isLoose, isOnGrid, type PlacedPart } from './geometry';
 import { isPair, mates } from './mates';
 import type { Brick } from './types';
 
@@ -146,8 +146,42 @@ export function hasRoom(socket: WorldConnector, plug: Stretch, taken: readonly S
   return !taken.some((other) => inTheWay(plug, other));
 }
 
-/** How a group of parts is held by the rest: by joints on one line it can swing about, rigidly, or not by any connection. */
+/**
+ * How a group of parts is held by the rest: by joints on one line it can
+ * swing about, rigidly, or not by any connection. A joint's axis points the
+ * way R swings the group about it (as a right-handed screw turns).
+ */
 export type Hold = { readonly kind: 'joint'; readonly axis: Vec3; readonly pivot: Vec3 } | { readonly kind: 'rigid' } | { readonly kind: 'none' };
+
+/** An axis pointing the way of its largest part, so R swings parts about an upright one the way it turns them on the grid. */
+function canonicalAxis(axis: Vec3): Vec3 {
+  const largest = [axis.x, axis.y, axis.z].reduce((a, b) => (Math.abs(b) > Math.abs(a) + 1e-9 ? b : a));
+  return largest < 0 ? { x: -axis.x, y: -axis.y, z: -axis.z } : axis;
+}
+
+/** How far to the side of its pivot a part's middle must lie, in studs, for the part to hang to that side of it: the least in the library is 0.3. */
+const TO_ONE_SIDE = 0.1;
+
+/**
+ * The way about a hinge's pivot that turns its part up, as a right-handed
+ * screw turns: for a part hinged at an end or an edge (ROUND_PIVOTS), its
+ * middle to one side of the pivot, as a car roof on its holder, a plate on
+ * a click hinge or the top of a folding hinge plate is. R swings such a
+ * part this way, whichever way it faces in the world, so R lifts it. Null
+ * for a part whose middle lies over or under its pivot (a control stick, a
+ * hinge brick's top), and for any other connection: about those R turns
+ * the way the world's axes point.
+ */
+function liftingWay(part: PartDef, pivot: Connector, turn: Turn): Vec3 | null {
+  if (!ROUND_PIVOTS.includes(pivot.kind)) return null;
+  const { min, max } = part.extent ?? { min: { x: -part.w / 2, y: 0, z: -part.d / 2 }, max: { x: part.w / 2, y: part.h * PLATE_HEIGHT, z: part.d / 2 } };
+  const [x, z] = [(min.x + max.x) / 2 - pivot.at.x, (min.z + max.z) / 2 - pivot.at.z];
+  // how far up a turn about the pivot, the way it points, takes the part's middle: the upright part of pivot × (pivot to middle)
+  const lift = pivot.axis.z * x - pivot.axis.x * z;
+  if (Math.abs(lift) < TO_ONE_SIDE) return null;
+  const way = rotateBy(turn, pivot.axis);
+  return lift > 0 ? way : { x: -way.x, y: -way.y, z: -way.z };
+}
 
 function overlaps(a: { x0: number; y0: number; z0: number; x1: number; y1: number; z1: number }, b: typeof a, margin: number): boolean {
   return a.x0 - margin <= b.x1 && b.x0 - margin <= a.x1 && a.y0 - margin <= b.y1 && b.y0 - margin <= a.y1 && a.z0 - margin <= b.z1 && b.z0 - margin <= a.z1;
@@ -177,11 +211,17 @@ export function connectionsAround(brick: Brick, others: Iterable<Brick>, lookup:
   return found;
 }
 
-/** A connection of the group's, with the box of the part it is on, and whether that part is loose: plugged in, not standing on the grid. */
+/**
+ * A connection of the group's, with the box of the part it is on, whether
+ * that part is loose (plugged in, not standing on the grid), and the way
+ * about it that turns the part up, if it hangs to one side of it
+ * (liftingWay).
+ */
 interface Own {
   readonly connector: WorldConnector;
   readonly box: Box;
   readonly loose: boolean;
+  readonly lifts: Vec3 | null;
 }
 
 /** A connection of the group's (as Own) plugged into one of another brick's. */
@@ -199,8 +239,36 @@ function pluggedInto(own: readonly Own[], other: Brick, lookup: PartLookup): Plu
   return brickConnectors(other, lookup).flatMap((theirs) => near.filter(({ connector }) => engaged(connector, theirs)).map((mine) => ({ ...mine, theirs })));
 }
 
-/** The halves of joints that sit one within the other's cells: a hinge brick's top in its base, a turntable's top on its base. */
-const NESTED: readonly ConnectorKind[] = ['hingebase', 'hingetop', 'swivelbase', 'swiveltop', 'turnbase', 'turntop', 'turnbase4', 'turntop4', 'turnflat', 'turnsnap'];
+/**
+ * The joints of the older hinges and of the turntables: a hinge brick's top
+ * in its base, a turntable's top on its base, a car roof on its holder, the
+ * two plates of a folding hinge plate, a control stick in its base, the
+ * halves of a 1 × 8 hinge brick. LDraw draws them with plain shapes, so
+ * each is set by hand on the file that draws its half
+ * (scripts/ldraw/hingeJoints.ts): at rest one half goes onto the other as
+ * those are drawn. The halves are parts to build on in their own right,
+ * and sit in or over each other's cells.
+ */
+export const SET_JOINTS: readonly ConnectorKind[] = [
+  'hingebase',
+  'hingetop',
+  'swivelbase',
+  'swiveltop',
+  'turnbase',
+  'turntop',
+  'turnbase4',
+  'turntop4',
+  'turnflat',
+  'turnsnap',
+  'fingers4',
+  'fingers5',
+  'foldbase',
+  'foldtop',
+  'stickbase',
+  'stick',
+  'tongue',
+  'yoke',
+];
 
 /** How far a part's top may rise above its cells, in plates: the library build fits parts into cells so (scripts/ldraw/fit.ts). */
 const TOP_RISE = 0.25;
@@ -216,20 +284,28 @@ function standsOn(brick: Brick, box: Box, lookup: PartLookup): boolean {
 
 /**
  * How `group` hangs on the other bricks (`others`, which may include the
- * group's own, skipped by id): the line it swings about when everything
- * plugging it to them turns freely about that one line, and no studs hold
- * it too: another brick's, or the baseplate's, for a brick on the grid at
- * ground level, which turns on the grid as it always has. One case is not
- * studs though it looks it: the cells of a hinge's or a turntable's base
- * reach up round its top, so a brick standing on a top plugged in there
- * stands on the base's cells too; with the top, it swings.
+ * group's own, skipped by id): the line it swings about, and which way
+ * round (see Hold, liftingWay), when everything plugging it to them turns
+ * freely about that one line, and no studs hold it too: another brick's,
+ * or the baseplate's, for a brick on the grid at ground level, which turns
+ * on the grid as it always has. One case is not studs though it looks it:
+ * the cells of a hinge's or a turntable's base reach up round its top, so
+ * a brick standing on a top plugged in there stands on the base's cells
+ * too; with the top, it swings.
  */
 export function holdOf(group: readonly Brick[], others: Iterable<Brick>, lookup: PartLookup): Hold {
   const ids = new Set(group.map((brick) => brick.id));
   const own = group.flatMap((brick): Own[] => {
+    const part = lookup(brick.partId);
+    const pivots = part?.connectors ?? [];
+    if (!part || pivots.length === 0) return [];
     const box = brickCellBox(brick, lookup);
     const loose = isLoose(brick);
-    return brickConnectors(brick, lookup).map((connector) => ({ connector, box, loose }));
+    const turn = brickTurn(brick);
+    return brickConnectors(brick, lookup).flatMap((connector, i): Own[] => {
+      const pivot = pivots[i];
+      return pivot ? [{ connector, box, loose, lifts: liftingWay(part, pivot, turn) }] : [];
+    });
   });
   if (own.length === 0) return { kind: 'none' };
   const pairs: Plugged[] = [];
@@ -239,11 +315,13 @@ export function holdOf(group: readonly Brick[], others: Iterable<Brick>, lookup:
     const plugged = pluggedInto(own, other, lookup);
     pairs.push(...plugged);
     // the group's tops plugged into this brick: what stands on one of them is not on this brick's studs
-    const tops = plugged.filter((pair) => pair.loose && NESTED.includes(pair.connector.kind)).map((pair) => pair.box);
+    const tops = plugged.filter((pair) => pair.loose && SET_JOINTS.includes(pair.connector.kind)).map((pair) => pair.box);
     studded ||= group.some((brick) => stacked(brick, other, lookup) && !tops.some((top) => standsOn(brick, top, lookup)));
   }
   const [first] = pairs;
   if (!first) return { kind: 'none' };
   const free = !studded && pairs.every(({ connector, theirs }) => turnsFreely(connector.kind, theirs.kind) && onOneLine(first.theirs, theirs));
-  return free ? { kind: 'joint', axis: first.theirs.axis, pivot: first.theirs.at } : { kind: 'rigid' };
+  if (!free) return { kind: 'rigid' };
+  const lifting = pairs.find(({ lifts }) => lifts !== null);
+  return { kind: 'joint', axis: lifting?.lifts ?? canonicalAxis(first.theirs.axis), pivot: first.theirs.at };
 }

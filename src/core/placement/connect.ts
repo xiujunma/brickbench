@@ -19,6 +19,7 @@ import {
   onOneLine,
   placeConnector,
   playOf,
+  SET_JOINTS,
   stretchOn,
   takenOn,
   type Stretch,
@@ -26,7 +27,7 @@ import {
 } from '../model/connections';
 import { brickCellBox, brickTurn, placeLoose } from '../model/geometry';
 import type { Brick } from '../model/types';
-import { multiplyTurns, rotateBy, turnAbout, type Turn } from '../orientation';
+import { multiplyTurns, rotateBy, transposeTurn, turnAbout, type Turn } from '../orientation';
 import type { Connector, PartDef, PartLookup } from '../parts/types';
 import type { Attachment } from './attach';
 import type { Payload, PayloadBrick } from './payload';
@@ -264,7 +265,7 @@ const FINGERED: readonly string[] = ['finger', 'fork', 'fingers2', 'fingers3'];
  * beside. What goes into any other connection (a pin, a bar, a minifigure's
  * arm) is little without it.
  */
-const BRICK_JOINTS: readonly string[] = [...FINGERED, 'hingebase', 'hingetop', 'swivelbase', 'swiveltop', 'turnbase', 'turntop', 'turnbase4', 'turntop4', 'turnflat', 'turnsnap'];
+const BRICK_JOINTS: readonly string[] = [...FINGERED, ...SET_JOINTS];
 
 /** The stretches of one of the target's connections that parts already plugged into it take. */
 type TakenOf = (socket: WorldConnector) => readonly Stretch[];
@@ -293,11 +294,43 @@ function haveRoom(seated: readonly Seat[], takenOf: TakenOf): boolean {
 }
 
 /**
+ * How the half of a hinge or a turntable goes onto its other half, there
+ * already, at rest (see SET_JOINTS): turned as that half is, and from there
+ * the shortest way that lines its pivot up with the other's. LDraw draws
+ * the two halves of most as they go together, so that is no turn at all:
+ * a top goes onto its base as LDraw's assembled hinge has it, whether the
+ * base stands, lies on its side or hangs upside down. Where their pivots
+ * point opposite ways, one half goes on turned half round: the halves of a
+ * 1 × 8 hinge brick, which LDraw draws the same way round though they face
+ * each other.
+ */
+function restTurn(plug: Connector, socket: WorldConnector, target: Brick): Turn {
+  const facing = brickTurn(target);
+  return multiplyTurns(facing, turnTaking(plug.axis, rotateBy(transposeTurn(facing), socket.axis)));
+}
+
+/**
+ * The ways a plug is turned to try it in a socket: the one way a hinge's
+ * or a turntable's half goes on at rest; for any other connection, each
+ * way it can point along the socket (endsFor), at every quarter turn about
+ * it.
+ */
+function turnsFor(plug: Connector, socket: WorldConnector, hit: Hit, part: PartDef, target: Brick, asTarget: 1 | -1): Turn[] {
+  if (SET_JOINTS.includes(socket.kind)) return [restTurn(plug, socket, target)];
+  return endsFor(plug, socket, hit, part, asTarget).flatMap((axis) => {
+    const lined = turnTaking(plug.axis, axis);
+    return [0, 1, 2, 3].map((spin) => multiplyTurns(turnAbout(axis, (spin * Math.PI) / 2), lined));
+  });
+}
+
+/**
  * Every way the payload's part plugs into the socket, scored: the most of
  * its connections plugged into the target's (a torso on both the hips'
  * studs, not one), then most upright, then least in the target's way, then
  * (but for round connections, whose turn means nothing) facing most as the
- * target does, then turned least. A part goes into one of the target's
+ * target does, then turned least. A hinge's or a turntable's half goes on
+ * one way, as the two are drawn together (restTurn), from which R and T
+ * still turn it. A part goes into one of the target's
  * hinges, not into two on different lines at once: fingers hold a part to
  * one side of them, so that would lay it through the target, as a hinge
  * plate with fingers on both ends lies turned round onto its twin. And it
@@ -315,19 +348,15 @@ function fitsOf(part: PartDef, brick: PayloadBrick, socket: WorldConnector, hit:
     const asTarget = dot(rotateBy(brickTurn(target), plug.axis), socket.axis) < 0 ? -1 : 1;
     const middle = placeOn(plug, socket, hit, takenOf(socket), asTarget);
     if (middle === null) continue;
-    for (const axis of endsFor(plug, socket, hit, part, asTarget)) {
-      const lined = turnTaking(plug.axis, axis);
-      for (let spin = 0; spin < 4; spin++) {
-        const turn = multiplyTurns(turnAbout(axis, (spin * Math.PI) / 2), lined);
-        const origin = minus(middle, rotateBy(turn, plug.at));
-        const [a, , , , e, , , , i] = turn;
-        const box = brickCellBox(placedAt(brick, origin, turn, lookup), lookup);
-        const seated = seatsOf(plugs, sockets, origin, turn);
-        if (!haveRoom(seated, takenOf)) continue;
-        const [hinge, ...hinges] = seated.map(([, [into]]) => into).filter((other) => FINGERED.includes(other.kind));
-        if (hinge && hinges.some((other) => !onOneLine(hinge, other))) continue;
-        fits.push({ turn, origin, middle, score: [-seated.length, -e, overlap(box, targetBox), facing ? -closeness(facing, turn) : 0, -(a + e + i)] });
-      }
+    for (const turn of turnsFor(plug, socket, hit, part, target, asTarget)) {
+      const origin = minus(middle, rotateBy(turn, plug.at));
+      const [a, , , , e, , , , i] = turn;
+      const box = brickCellBox(placedAt(brick, origin, turn, lookup), lookup);
+      const seated = seatsOf(plugs, sockets, origin, turn);
+      if (!haveRoom(seated, takenOf)) continue;
+      const [hinge, ...hinges] = seated.map(([, [into]]) => into).filter((other) => FINGERED.includes(other.kind));
+      if (hinge && hinges.some((other) => !onOneLine(hinge, other))) continue;
+      fits.push({ turn, origin, middle, score: [-seated.length, -e, overlap(box, targetBox), facing ? -closeness(facing, turn) : 0, -(a + e + i)] });
     }
   }
   return fits;

@@ -215,6 +215,52 @@ describe('hinges and turntables set on their parts', () => {
     expect(joints('3938.dat')).toEqual([{ kind: 'hingetop', at: [0, 10, 0], axis: [1, 0, 0], length: 40 }]);
     expect(joints('3679.dat')).toEqual([{ kind: 'turntop', at: [0, 6, 0], axis: [0, 1, 0], length: 4 }]);
   });
+
+  it('give a car roof its four fingers and a canopy extender both its hinges, and put the rarer hinges together as LDraw does', () => {
+    const at = (x: number, y: number, turn: string, file: string): string => `1 16 ${x} ${y} 0 ${turn} ${file}`;
+    const [AS_DRAWN, HALF_ROUND] = ['1 0 0 0 1 0 0 0 1', '-1 0 0 0 1 0 0 0 -1'];
+    const source = memorySource({
+      ...Object.fromEntries(['4213', '2337', 's/2582s01', '4531', '3149e', '3148', '4592', '4593', '652', '653'].map((id) => [`${id}.dat`, body])),
+      // a panel's shape is in a file of its own, which the plain panel and its printed ones are each drawn from
+      '2582.dat': certified(at(0, 0, AS_DRAWN, 's\\2582s01.dat')),
+      '2582p68.dat': certified([at(0, 0, AS_DRAWN, 's\\2582s01.dat'), '3 16 -20 30 0 20 30 0 0 60 0'].join('\n')),
+      // LDraw's complete folding hinge plate (3149ec01) draws both plates about the hinge; its complete control stick (73587a) sets the
+      // stick 2 LDU up the base; its complete 1 × 8 hinge brick (652c01) turns the second half half round, 80 LDU on
+      'fold.dat': certified([at(0, 0, AS_DRAWN, '3149e.dat'), at(0, 0, AS_DRAWN, '3148.dat')].join('\n')),
+      'lever.dat': certified([at(0, 0, AS_DRAWN, '4592.dat'), at(0, -2, AS_DRAWN, '4593.dat')].join('\n')),
+      'brick8.dat': certified([at(-40, 0, AS_DRAWN, '652.dat'), at(40, 0, HALF_ROUND, '653.dat')].join('\n')),
+    });
+    const drawn = (file: string) => allConnectors(flattenPart(file, source).connectors).map(round);
+    const free = (file: string) => finishConnectors(flattenPart(file, source).connectors).map((c) => c.kind);
+    // a roof's fingers are along its front edge, the roof behind them
+    expect(drawn('4213.dat')).toEqual([{ kind: 'fingers4', at: [0, 4, 36], axis: [-1, 0, 0], length: 72 }]);
+    expect(drawn('2337.dat')).toEqual([
+      { kind: 'fingers4', at: [0, 0, 0], axis: [-1, 0, 0], length: 72 },
+      { kind: 'fingers5', at: [0, 0, -80], axis: [-1, 0, 0], length: 80 },
+    ]);
+    // a panel is drawn before its fingers, and they point the other way: it goes onto a holder turned half round. Its printed ones
+    // hinge as it does
+    expect(drawn('2582.dat')).toEqual([{ kind: 'fingers4', at: [0, 68, -26], axis: [1, 0, 0], length: 72 }]);
+    expect(drawn('2582p68.dat')).toEqual(drawn('2582.dat'));
+    // a folding hinge plate's two plates turn about one line right across them, a control stick about the short barrel at its foot
+    expect(drawn('3149e.dat')).toEqual([{ kind: 'foldbase', at: [0, 0, 0], axis: [-1, 0, 0], length: 40 }]);
+    expect(drawn('3148.dat')).toEqual([{ kind: 'foldtop', at: [0, 0, 0], axis: [-1, 0, 0], length: 40 }]);
+    expect(drawn('4592.dat')).toEqual([{ kind: 'stickbase', at: [0, -2, 0], axis: [1, 0, 0], length: 4 }]);
+    expect(drawn('4593.dat')).toEqual([{ kind: 'stick', at: [0, 0, 0], axis: [1, 0, 0], length: 4 }]);
+    // a hinge tile's two fingers, as a hinge plate's: about a line across it, 10 LDU beyond its end
+    expect(drawn('4531.dat')).toEqual([{ kind: 'fingers2', at: [30, 4, 0], axis: [0, 0, 1], length: 20 }]);
+    // on their own, the halves of a 1 × 8 hinge brick point opposite ways along their pivots
+    expect(drawn('652.dat')).toEqual([{ kind: 'tongue', at: [40, -5, 0], axis: [0, 0, 1], length: 20 }]);
+    expect(drawn('653.dat')).toEqual([{ kind: 'yoke', at: [40, -5, 0], axis: [0, 0, -1], length: 20 }]);
+    // put together, each pair's two joints are one line, pointing one way: that is how a half goes onto the other at rest
+    for (const file of ['fold.dat', 'lever.dat', 'brick8.dat']) {
+      const [one, other] = drawn(file);
+      expect(`${file} ${one?.at} ${one?.axis}`).toBe(`${file} ${other?.at} ${other?.axis}`);
+      // and nothing is left for another part
+      expect(`${file} ${free(file)}`).toBe(`${file} `);
+    }
+    expect(drawn('brick8.dat').map((c) => c.kind)).toEqual(['tongue', 'yoke']);
+  });
 });
 
 describe('connections a part’s own pieces take', () => {

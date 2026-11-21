@@ -13,7 +13,7 @@ import {
   type Orientation,
   type Turn,
 } from '../orientation';
-import type { CellBox, PartDef, PartLookup } from '../parts/types';
+import type { CellBox, Connector, ConnectorKind, PartDef, PartLookup } from '../parts/types';
 import type { Brick } from './types';
 
 export interface Aabb {
@@ -170,23 +170,137 @@ export function partLocalBoxes(part: PartDef): Aabb[] {
 }
 
 /**
- * How low a brick really reaches, in plates: a loose part with a known
- * extent (PartDef.extent) by its shape, which a bar's is well inside the
- * whole cells of its box; any other by its box.
+ * The halves of hinges that end in the round of their pivot: fingers, a
+ * knuckle or a barrel, at an end or an edge of the part, the part itself
+ * all to one side of it. Such a part is round there (shapeOf), and R turns
+ * it up about the pivot (liftingWay in connections.ts).
+ */
+export const ROUND_PIVOTS: readonly ConnectorKind[] = ['finger', 'fork', 'fingers2', 'fingers3', 'hingetop', 'fingers4', 'fingers5', 'foldbase', 'foldtop', 'stick', 'tongue', 'yoke'];
+
+/**
+ * How much further a part's box may reach beyond a pivot than its knuckle
+ * is round, and the part still end in that knuckle, in LDraw units. Cells
+ * reach 2 past the knuckle of a 2 × 9 folding hinge plate, and drawing
+ * leaves a tenth or two elsewhere; a plate that carries a finger on its
+ * top runs on 4 and more past the finger's round, and is no knuckle there.
+ */
+const KNUCKLE_SLACK = 3;
+
+/** The round of a hinge about its pivot, in a part's own frame, in LDraw units: a cylinder about the pivot's middle, `reach` either way along it. */
+interface Knuckle {
+  readonly at: Vec3;
+  readonly axis: Vec3;
+  readonly reach: number;
+  readonly radius: number;
+}
+
+/** A part's shape for telling how low it reaches (shapeOf): what is left of its box, and its knuckles. */
+interface Shape {
+  readonly boxes: readonly LduBox[];
+  readonly knuckles: readonly Knuckle[];
+}
+
+type Axis = 'x' | 'y' | 'z';
+const AXES: readonly Axis[] = ['x', 'y', 'z'];
+
+/**
+ * A knuckle, and where the part lies from its pivot: on along `side`, up it
+ * (1) or down it (-1); `beside` is the level axis square to the pivot.
+ */
+interface Hinged extends Knuckle {
+  readonly side: Axis;
+  readonly up: 1 | -1;
+  readonly beside: Axis;
+}
+
+/** A box by its least and greatest corners. */
+interface Corners {
+  readonly min: Vec3;
+  readonly max: Vec3;
+}
+
+/** The round of a part about one of its connections, when that is a hinge's pivot across the part (ROUND_PIVOTS), in a box from `min` to `max`. */
+function hingedAt({ kind, at, axis, length }: Connector, { min, max }: Corners): Hinged[] {
+  // across the part: along its width or its depth
+  const along = AXES.find((k) => k !== 'y' && Math.abs(axis[k]) > 0.999);
+  if (!ROUND_PIVOTS.includes(kind) || !along) return [];
+  const pivot = { x: at.x * LDU_PER_UNIT, y: at.y * LDU_PER_UNIT, z: at.z * LDU_PER_UNIT };
+  const beside = along === 'x' ? 'z' : 'x';
+  // the side of the pivot the part's middle lies on, by how far across its box that is
+  const towards = (k: Axis): number => ((min[k] + max[k]) / 2 - pivot[k]) / Math.max(max[k] - min[k], 1e-9);
+  const side = Math.abs(towards(beside)) >= Math.abs(towards('y')) ? beside : 'y';
+  const up = towards(side) > 0 ? 1 : -1;
+  // as large about the pivot as fits in the box
+  const radius = Math.max(0, Math.min(pivot.y - min.y, max.y - pivot.y, pivot[beside] - min[beside], max[beside] - pivot[beside]));
+  // a pivot at the part's middle has it all round it; and where the box goes on beyond the pivot further than that round reaches, more
+  // of the part than a knuckle lies there, as a plate does under a finger on its top: such a part is taken for its whole box
+  const beyond = up > 0 ? pivot[side] - min[side] : max[side] - pivot[side];
+  if (Math.abs(towards(side)) < 1e-6 || beyond > radius + KNUCKLE_SLACK) return [];
+  return [{ at: pivot, axis, reach: (length * LDU_PER_UNIT) / 2, radius, side, up, beside }];
+}
+
+/** The part of a box between `from` and `to` along one axis, if any. */
+function slice(box: Corners, k: Axis, from: number, to: number): Corners[] {
+  const [lo, hi] = [Math.max(box.min[k], from), Math.min(box.max[k], to)];
+  return hi - lo > 1e-9 ? [{ min: { ...box.min, [k]: lo }, max: { ...box.max, [k]: hi } }] : [];
+}
+
+/**
+ * What a knuckle leaves of a box: the box on the part's side of the pivot;
+ * and of what lies beyond a pivot at the part's bottom or top, all but the
+ * corner the knuckle is, as far to either side of the pivot as it is
+ * round. Beyond a pivot at a part's end there is nothing left: a plate or
+ * a brick with a hinge on its end is all knuckle there.
+ */
+function without(box: Corners, { at, side, up, radius, beside }: Hinged): Corners[] {
+  const kept = up > 0 ? slice(box, side, at[side], Infinity) : slice(box, side, -Infinity, at[side]);
+  if (side !== 'y') return kept;
+  const beyond = up > 0 ? slice(box, 'y', -Infinity, at.y) : slice(box, 'y', at.y, Infinity);
+  return [...kept, ...beyond.flatMap((layer) => [...slice(layer, beside, -Infinity, at[beside] - radius), ...slice(layer, beside, at[beside] + radius, Infinity)])];
+}
+
+/**
+ * A part's shape for telling how low it reaches at an angle: the box of its
+ * extent, or of its cells, and no more of it than the part is. Where the
+ * part hinges about a pivot across it, it is round about the pivot: its box
+ * stops there, on the side away from its middle, and its knuckle, a
+ * cylinder about the pivot, stands in for what lay beyond (without). So a
+ * plate lifted on the hinge at its end does not go under the ground by the
+ * corner its box has there.
+ */
+function shapeOf(part: PartDef): Shape {
+  const extent = part.extent ?? { min: { x: -part.w / 2, y: 0, z: -part.d / 2 }, max: { x: part.w / 2, y: part.h * PLATE_HEIGHT, z: part.d / 2 } };
+  const inLdu = (v: Vec3): Vec3 => ({ x: v.x * LDU_PER_UNIT, y: v.y * LDU_PER_UNIT, z: v.z * LDU_PER_UNIT });
+  const whole = { min: inLdu(extent.min), max: inLdu(extent.max) };
+  const knuckles = (part.connectors ?? []).flatMap((connector) => hingedAt(connector, whole));
+  const left = knuckles.reduce<Corners[]>((boxes, knuckle) => boxes.flatMap((box) => without(box, knuckle)), [whole]);
+  return { boxes: left.map(({ min, max }) => ({ x0: min.x, y0: min.y, z0: min.z, x1: max.x, y1: max.y, z1: max.z })), knuckles };
+}
+
+const shapes = new WeakMap<PartDef, Shape>();
+
+/**
+ * How low a brick really reaches, in plates. A brick square to the grid,
+ * by its cells. A loose part by its shape (shapeOf): its extent, which a
+ * bar's is well inside the whole cells of its box, and round about a hinge
+ * it has; with neither, by its box.
  */
 export function brickFloor(brick: PlacedPart, lookup: PartLookup): number {
   const part = requirePart(lookup, brick.partId);
-  if (!isLoose(brick) || !part.extent) return brickCellBox(brick, lookup).y0;
-  const { min, max } = part.extent;
-  const box = turnBox(brickTurn(brick), {
-    x0: min.x * LDU_PER_UNIT,
-    y0: min.y * LDU_PER_UNIT,
-    z0: min.z * LDU_PER_UNIT,
-    x1: max.x * LDU_PER_UNIT,
-    y1: max.y * LDU_PER_UNIT,
-    z1: max.z * LDU_PER_UNIT,
-  });
-  return (originLdu(brick, part).y + box.y0) / LDU_PER_PLATE;
+  if (!isLoose(brick)) return brickCellBox(brick, lookup).y0;
+  const shape = shapes.get(part) ?? shapeOf(part);
+  shapes.set(part, shape);
+  if (!part.extent && shape.knuckles.length === 0) return brickCellBox(brick, lookup).y0;
+  const turn = brickTurn(brick);
+  const lows = [
+    ...shape.boxes.map((box) => turnBox(turn, box).y0),
+    // the lower end of each knuckle's middle line, less how far down its round reaches from there
+    ...shape.knuckles.map(({ at, axis, reach, radius }) => {
+      const way = rotateBy(turn, axis);
+      return rotateBy(turn, at).y - Math.abs(way.y) * reach - radius * Math.hypot(way.x, way.z);
+    }),
+  ];
+  return (originLdu(brick, part).y + Math.min(...lows)) / LDU_PER_PLATE;
 }
 
 /** World-grid box covering a brick's whole footprint and height (x and z in studs, y in plates). */

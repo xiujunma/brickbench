@@ -84,9 +84,29 @@ export const THIN_BEAM = part('thin-beam', 1, 3, 1, [
   { kind: 'axlehole', at: { x: 0, y: 0.25, z: -1 }, axis: NEG_Y, length: 0.5 },
 ]);
 
-/** Hinge bricks 1 × 2 with a click hinge on their +X end: one finger, and the fork it fits. */
-export const FINGER = part('finger', 3, 1, 3, [{ kind: 'finger', at: { x: 1, y: 0.7, z: 0 }, axis: Z, length: 0.9 }]);
-export const FORK = part('fork', 3, 1, 3, [{ kind: 'fork', at: { x: 1, y: 0.7, z: 0 }, axis: Z, length: 0.85 }]);
+/**
+ * Hinge bricks 1 × 2 with a click hinge on their +X end, as LDraw 30364
+ * and 30365: one finger, and the fork it fits, each reaching a quarter of
+ * a stud beyond its pivot, well short of the end of its three cells.
+ */
+export const FINGER = {
+  ...part('finger', 3, 1, 3, [{ kind: 'finger', at: { x: 1, y: 0.7, z: 0 }, axis: Z, length: 0.9 }]),
+  extent: { min: { x: -1.5, y: 0, z: -0.5 }, max: { x: 1.27, y: 1.4, z: 0.5 } },
+};
+export const FORK = {
+  ...part('fork', 3, 1, 3, [{ kind: 'fork', at: { x: 1, y: 0.7, z: 0 }, axis: Z, length: 0.85 }]),
+  extent: { min: { x: -1.5, y: 0, z: -0.5 }, max: { x: 1.3, y: 1.4, z: 0.5 } },
+};
+
+/**
+ * A 1 × 2 hinge plate that carries its click hinge's finger on top, as
+ * LDraw 30383: the pivot over the middle of its second stud, the plate
+ * running on under it to its end, half a stud beyond.
+ */
+export const FINGER_ON_TOP = {
+  ...part('finger-on-top', 2, 1, 3, [{ kind: 'finger', at: { x: 0.5, y: 0.7, z: 0 }, axis: Z, length: 0.9 }]),
+  extent: { min: { x: -1, y: 0, z: -0.5 }, max: { x: 1, y: 0.97, z: 0.5 } },
+};
 
 const SHOULDER_TILT = Math.atan2(0.17, 0.985);
 
@@ -192,6 +212,8 @@ export const SWORD = {
 /** A 1 × 2 hinge brick's base and top, as LDraw 3937 and 3938: one pivot along their length, which LDraw's assembled hinge puts 0.7 studs up the base and 0.3 up the top. */
 export const HINGE_BASE = part('hinge-base', 2, 1, 3, [{ kind: 'hingebase', at: { x: 0, y: 0.7, z: 0 }, axis: X, length: 2 }]);
 export const HINGE_TOP = part('hinge-top', 2, 1, 2, [{ kind: 'hingetop', at: { x: 0, y: 0.3, z: 0 }, axis: X, length: 2 }]);
+/** A 2 × 2 top for the same base, as LDraw 6134: its pivot under one of its two rows of studs, the other row reaching a stud to the side. */
+export const HINGE_TOP_2X2 = part('hinge-top-2x2', 2, 2, 2, [{ kind: 'hingetop', at: { x: 0, y: 0.3, z: 0.5 }, axis: X, length: 2 }]);
 
 /** A 2 × 2 turntable's base and top, as LDraw 3680 and 3679: they turn about the upright through their middle. */
 export const TURN_BASE = part('turn-base', 2, 2, 1, [{ kind: 'turnbase', at: { x: 0, y: 0.1, z: 0 }, axis: { x: 0, y: -1, z: 0 }, length: 0.2 }]);
@@ -208,6 +230,13 @@ export const TURN_BASE_4 = {
 };
 export const TURN_TOP_4 = part('turn-top-4', 4, 4, 2, [{ kind: 'turntop4', at: { x: 0, y: 0.4, z: 0 }, axis: { x: 0, y: -1, z: 0 }, length: 0.6 }]);
 
+/** A flat 4 × 4 turntable base and the round plate that snaps into it, as LDraw 61485 and 60474: the plate's snap is under its underside. */
+export const TURN_FLAT = {
+  ...part('turn-flat', 4, 4, 2, [{ kind: 'turnflat', at: { x: 0, y: 0.3, z: 0 }, axis: NEG_Y, length: 0.2 }]),
+  extent: { min: { x: -2, y: 0, z: -2 }, max: { x: 2, y: 0.6, z: 2 } },
+};
+export const TURN_SNAP = part('turn-snap', 4, 4, 1, [{ kind: 'turnsnap', at: { x: 0, y: -0.1, z: 0 }, axis: NEG_Y, length: 0.2 }]);
+
 /**
  * A 1 × 4 hinge plate's base and top, as LDraw 2429 and 2430: each a 1 × 2
  * plate with an arm beside it, the top swivelling on the base about an
@@ -222,14 +251,71 @@ export const SWIVEL_TOP = part('swivel-top', 3, 2, 1, [{ kind: 'swiveltop', at: 
  * the two that go between them, about a pivot across the plate, half a stud
  * beyond its end and half way up it. The first two are 1 × 2 plates with
  * fingers on one end; the last, a 1 × 6, has two on one end and three on
- * the other.
+ * the other. The fingers are round about the pivot, a fifth of a stud
+ * beyond it: that is where the parts end, short of the end of their cells.
  */
-export const FINGERS_3 = part('fingers-3', 3, 1, 1, [{ kind: 'fingers3', at: { x: 1, y: 0.2, z: 0 }, axis: NEG_Z, length: 1 }]);
-export const FINGERS_2 = part('fingers-2', 3, 1, 1, [{ kind: 'fingers2', at: { x: 1, y: 0.2, z: 0 }, axis: NEG_Z, length: 1 }]);
-export const FINGERS_BOTH = part('fingers-both', 8, 1, 1, [
-  { kind: 'fingers2', at: { x: 3.5, y: 0.2, z: 0 }, axis: NEG_Z, length: 1 },
-  { kind: 'fingers3', at: { x: -3.5, y: 0.2, z: 0 }, axis: NEG_Z, length: 1 },
-]);
+const FINGERS_EXTENT = { min: { x: -1.5, y: 0, z: -0.5 }, max: { x: 1.2, y: 0.6, z: 0.5 } };
+export const FINGERS_3 = { ...part('fingers-3', 3, 1, 1, [{ kind: 'fingers3', at: { x: 1, y: 0.2, z: 0 }, axis: NEG_Z, length: 1 }]), extent: FINGERS_EXTENT };
+export const FINGERS_2 = { ...part('fingers-2', 3, 1, 1, [{ kind: 'fingers2', at: { x: 1, y: 0.2, z: 0 }, axis: NEG_Z, length: 1 }]), extent: FINGERS_EXTENT };
+export const FINGERS_BOTH = {
+  ...part('fingers-both', 8, 1, 1, [
+    { kind: 'fingers2', at: { x: 3.5, y: 0.2, z: 0 }, axis: NEG_Z, length: 1 },
+    { kind: 'fingers3', at: { x: -3.5, y: 0.2, z: 0 }, axis: NEG_Z, length: 1 },
+  ]),
+  extent: { min: { x: -3.7, y: 0, z: -0.5 }, max: { x: 3.7, y: 0.6, z: 0.5 } },
+};
+
+/**
+ * A car roof and what holds it, as LDraw 4213, 4315 and 4214: the roof's
+ * four fingers run along one edge of it, half way up it. They go between
+ * the five beside a 1 × 4 plate, at the plate's own height, or the five
+ * along one edge of the top of a holder two bricks tall, which the roof
+ * then lies over.
+ */
+export const ROOF = part('roof', 4, 4, 1, [{ kind: 'fingers4', at: { x: 0, y: 0.2, z: -1.8 }, axis: NEG_X, length: 3.6 }]);
+export const ROOF_PLATE = {
+  ...part('roof-plate', 4, 2, 1, [{ kind: 'fingers5', at: { x: 0, y: 0.2, z: 0.2 }, axis: NEG_X, length: 4 }]),
+  extent: { min: { x: -2, y: 0, z: -1 }, max: { x: 2, y: 0.6, z: 0.4 } },
+};
+export const ROOF_HOLDER = part('roof-holder', 4, 1, 7, [{ kind: 'fingers5', at: { x: 0, y: 2.6, z: -0.3 }, axis: NEG_X, length: 4 }]);
+/** A hinged 2 × 4 tile, as LDraw 2873: its fingers stand out beyond its cells, their pivot right on the edge of them. */
+export const ROOF_TILE = part('roof-tile', 4, 2, 1, [{ kind: 'fingers4', at: { x: 0, y: 0.2, z: -1 }, axis: NEG_X, length: 3.6 }]);
+
+/**
+ * A folding hinge plate's base and top, as LDraw 3149e and 3148: two
+ * 2 × 5 plates, the top lying on the base, hinged along one end. LDraw
+ * draws both about the hinge, so closed they fill one box.
+ */
+export const FOLD_BASE = {
+  ...part('fold-base', 2, 5, 2, [{ kind: 'foldbase', at: { x: 0, y: 0.4, z: -2 }, axis: NEG_X, length: 2 }]),
+  extent: { min: { x: -1, y: 0, z: -2.4 }, max: { x: 1, y: 0.8, z: 2.5 } },
+};
+export const FOLD_TOP = {
+  ...part('fold-top', 2, 5, 2, [{ kind: 'foldtop', at: { x: 0, y: 0.4, z: -2 }, axis: NEG_X, length: 2 }]),
+  extent: { min: { x: -1, y: 0, z: -2.4 }, max: { x: 1, y: 1.1, z: 2.5 } },
+};
+
+/** A control stick and its base, as LDraw 4593 and 4592: the stick tips about a short pivot across the base, half a stud up it. */
+export const STICK_BASE = {
+  ...part('stick-base', 1, 1, 2, [{ kind: 'stickbase', at: { x: 0, y: 0.5, z: 0 }, axis: X, length: 0.2 }]),
+  extent: { min: { x: -0.4, y: 0, z: -0.4 }, max: { x: 0.4, y: 0.69, z: 0.4 } },
+};
+export const STICK = {
+  ...part('stick', 1, 1, 5, [{ kind: 'stick', at: { x: 0, y: 0.2, z: 0 }, axis: X, length: 0.2 }]),
+  extent: { min: { x: -0.2, y: 0, z: -0.2 }, max: { x: 0.2, y: 2.1, z: 0.2 } },
+};
+
+/**
+ * The two halves of a 1 × 8 hinge brick, as LDraw 652 and 653: each a
+ * 1 × 4 brick with a knuckle beyond one end, above its top; one's tongue
+ * goes in the other's yoke, the bricks end to end. LDraw draws both the
+ * same way round, so their pivots point opposite ways: one goes on turned
+ * half round. The knuckle is half a stud round, and the part ends with it,
+ * half a stud short of the end of its five cells.
+ */
+const HINGE_BRICK_EXTENT = { min: { x: -2.5, y: 0, z: -0.5 }, max: { x: 2, y: 1.95, z: 0.5 } };
+export const TONGUE_BRICK = { ...part('tongue-brick', 5, 1, 5, [{ kind: 'tongue', at: { x: 1.5, y: 1.45, z: 0 }, axis: NEG_Z, length: 1 }]), extent: HINGE_BRICK_EXTENT };
+export const YOKE_BRICK = { ...part('yoke-brick', 5, 1, 5, [{ kind: 'yoke', at: { x: 1.5, y: 1.45, z: 0 }, axis: Z, length: 1 }]), extent: HINGE_BRICK_EXTENT };
 
 /** A 1 × 1 round brick with an open stud, as LDraw 3062b: a bar-sized hole down its stud. */
 export const ROUND_BRICK = part('round-brick', 1, 1, 3, [{ kind: 'barhole', at: { x: 0, y: 1.3, z: 0 }, axis: Y, length: 0.2 }]);
@@ -249,6 +335,7 @@ const TECHNIC = new Map(
     THIN_BEAM,
     FINGER,
     FORK,
+    FINGER_ON_TOP,
     TORSO,
     HIPS,
     BARE_HIPS,
@@ -267,15 +354,28 @@ const TECHNIC = new Map(
     ROUND_BRICK,
     HINGE_BASE,
     HINGE_TOP,
+    HINGE_TOP_2X2,
     TURN_BASE,
     TURN_TOP,
     TURN_BASE_4,
     TURN_TOP_4,
+    TURN_FLAT,
+    TURN_SNAP,
     SWIVEL_BASE,
     SWIVEL_TOP,
     FINGERS_3,
     FINGERS_2,
     FINGERS_BOTH,
+    ROOF,
+    ROOF_PLATE,
+    ROOF_HOLDER,
+    ROOF_TILE,
+    FOLD_BASE,
+    FOLD_TOP,
+    STICK_BASE,
+    STICK,
+    TONGUE_BRICK,
+    YOKE_BRICK,
   ].map((p) => [p.id, p]),
 );
 

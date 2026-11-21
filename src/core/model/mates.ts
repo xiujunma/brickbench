@@ -14,7 +14,11 @@ export function isPair(a: ConnectorKind, b: ConnectorKind, p: ConnectorKind, q: 
  * single finger into a fork, a minifigure's head on its neck, hips under
  * its waist, legs on the hips, arms at its shoulders and hands at its
  * wrists, a bar in a clip, a minifigure's hand or an open stud, and each
- * half of the older hinges and of the turntables with its own other half.
+ * half of the older hinges and of the turntables with its own other half:
+ * among them a car roof's or a canopy's four fingers between its holder's
+ * five, the two plates of a folding hinge plate, a control stick in its
+ * base, and the tongue of a 1 × 8 hinge brick's one half in the yoke of the
+ * other.
  */
 const PAIRS: readonly (readonly [ConnectorKind, ConnectorKind])[] = [
   ['pin', 'pinhole'],
@@ -34,6 +38,10 @@ const PAIRS: readonly (readonly [ConnectorKind, ConnectorKind])[] = [
   ['turnbase', 'turntop'],
   ['turnbase4', 'turntop4'],
   ['turnflat', 'turnsnap'],
+  ['fingers4', 'fingers5'],
+  ['foldbase', 'foldtop'],
+  ['stickbase', 'stick'],
+  ['tongue', 'yoke'],
 ];
 
 export function mates(a: ConnectorKind, b: ConnectorKind): boolean {
