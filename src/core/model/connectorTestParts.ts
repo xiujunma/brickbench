@@ -16,6 +16,7 @@ const X = { x: 1, y: 0, z: 0 };
 const NEG_X = { x: -1, y: 0, z: 0 };
 const Y = { x: 0, y: 1, z: 0 };
 const Z = { x: 0, y: 0, z: 1 };
+const NEG_Z = { x: 0, y: 0, z: -1 };
 
 /** A Technic pin: two ends a stud long, pointing out from its collar in the middle, 0.4 studs up. */
 export const PIN = part('pin', 2, 1, 2, [
@@ -90,11 +91,55 @@ export const SWORD = {
   extent: { min: { x: -0.5, y: 0, z: -0.1 }, max: { x: 0.5, y: 3.5, z: 0.1 } },
 };
 
+/** A 1 × 2 hinge brick's base and top, as LDraw 3937 and 3938: one pivot along their length, which LDraw's assembled hinge puts 0.7 studs up the base and 0.3 up the top. */
+export const HINGE_BASE = part('hinge-base', 2, 1, 3, [{ kind: 'hingebase', at: { x: 0, y: 0.7, z: 0 }, axis: X, length: 2 }]);
+export const HINGE_TOP = part('hinge-top', 2, 1, 2, [{ kind: 'hingetop', at: { x: 0, y: 0.3, z: 0 }, axis: X, length: 2 }]);
+
+/** A 2 × 2 turntable's base and top, as LDraw 3680 and 3679: they turn about the upright through their middle. */
+export const TURN_BASE = part('turn-base', 2, 2, 1, [{ kind: 'turnbase', at: { x: 0, y: 0.1, z: 0 }, axis: { x: 0, y: -1, z: 0 }, length: 0.2 }]);
+export const TURN_TOP = part('turn-top', 2, 2, 1, [{ kind: 'turntop', at: { x: 0, y: 0.1, z: 0 }, axis: { x: 0, y: -1, z: 0 }, length: 0.2 }]);
+
+/**
+ * A 4 × 4 turntable's base and top, as LDraw 3403 and 3404: the base a plate
+ * with a hub that stops short of the top of its three plates of cells, the
+ * top turning inside those cells, 0.3 studs up the base.
+ */
+export const TURN_BASE_4 = {
+  ...part('turn-base-4', 4, 4, 3, [{ kind: 'turnbase4', at: { x: 0, y: 0.7, z: 0 }, axis: { x: 0, y: -1, z: 0 }, length: 0.6 }]),
+  extent: { min: { x: -2, y: 0, z: -2 }, max: { x: 2, y: 1, z: 2 } },
+};
+export const TURN_TOP_4 = part('turn-top-4', 4, 4, 2, [{ kind: 'turntop4', at: { x: 0, y: 0.4, z: 0 }, axis: { x: 0, y: -1, z: 0 }, length: 0.6 }]);
+
+/**
+ * A 1 × 4 hinge plate's base and top, as LDraw 2429 and 2430: each a 1 × 2
+ * plate with an arm beside it, the top swivelling on the base about an
+ * upright pivot where the arms lie one over the other. Put together, their
+ * boxes share two of their three studs' length.
+ */
+export const SWIVEL_BASE = part('swivel-base', 3, 2, 1, [{ kind: 'swivelbase', at: { x: 0.5, y: 0.1, z: 0 }, axis: { x: 0, y: -1, z: 0 }, length: 0.2 }]);
+export const SWIVEL_TOP = part('swivel-top', 3, 2, 1, [{ kind: 'swiveltop', at: { x: -0.5, y: 0.1, z: 0 }, axis: { x: 0, y: -1, z: 0 }, length: 0.2 }]);
+
+/**
+ * The older hinge plates, as LDraw 4275b, 4276b and 4504: three fingers, or
+ * the two that go between them, about a pivot across the plate, half a stud
+ * beyond its end and half way up it. The first two are 1 × 2 plates with
+ * fingers on one end; the last, a 1 × 6, has two on one end and three on
+ * the other.
+ */
+export const FINGERS_3 = part('fingers-3', 3, 1, 1, [{ kind: 'fingers3', at: { x: 1, y: 0.2, z: 0 }, axis: NEG_Z, length: 1 }]);
+export const FINGERS_2 = part('fingers-2', 3, 1, 1, [{ kind: 'fingers2', at: { x: 1, y: 0.2, z: 0 }, axis: NEG_Z, length: 1 }]);
+export const FINGERS_BOTH = part('fingers-both', 8, 1, 1, [
+  { kind: 'fingers2', at: { x: 3.5, y: 0.2, z: 0 }, axis: NEG_Z, length: 1 },
+  { kind: 'fingers3', at: { x: -3.5, y: 0.2, z: 0 }, axis: NEG_Z, length: 1 },
+]);
+
 /** A 1 × 1 round brick with an open stud, as LDraw 3062b: a bar-sized hole down its stud. */
 export const ROUND_BRICK = part('round-brick', 1, 1, 3, [{ kind: 'barhole', at: { x: 0, y: 1.3, z: 0 }, axis: Y, length: 0.2 }]);
 
 const TECHNIC = new Map(
-  [PIN, BEAM, TECHNIC_BRICK, AXLE, BUSH, FINGER, FORK, TORSO, HIPS, HEAD, ARM, BAR, CLIP_PLATE, HANDLE_PLATE, ANTENNA, SWORD, ROUND_BRICK].map((p) => [p.id, p]),
+  [PIN, BEAM, TECHNIC_BRICK, AXLE, BUSH, FINGER, FORK, TORSO, HIPS, HEAD, ARM, BAR, CLIP_PLATE, HANDLE_PLATE, ANTENNA, SWORD, ROUND_BRICK, HINGE_BASE, HINGE_TOP, TURN_BASE, TURN_TOP, TURN_BASE_4, TURN_TOP_4, SWIVEL_BASE, SWIVEL_TOP, FINGERS_3, FINGERS_2, FINGERS_BOTH].map(
+    (p) => [p.id, p],
+  ),
 );
 
 /** The test parts, and the built-in catalogue's. */

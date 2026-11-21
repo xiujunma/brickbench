@@ -97,8 +97,9 @@ test.describe('building with a model behind an API', () => {
       const log = agentPanel(page).getByRole('log', { name: 'Conversation with the agent' });
       await expect(log).toContainText('Placing 2 bricks');
       await expect(log).toContainText('Looking at the model from the front');
-      // the picture BrickBench drew reached the model, and the model's reasoning went back to it each round
-      await expect(log).toContainText('Built a red wall of 2 bricks. I was shown 1 picture.');
+      // the picture BrickBench drew reached the model, and the model's reasoning went back to it each round; drawing it
+      // under software graphics, with other tests running, takes a while
+      await expect(log).toContainText('Built a red wall of 2 bricks. I was shown 1 picture.', { timeout: 30_000 });
       await expect(log).toContainText('3 turns');
       await expect(counts(page)).toHaveText('2 bricks');
       await page.getByRole('button', { name: 'Undo' }).click();

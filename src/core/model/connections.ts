@@ -6,7 +6,8 @@
 import type { Vec3 } from '../grid';
 import { rotateBy, type Turn } from '../orientation';
 import type { Connector, ConnectorKind, PartLookup } from '../parts/types';
-import { brickCellBox, brickOrigin, brickTurn, isOnGrid, type PlacedPart } from './geometry';
+import { brickCellBox, brickOrigin, brickTurn, isLoose, isOnGrid, type PlacedPart } from './geometry';
+import { isPair, mates } from './mates';
 import type { Brick } from './types';
 
 /** A connection where it is in the world: its middle and length in world units, and the unit axis it runs along. */
@@ -21,6 +22,8 @@ export interface WorldConnector {
 const ON_LINE = 0.025;
 /** ... and run along it to within about 2.5°. */
 const PARALLEL = 0.999;
+
+export { mates };
 
 export function dot(a: Vec3, b: Vec3): number {
   return a.x * b.x + a.y * b.y + a.z * b.z;
@@ -47,34 +50,6 @@ export function brickConnectors(brick: PlacedPart, lookup: PartLookup): WorldCon
   const origin = brickOrigin(brick, lookup);
   const turn = brickTurn(brick);
   return connectors.map((connector) => placeConnector(connector, origin, turn));
-}
-
-function isPair(a: ConnectorKind, b: ConnectorKind, p: ConnectorKind, q: ConnectorKind): boolean {
-  return (a === p && b === q) || (a === q && b === p);
-}
-
-/**
- * What plugs into what: a pin into a pin hole, an axle into either kind of
- * hole, a hinge's single finger into a fork, and a minifigure's head on its
- * neck, hips under its waist, legs on the hips, arms at its shoulders and
- * hands at its wrists, and a bar in a clip, a minifigure's hand or an open
- * stud.
- */
-export function mates(a: ConnectorKind, b: ConnectorKind): boolean {
-  const pairs: readonly (readonly [ConnectorKind, ConnectorKind])[] = [
-    ['pin', 'pinhole'],
-    ['axle', 'pinhole'],
-    ['axle', 'axlehole'],
-    ['finger', 'fork'],
-    ['neck', 'head'],
-    ['waist', 'hips'],
-    ['hip', 'leg'],
-    ['shoulder', 'arm'],
-    ['wrist', 'hand'],
-    ['bar', 'clip'],
-    ['bar', 'barhole'],
-  ];
-  return pairs.some(([p, q]) => isPair(a, b, p, q));
 }
 
 /** Whether plugged-together connections turn about their axis: all but an axle in an axle hole, which locks it, and hips in a torso. */
@@ -121,33 +96,75 @@ function stacked(a: Brick, b: Brick, lookup: PartLookup): boolean {
   return footprints && (p.y1 === q.y0 || q.y1 === p.y0);
 }
 
+type Box = ReturnType<typeof brickCellBox>;
+
+/** A connection of the group's, with the box of the part it is on, and whether that part is loose: plugged in, not standing on the grid. */
+interface Own {
+  readonly connector: WorldConnector;
+  readonly box: Box;
+  readonly loose: boolean;
+}
+
+/** A connection of the group's (as Own) plugged into one of another brick's. */
+interface Plugged extends Own {
+  readonly theirs: WorldConnector;
+}
+
+/** The group's connections that are plugged into `other`'s. */
+function pluggedInto(own: readonly Own[], other: Brick, lookup: PartLookup): Plugged[] {
+  if (!lookup(other.partId)?.connectors?.length) return [];
+  const box = brickCellBox(other, lookup);
+  // a cell's margin either way: plugged-in parts reach into each other's boxes
+  const near = own.filter((mine) => overlaps(mine.box, box, 1));
+  if (near.length === 0) return [];
+  return brickConnectors(other, lookup).flatMap((theirs) => near.filter(({ connector }) => engaged(connector, theirs)).map((mine) => ({ ...mine, theirs })));
+}
+
+/** The halves of joints that sit one within the other's cells: a hinge brick's top in its base, a turntable's top on its base. */
+const NESTED: readonly ConnectorKind[] = ['hingebase', 'hingetop', 'swivelbase', 'swiveltop', 'turnbase', 'turntop', 'turnbase4', 'turntop4', 'turnflat', 'turnsnap'];
+
+/** How far a part's top may rise above its cells, in plates: the library build fits parts into cells so (scripts/ldraw/fit.ts). */
+const TOP_RISE = 0.25;
+
+/** Whether a brick on the grid stands on a part with this box: over it, its underside at the box's top, or as far above as that part's top may rise. */
+function standsOn(brick: Brick, box: Box, lookup: PartLookup): boolean {
+  if (!isOnGrid(brick)) return false;
+  const own = brickCellBox(brick, lookup);
+  const above = own.y0 - box.y1;
+  const isOver = Math.min(own.x1, box.x1) > Math.max(own.x0, box.x0) && Math.min(own.z1, box.z1) > Math.max(own.z0, box.z0);
+  return isOver && above > -1e-6 && above < TOP_RISE + 1e-6;
+}
+
 /**
  * How `group` hangs on the other bricks (`others`, which may include the
  * group's own, skipped by id): the line it swings about when everything
  * plugging it to them turns freely about that one line, and no studs hold
  * it too: another brick's, or the baseplate's, for a brick on the grid at
- * ground level, which turns on the grid as it always has.
+ * ground level, which turns on the grid as it always has. One case is not
+ * studs though it looks it: the cells of a hinge's or a turntable's base
+ * reach up round its top, so a brick standing on a top plugged in there
+ * stands on the base's cells too; with the top, it swings.
  */
 export function holdOf(group: readonly Brick[], others: Iterable<Brick>, lookup: PartLookup): Hold {
   const ids = new Set(group.map((brick) => brick.id));
-  const own = group.flatMap((brick) => brickConnectors(brick, lookup).map((connector) => ({ connector, box: brickCellBox(brick, lookup) })));
+  const own = group.flatMap((brick): Own[] => {
+    const box = brickCellBox(brick, lookup);
+    const loose = isLoose(brick);
+    return brickConnectors(brick, lookup).map((connector) => ({ connector, box, loose }));
+  });
   if (own.length === 0) return { kind: 'none' };
-  const pairs: { readonly mine: WorldConnector; readonly theirs: WorldConnector }[] = [];
+  const pairs: Plugged[] = [];
   let studded = group.some((brick) => isOnGrid(brick) && brick.y === 0);
   for (const other of others) {
     if (ids.has(other.id)) continue;
-    studded ||= group.some((brick) => stacked(brick, other, lookup));
-    if (!lookup(other.partId)?.connectors?.length) continue;
-    const box = brickCellBox(other, lookup);
-    // a cell's margin either way: plugged-in parts reach into each other's boxes
-    const near = own.filter((mine) => overlaps(mine.box, box, 1));
-    if (near.length === 0) continue;
-    for (const theirs of brickConnectors(other, lookup)) {
-      for (const { connector: mine } of near) if (engaged(mine, theirs)) pairs.push({ mine, theirs });
-    }
+    const plugged = pluggedInto(own, other, lookup);
+    pairs.push(...plugged);
+    // the group's tops plugged into this brick: what stands on one of them is not on this brick's studs
+    const tops = plugged.filter((pair) => pair.loose && NESTED.includes(pair.connector.kind)).map((pair) => pair.box);
+    studded ||= group.some((brick) => stacked(brick, other, lookup) && !tops.some((top) => standsOn(brick, top, lookup)));
   }
   const [first] = pairs;
   if (!first) return { kind: 'none' };
-  const free = !studded && pairs.every(({ mine, theirs }) => turnsFreely(mine.kind, theirs.kind) && onOneLine(first.theirs, theirs));
+  const free = !studded && pairs.every(({ connector, theirs }) => turnsFreely(connector.kind, theirs.kind) && onOneLine(first.theirs, theirs));
   return free ? { kind: 'joint', axis: first.theirs.axis, pivot: first.theirs.at } : { kind: 'rigid' };
 }

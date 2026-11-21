@@ -2,13 +2,17 @@
  * Technic and click-hinge connections, read from the LDraw primitives that
  * draw them: pins (connect*, confric*), round pin holes (peghole*, beamhol*,
  * connhol*), axles and axle holes (axle*, axl*), and click hinges'
- * single fingers and forks of two (clh*), and the clips (clip*) and handle
- * bars (phandle*, handle*) LDraw draws as primitives; bars drawn as plain
- * cylinders are found by their size (barPiece). Each primitive in a part is
- * a piece of a connection; pieces along one line join up, so the peg-hole
- * ends on the two faces of a Technic brick make one hole through it.
+ * single fingers and forks of two (clh*), the older hinge plates' two and
+ * three fingers (h1, h2), and the clips (clip*) and handle bars (phandle*,
+ * handle*) LDraw draws as primitives; bars drawn as plain cylinders are
+ * found by their size (barPiece). Each primitive in a part is a piece of a
+ * connection; pieces along one line join up, so the peg-hole ends on the
+ * two faces of a Technic brick make one hole through it. Connections LDraw
+ * draws with plain shapes are set on their parts' files instead
+ * (minifigJoints.ts, hingeJoints.ts).
  */
 import { CONNECTOR_KINDS } from '../../src/core/ldraw/format.ts';
+import { mates } from '../../src/core/model/mates.ts';
 import type { Transform, V3 } from './parse.ts';
 
 export type ConnectorKind = (typeof CONNECTOR_KINDS)[number];
@@ -29,6 +33,18 @@ export interface FlatConnector {
    * when that can't be told.
    */
   readonly outward: number;
+  /**
+   * How much wider (or thinner) than its primitive it is drawn, across its
+   * axis: 1 as LDraw's primitive is; 0.65 for the small pivot a hinge plate
+   * is drawn with from a Technic pin's primitive.
+   */
+  readonly across: number;
+}
+
+/** A connection set by hand on the file that draws its part: there, along that way, that long (see minifigJoints.ts, hingeJoints.ts). */
+export function setJoint(kind: ConnectorKind, at: V3, [x, y, z]: V3, length: number): FlatConnector {
+  const size = Math.hypot(x, y, z);
+  return { kind, at, axis: [x / size, y / size, z / size], length, outward: 0, across: 1 };
 }
 
 /** A primitive that draws a connection: what it is, and the axis it is drawn along in its own frame. */
@@ -51,6 +67,11 @@ const AXLE_HOLE: ConnectorPrimitive = { kind: 'axlehole', axis: ALONG_Y, through
 
 function hinge(kind: 'finger' | 'fork', y: number, z: number): ConnectorPrimitive {
   return { kind, axis: [1, 0, 0], through: [0, y, z], either: false };
+}
+
+/** The older hinge plates' fingers turn about their primitive's Z axis, through the knuckle 10 LDU out from where the primitive joins its plate. */
+function fingers(kind: 'fingers2' | 'fingers3'): ConnectorPrimitive {
+  return { kind, axis: [0, 0, 1], through: [0, 10, 0], either: false };
 }
 
 /**
@@ -77,6 +98,9 @@ const HINGES: Readonly<Record<string, ConnectorPrimitive>> = {
   clh10: hinge('fork', 0, 4),
   clh11: hinge('fork', 0, 4),
   clh14: hinge('fork', 0, 10),
+  // the hinge plates before click hinges: two fingers go between three, middle to middle
+  h1: fingers('fingers2'),
+  h2: fingers('fingers3'),
 };
 
 /** The hinge primitives and the pivot each turns about, for the verify test. */
@@ -141,7 +165,7 @@ export function barPiece(file: string, matrix: Transform, inverted: boolean): Fl
   const length = Math.hypot(b, e, h);
   if (radial.some((r) => Math.abs(r - BAR_RADIUS) > 0.05) || length < SHORTEST_BAR) return null;
   const [x, y, z] = matrix.t;
-  return { kind: 'bar', at: [x + b / 2, y + e / 2, z + h / 2], axis: [b / length, e / length, h / length], length, outward: 0 };
+  return { kind: 'bar', at: [x + b / 2, y + e / 2, z + h / 2], axis: [b / length, e / length, h / length], length, outward: 0, across: 1 };
 }
 
 /** The connection a primitive draws, by its file name ("p/connect.dat" or "connect.dat"); undefined for any other file. */
@@ -220,7 +244,20 @@ export function connectorOf(primitive: ConnectorPrimitive, triangles: readonly F
   }
   const middle = (min + max) / 2;
   const at: V3 = [k === 0 ? middle : primitive.through[0], k === 1 ? middle : primitive.through[1], k === 2 ? middle : primitive.through[2]];
-  return { kind: primitive.kind, at, axis: primitive.axis, length: max - min, outward: primitive.either ? outwardness(triangles, primitive) : 0 };
+  return { kind: primitive.kind, at, axis: primitive.axis, length: max - min, outward: primitive.either ? outwardness(triangles, primitive) : 0, across: 1 };
+}
+
+/** How much a reference's matrix widens what lies across a unit axis: the mean of its stretch along two directions square to it. */
+function widening(matrix: Transform, axis: V3): number {
+  const [a, b, c, d, e, f, g, h, i] = matrix.m;
+  const stretch = ([x, y, z]: V3): number => Math.hypot(a * x + b * y + c * z, d * x + e * y + f * z, g * x + h * y + i * z);
+  // two unit vectors square to the axis and to each other
+  const k = axis.findIndex((v) => Math.abs(v) < 0.9);
+  const other: V3 = [k === 0 ? 1 : 0, k === 1 ? 1 : 0, k === 2 ? 1 : 0];
+  const first = cross(axis, other);
+  const size = Math.hypot(...first);
+  const u = scale(first, 1 / size);
+  return Math.sqrt(stretch(u) * stretch(cross(axis, u)));
 }
 
 /**
@@ -242,6 +279,7 @@ export function placeConnector(connector: FlatConnector, matrix: Transform, inve
     axis: scale(along, 1 / stretch),
     length: connector.length * stretch,
     outward: inverted ? -connector.outward : connector.outward,
+    across: connector.across * widening(matrix, connector.axis),
   };
 }
 
@@ -255,28 +293,21 @@ function settled(connector: FlatConnector): FlatConnector {
   return connector;
 }
 
-/** How far apart pieces on one line may be and still be one connection, in LDU: a Technic brick's peg-hole ends are 16 apart. */
-const JOIN_GAP: Readonly<Record<ConnectorKind, number | null>> = {
-  pin: null,
-  pinhole: 16,
-  axle: 2,
-  axlehole: 16,
-  finger: 0,
-  fork: 8,
-  neck: null,
-  head: null,
-  waist: null,
-  hips: null,
-  hip: null,
-  leg: null,
-  shoulder: null,
-  arm: null,
-  wrist: null,
-  hand: null,
-  bar: 1,
-  clip: null,
-  barhole: null,
-};
+/**
+ * How far apart pieces on one line may be and still be one connection, in
+ * LDU: a Technic brick's peg-hole ends are 16 apart. The kinds not here are
+ * whole as they come: a pin's two ends, a clip, a joint set by hand.
+ */
+const JOIN_GAP: Readonly<Partial<Record<ConnectorKind, number>>> = { pinhole: 16, axle: 2, axlehole: 16, finger: 0, fork: 8, bar: 1 };
+
+/** Technic pins, holes and axles are one size: a piece drawn more than this much wider or thinner than its primitive is something else. */
+const TECHNIC_SIZE = 0.15;
+
+function isTechnicSized(connector: FlatConnector): boolean {
+  const technic = connector.kind === 'pin' || connector.kind === 'pinhole' || connector.kind === 'axle' || connector.kind === 'axlehole';
+  return !technic || Math.abs(connector.across - 1) <= TECHNIC_SIZE;
+}
+
 /** Pieces of a connection lie on one line to within this, in LDU. */
 const ON_LINE = 0.5;
 
@@ -294,7 +325,7 @@ function span(connector: FlatConnector, along: FlatConnector): readonly [number,
 
 function joins(a: FlatConnector, b: FlatConnector): boolean {
   const gap = JOIN_GAP[a.kind];
-  if (gap === null || a.kind !== b.kind || !coaxial(a, b)) return false;
+  if (gap === undefined || a.kind !== b.kind || !coaxial(a, b)) return false;
   const [b0, b1] = span(b, a);
   return Math.max(-a.length / 2, b0) - Math.min(a.length / 2, b1) <= gap + 1e-6;
 }
@@ -347,12 +378,14 @@ function once(connectors: readonly FlatConnector[]): FlatConnector[] {
 }
 
 /**
- * A part's connections, from all the pieces it is drawn with: axles told
+ * Every connection a part is drawn with, from all its pieces: axles told
  * from axle holes, pieces on one line joined, mouths of axle holes dropped,
- * each once, in a steady order.
+ * each once, in a steady order. Those its own pieces take are among them
+ * (see finishConnectors): this is how LDraw's ready-made assemblies show
+ * where their halves join.
  */
-export function finishConnectors(pieces: readonly FlatConnector[]): FlatConnector[] {
-  const joined = once(joinRuns(pieces.map(settled).filter((piece) => piece.length > 0)));
+export function allConnectors(pieces: readonly FlatConnector[]): FlatConnector[] {
+  const joined = once(joinRuns(pieces.map(settled).filter((piece) => piece.length > 0 && isTechnicSized(piece))));
   const axleHoles = joined.filter((c) => c.kind === 'axlehole');
   const byPlace = (a: FlatConnector, b: FlatConnector): number => {
     for (let k = 0; k < 3; k++) {
@@ -364,4 +397,40 @@ export function finishConnectors(pieces: readonly FlatConnector[]): FlatConnecto
   return joined
     .filter((c) => c.kind !== 'pinhole' || !alongAxleHole(c, axleHoles))
     .sort((a, b) => CONNECTOR_KINDS.indexOf(a.kind) - CONNECTOR_KINDS.indexOf(b.kind) || byPlace(a, b));
+}
+
+/** Rods and what holds them: one may go on past the other, and be free there. Any other kind is a joint, taken whole. */
+const RODS_AND_HOLDERS: readonly ConnectorKind[] = ['pin', 'pinhole', 'axle', 'axlehole', 'bar', 'clip', 'barhole'];
+
+/** How far a connection may reach past its mate and still be wholly in it, in LDU. */
+const TAKEN_SLACK = 1;
+
+/** Whether two connections of one part are plugged into each other: kinds that mate, on one line, overlapping along it. */
+function plugged(a: FlatConnector, b: FlatConnector): boolean {
+  if (!mates(a.kind, b.kind) || !coaxial(a, b)) return false;
+  const [b0, b1] = span(b, a);
+  return Math.min(a.length / 2, b1) - Math.max(-a.length / 2, b0) > ON_LINE;
+}
+
+/**
+ * Whether `a`, plugged into `b`, has nothing left for another part: a
+ * joint's half, or a pin's end; a hole, an axle, a bar or a clip unless it
+ * goes on past its mate, as an axle does through a hole.
+ */
+function takenBy(a: FlatConnector, b: FlatConnector): boolean {
+  if (a.kind === 'pin' || !RODS_AND_HOLDERS.includes(a.kind)) return true;
+  const [a0, a1] = span(a, b);
+  return a0 >= -b.length / 2 - TAKEN_SLACK && a1 <= b.length / 2 + TAKEN_SLACK;
+}
+
+/**
+ * A part's connections, where other parts can plug in: every one it is
+ * drawn with (allConnectors) but those its own pieces take. A ready-made
+ * assembly (a complete hinge brick or turntable, a torso with its arms on)
+ * holds both halves of a joint, plugged together: nothing else goes there,
+ * and the assembly stacks like any other part.
+ */
+export function finishConnectors(pieces: readonly FlatConnector[]): FlatConnector[] {
+  const all = allConnectors(pieces);
+  return all.filter((a) => !all.some((b) => b !== a && plugged(a, b) && takenBy(a, b)));
 }

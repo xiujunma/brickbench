@@ -7,7 +7,7 @@
  * neighbour rather than colliding with it.
  */
 import { LDU_PER_UNIT, PLATE_HEIGHT, type Vec3 } from '../grid';
-import { along, brickConnectors, dot, engaged, isRound, mates, placeConnector, type WorldConnector } from '../model/connections';
+import { along, brickConnectors, dot, engaged, isRound, mates, onOneLine, placeConnector, type WorldConnector } from '../model/connections';
 import { brickCellBox, brickTurn, placeLoose } from '../model/geometry';
 import type { Brick } from '../model/types';
 import { multiplyTurns, rotateBy, turnAbout, type Turn } from '../orientation';
@@ -24,8 +24,9 @@ export interface ConnectTurn {
 
 /**
  * How near a hole's mouth the cursor must be to plug into it, how near a
- * pin, axle or hinge, and how near a minifigure's joint, which lies deeper
- * inside the box its part is picked by, in studs.
+ * pin, an axle or a hinge's fingers, and how near a joint that lies deeper
+ * inside the box its part is picked by (a minifigure's, a hinge brick's, a
+ * turntable's), in studs.
  */
 const MOUTH_REACH = 0.45;
 const REACH = 0.6;
@@ -55,7 +56,7 @@ function isHole(connector: { readonly kind: string }): boolean {
 /** How near the cursor must be to a connection to plug into it (see MOUTH_REACH). */
 function reachOf(socket: WorldConnector): number {
   if (isHole(socket)) return MOUTH_REACH;
-  return isRound(socket.kind) || ['finger', 'fork', 'clip'].includes(socket.kind) ? REACH : JOINT_REACH;
+  return isRound(socket.kind) || ['finger', 'fork', 'fingers2', 'fingers3', 'clip'].includes(socket.kind) ? REACH : JOINT_REACH;
 }
 
 /**
@@ -205,23 +206,30 @@ function closeness(a: Turn, b: Turn): number {
   return sum;
 }
 
+/** Hinges whose fingers hold a part to one side of their pivot: click hinges, and the older hinge plates. */
+const FINGERED: readonly string[] = ['finger', 'fork', 'fingers2', 'fingers3'];
+
 /**
  * Every way the payload's part plugs into the socket, scored: the most of
  * its connections plugged into the target's (a torso on both the hips'
  * studs, not one), then most upright, then least in the target's way, then
  * (but for round connections, whose turn means nothing) facing most as the
- * target does, then turned least.
+ * target does, then turned least. A part goes into one of the target's
+ * hinges, not into two on different lines at once: fingers hold a part to
+ * one side of them, so that would lay it through the target, as a hinge
+ * plate with fingers on both ends lies turned round onto its twin.
  */
 function fitsOf(part: PartDef, brick: PayloadBrick, socket: WorldConnector, hit: Hit, target: Brick, lookup: PartLookup): Fit[] {
   const plugs = part.connectors ?? [];
   const targetBox = brickCellBox(target, lookup);
   const facing = isRound(socket.kind) ? null : brickTurn(target);
   const sockets = brickConnectors(target, lookup);
-  const seated = (origin: Vec3, turn: Turn): number =>
-    plugs.filter((plug) => {
+  /** The target's connections the part's are plugged into, placed like that, one for each of the part's that is. */
+  const held = (origin: Vec3, turn: Turn): WorldConnector[] =>
+    plugs.flatMap((plug) => {
       const placed = placeConnector(plug, origin, turn);
-      return sockets.some((other) => engaged(placed, other));
-    }).length;
+      return sockets.find((other) => engaged(placed, other)) ?? [];
+    });
   const fits: Fit[] = [];
   for (const plug of plugs) {
     if (!plugsInto(plug, socket, part)) continue;
@@ -232,8 +240,11 @@ function fitsOf(part: PartDef, brick: PayloadBrick, socket: WorldConnector, hit:
         const turn = multiplyTurns(turnAbout(axis, (spin * Math.PI) / 2), lined);
         const origin = minus(middle, rotateBy(turn, plug.at));
         const [a, , , , e, , , , i] = turn;
-        const inTheWay = overlap(brickCellBox(placedAt(brick, origin, turn, lookup), lookup), targetBox);
-        fits.push({ turn, origin, middle, score: [-seated(origin, turn), -e, inTheWay, facing ? -closeness(facing, turn) : 0, -(a + e + i)] });
+        const box = brickCellBox(placedAt(brick, origin, turn, lookup), lookup);
+        const seated = held(origin, turn);
+        const [hinge, ...hinges] = seated.filter((other) => FINGERED.includes(other.kind));
+        if (hinge && hinges.some((other) => !onOneLine(hinge, other))) continue;
+        fits.push({ turn, origin, middle, score: [-seated.length, -e, overlap(box, targetBox), facing ? -closeness(facing, turn) : 0, -(a + e + i)] });
       }
     }
   }

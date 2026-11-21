@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { barPiece, connectorPrimitive, finishConnectors, type FlatConnector } from './connectors.ts';
+import { allConnectors, barPiece, connectorPrimitive, finishConnectors, type FlatConnector } from './connectors.ts';
 import { flattenPart } from './flatten.ts';
 import { memorySource } from './library.ts';
 
@@ -65,6 +65,9 @@ describe('connections read from LDraw primitives', () => {
     expect(connectorPrimitive('axl3hole.dat')?.kind).toBe('axlehole');
     expect(connectorPrimitive('clh2.dat')?.kind).toBe('finger');
     expect(connectorPrimitive('clh10.dat')?.kind).toBe('fork');
+    // the older hinges' two fingers and the three they go between
+    expect(connectorPrimitive('h1.dat')?.kind).toBe('fingers2');
+    expect(connectorPrimitive('h2.dat')?.kind).toBe('fingers3');
     for (const name of ['npeghole.dat', 'confricrib1.dat', 'connectcollar1.dat', 'axlehol0.dat', 'clh-finger.dat', 'stud.dat', '3001.dat']) {
       expect(connectorPrimitive(name)).toBeUndefined();
     }
@@ -140,7 +143,7 @@ describe('bars and clips', () => {
 
   it('find a bar in a whole cylinder of a bar’s radius, outside in, long enough to hold', () => {
     const bar = { m: [4, 0, 0, 0, 40, 0, 0, 0, 4] as const, t: [0, -40, 0] as const };
-    expect(barPiece('4-4cyli.dat', bar, false)).toEqual({ kind: 'bar', at: [0, -20, 0], axis: [0, 1, 0], length: 40, outward: 0 });
+    expect(barPiece('4-4cyli.dat', bar, false)).toEqual({ kind: 'bar', at: [0, -20, 0], axis: [0, 1, 0], length: 40, outward: 0, across: 1 });
     expect(barPiece('48\\4-4cylo.dat', bar, false)?.kind).toBe('bar');
     // inside out it is a hole; a stud is fatter; a stub is too short to hold; a half cylinder is no bar
     expect(barPiece('4-4cyli.dat', bar, true)).toBeNull();
@@ -180,5 +183,80 @@ describe('bars and clips', () => {
     // an open stud holds a bar, whichever part it is shaped for and with its logo or without; a solid one, or one with small holes, does not
     for (const name of ['stud2.dat', 'stud2a.dat', 'stud6.dat', 'stud6a.dat', 'stud17a.dat', '8/stud2-logo4.dat']) expect(connectorPrimitive(name)?.kind).toBe('barhole');
     for (const name of ['stud.dat', 'stud9.dat', 'stud2s.dat', 'studp01.dat', 'stud3.dat']) expect(connectorPrimitive(name)).toBeUndefined();
+  });
+});
+
+describe('pieces drawn at another size', () => {
+  it('leaves out a pin drawn thinner or fatter than a Technic pin, as a hinge plate’s small pivot is', () => {
+    const pinAt = (across: number) => connectorsOf(`1 16 0 0 0 ${across} 0 0 0 1 0 0 0 ${across} connect.dat`).map((c) => c.kind);
+    expect(pinAt(1)).toEqual(['pin']);
+    expect(pinAt(1.05)).toEqual(['pin']);
+    expect(pinAt(0.65)).toEqual([]);
+    expect(pinAt(1.33)).toEqual([]);
+    // through a reference that shrinks it too
+    const source = memorySource({ ...PRIMITIVES, 'small.dat': certified('1 16 0 0 0 1 0 0 0 1 0 0 0 1 connect.dat'), 'part.dat': certified('1 16 0 0 0 0.5 0 0 0 0.5 0 0 0 0.5 small.dat') });
+    expect(finishConnectors(flattenPart('part.dat', source).connectors)).toEqual([]);
+  });
+});
+
+describe('hinges and turntables set on their parts', () => {
+  const body = certified('3 16 -20 0 0 20 0 0 0 24 10');
+
+  it('give a hinge brick’s two halves the one pivot they share, and a turntable’s its axis', () => {
+    const source = memorySource({
+      '3937.dat': body,
+      's/3938s01.dat': body,
+      // the top is two halves, one the other mirrored
+      '3938.dat': certified('1 16 0 0 0 1 0 0 0 1 0 0 0 1 s\\3938s01.dat\n1 16 0 0 0 -1 0 0 0 1 0 0 0 1 s\\3938s01.dat'),
+      '3679.dat': body,
+    });
+    const joints = (file: string) => finishConnectors(flattenPart(file, source).connectors).map(round);
+    expect(joints('3937.dat')).toEqual([{ kind: 'hingebase', at: [0, 10, 0], axis: [1, 0, 0], length: 40 }]);
+    expect(joints('3938.dat')).toEqual([{ kind: 'hingetop', at: [0, 10, 0], axis: [1, 0, 0], length: 40 }]);
+    expect(joints('3679.dat')).toEqual([{ kind: 'turntop', at: [0, 6, 0], axis: [0, 1, 0], length: 4 }]);
+  });
+});
+
+describe('connections a part’s own pieces take', () => {
+  const body = certified('3 16 -20 0 0 20 0 0 0 24 10');
+  const at = (y: number, file: string): string => `1 16 0 ${y} 0 1 0 0 0 1 0 0 0 1 ${file}`;
+
+  it('leave out both halves of a joint a ready-made assembly holds together, and keep those of halves apart', () => {
+    const source = memorySource({
+      '3937.dat': body,
+      's/3938s01.dat': body,
+      // a complete hinge brick: LDraw draws both halves about one origin
+      'hinge.dat': certified([at(0, '3937.dat'), at(0, 's\\3938s01.dat')].join('\n')),
+      // its top lifted a brick off its base
+      'apart.dat': certified([at(0, '3937.dat'), at(-24, 's\\3938s01.dat')].join('\n')),
+      's/973s01.dat': body,
+      's/3626bs02.dat': body,
+      // a torso with its head on: the head's underside, 24 under its origin, on the neck
+      'figure.dat': certified([at(0, 's\\973s01.dat'), at(-24, 's\\3626bs02.dat')].join('\n')),
+    });
+    const kinds = (file: string) => finishConnectors(flattenPart(file, source).connectors).map((c) => c.kind);
+    expect(kinds('hinge.dat')).toEqual([]);
+    expect(kinds('apart.dat')).toEqual(['hingebase', 'hingetop']);
+    // the torso's waist and shoulders are still free
+    expect(kinds('figure.dat')).toEqual(['waist', 'waist', 'shoulder', 'shoulder']);
+    // every connection drawn can still be read, taken or not: LDraw's assemblies are how the joints set by hand are checked
+    expect(allConnectors(flattenPart('hinge.dat', source).connectors).map((c) => c.kind)).toEqual(['hingebase', 'hingetop']);
+  });
+
+  it('take a pin’s end wherever a hole holds it, and leave a hole or an axle that goes on past what it holds', () => {
+    // a hole through a brick a stud thick, from y 0 to 20, and a pin's end in it, from its collar at y 20 to its tip at y 0
+    const hole = ['1 16 0 0 0 1 0 0 0 1 0 0 0 1 peghole.dat', '1 16 0 20 0 1 0 0 0 -1 0 0 0 -1 peghole.dat'];
+    const pin = '1 16 0 20 0 1 0 0 0 1 0 0 0 1 connect.dat';
+    expect(connectorsOf(hole.join('\n')).map((c) => c.kind)).toEqual(['pinhole']);
+    expect(connectorsOf([...hole, pin].join('\n'))).toEqual([]);
+    // in one end of a hole two studs long, the pin's end is taken and the hole goes on
+    const long = [...hole, '1 16 0 20 0 1 0 0 0 1 0 0 0 1 peghole.dat', '1 16 0 40 0 1 0 0 0 -1 0 0 0 -1 peghole.dat'];
+    expect(connectorsOf([...long, pin].join('\n')).map(round)).toEqual([{ kind: 'pinhole', at: [0, 20, 0], axis: [0, 1, 0], length: 40 }]);
+    // an axle through the short hole, a stud and more out of it either side: the hole is taken, the axle goes on
+    const axle = '1 16 0 -30 0 1 0 0 0 80 0 0 0 1 axlehol8.dat';
+    expect(connectorsOf([...hole, axle].join('\n')).map(round)).toEqual([{ kind: 'axle', at: [0, 10, 0], axis: [0, 1, 0], length: 80 }]);
+    // on another line beside the hole, the pin is not in it
+    const beside = '1 16 20 20 0 1 0 0 0 1 0 0 0 1 connect.dat';
+    expect(connectorsOf([...hole, beside].join('\n')).map((c) => c.kind)).toEqual(['pin', 'pinhole']);
   });
 });

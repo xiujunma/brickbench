@@ -11,7 +11,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import { decodePartMesh, encodePartMesh } from '../../src/core/ldraw/format.ts';
 import { readColourTable } from './colours.ts';
-import { finishConnectors, HINGE_PRIMITIVES, ROD_PRIMITIVES, type FlatConnector } from './connectors.ts';
+import { allConnectors, finishConnectors, HINGE_PRIMITIVES, ROD_PRIMITIVES, type FlatConnector } from './connectors.ts';
+import { HINGE_JOINTS } from './hingeJoints.ts';
 import { convertPart } from './convert.ts';
 import { Flattener } from './flatten.ts';
 import { directorySource, memorySource, type LibrarySource } from './library.ts';
@@ -39,6 +40,72 @@ const CATALOGUE: readonly (readonly [string, number, number, number, readonly [n
 
 describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
   const flattener = new Flattener(directorySource(LDRAW_DIR ?? ''));
+  const library = directorySource(LDRAW_DIR ?? '');
+
+  /** A source with LDraw's files, and one more of our own on top. */
+  const withModel = (name: string, text: string): LibrarySource => {
+    const extra = memorySource({ [name]: text });
+    return { read: (file) => extra.read(file) ?? library.read(file) };
+  };
+  /** Every connection a file is drawn with, in LDraw's frame: those an assembly's own halves take among them. */
+  const joinsOf = (file: string, source: LibrarySource = library): FlatConnector[] => allConnectors(new Flattener(source).flatten(file).connectors);
+  /** The kinds of connection a file's part ends up with: where another part can plug in. */
+  const freeOf = (file: string): string => finishConnectors(new Flattener(library).flatten(file).connectors).map((j) => j.kind).join(' ');
+  /** Pairs of joints of these kinds that sit together (to half an LDraw unit) along one line. */
+  const together = (joints: readonly FlatConnector[], a: FlatConnector['kind'], b: FlatConnector['kind']): number =>
+    joints
+      .filter((j) => j.kind === a)
+      .filter((j) =>
+        joints.some(
+          (k) =>
+            k.kind === b &&
+            Math.hypot(j.at[0] - k.at[0], j.at[1] - k.at[1], j.at[2] - k.at[2]) < 0.5 &&
+            Math.abs(j.axis[0] * k.axis[0] + j.axis[1] * k.axis[1] + j.axis[2] * k.axis[2]) > 0.999,
+        ),
+      ).length;
+
+  const ROUND = /^(?:48\\|8\\)?\d+-\d+(?:edge|cyli|cylc|cylo|cyls|disc|ndis|con\d+|ring\d*|chrd|tndis|sphe)\.dat$/i;
+  const STUDS = /^(?:48\\|8\\)?stu/i;
+  /** One LDraw reference inside another: where the inner one lands. */
+  const compose = (p: Transform, c: Transform): Transform => {
+    const [a, b, cc, d, e, f, g, h, i] = p.m;
+    const [A, B, C, D, E, F, G, H, I] = c.m;
+    const [x, y, z] = c.t;
+    return {
+      t: [p.t[0] + a * x + b * y + cc * z, p.t[1] + d * x + e * y + f * z, p.t[2] + g * x + h * y + i * z],
+      m: [a * A + b * D + cc * G, a * B + b * E + cc * H, a * C + b * F + cc * I, d * A + e * D + f * G, d * B + e * E + f * H, d * C + e * F + f * I, g * A + h * D + i * G, g * B + h * E + i * H, g * C + h * F + i * I],
+    };
+  };
+  /** A point's line along `axis`, as the point of it nearest the origin, to a hundredth: "x,y,z". */
+  const lineThrough = ([x, y, z]: readonly [number, number, number], [ux, uy, uz]: readonly [number, number, number]): string => {
+    const along = x * ux + y * uy + z * uz;
+    return [x - along * ux, y - along * uy, z - along * uz].map((v) => Math.round(v * 100) / 100 + 0).join(',');
+  };
+  /**
+   * The line most of the round surfaces a file is drawn with turn about,
+   * among those along `axis` (of radius `radius` only, when given); studs
+   * are left out. This is how a pivot is read off a part's drawing.
+   */
+  const pivotOf = (file: string, axis: readonly [number, number, number], radius?: number): string | undefined => {
+    const found = new Map<string, number>();
+    const walk = (name: string, at: Transform): void => {
+      for (const line of parseLDraw(library.read(name)?.text ?? '')) {
+        if (line.kind !== 'ref' || STUDS.test(line.file)) continue;
+        const placed = compose(at, line.matrix);
+        if (!ROUND.test(line.file)) {
+          walk(line.file, placed);
+          continue;
+        }
+        const [a, b, , d, e, , g, h] = placed.m;
+        if (Math.abs(b * axis[0] + e * axis[1] + h * axis[2]) / Math.hypot(b, e, h) < 0.999) continue;
+        if (radius !== undefined && Math.abs(Math.hypot(a, d, g) - radius) > 0.1) continue;
+        const key = lineThrough(placed.t, axis);
+        found.set(key, (found.get(key) ?? 0) + 1);
+      }
+    };
+    walk(file, { m: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0] });
+    return [...found.entries()].sort((p, q) => q[1] - p[1])[0]?.[0];
+  };
 
   it.each(CATALOGUE)('%s fits the grid like the built-in part', (file, w, d, h, origin) => {
     const result = convertPart(file, flattener);
@@ -109,60 +176,67 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(connectorsOf('87087.dat')).toEqual([[18, 0, 0.7, 0.6, 0, 0, 1, 0.2]]);
   });
 
-  it('turns each click hinge about where its round surfaces are centred', () => {
-    const circle = /^(?:48\\|8\\)?\d+-\d+(?:edge|cyli|cylc|cylo|disc|ndis|con\d+|ring\d*|chrd|tndis|sphe)\.dat$/i;
-    const compose = (p: Transform, c: Transform): Transform => {
-      const [a, b, cc, d, e, f, g, h, i] = p.m;
-      const [A, B, C, D, E, F, G, H, I] = c.m;
-      const [x, y, z] = c.t;
-      return {
-        t: [p.t[0] + a * x + b * y + cc * z, p.t[1] + d * x + e * y + f * z, p.t[2] + g * x + h * y + i * z],
-        m: [a * A + b * D + cc * G, a * B + b * E + cc * H, a * C + b * F + cc * I, d * A + e * D + f * G, d * B + e * E + f * H, d * C + e * F + f * I, g * A + h * D + i * G, g * B + h * E + i * H, g * C + h * F + i * I],
-      };
-    };
-    // the centres, as "y,z", of the circles drawn about the primitive's X axis
-    const centres = (file: string, at: Transform, found: Map<string, number>): void => {
-      for (const line of parseLDraw(readFileSync(join(LDRAW_DIR ?? '', 'p', file.replace(/\\/g, '/').toLowerCase()), 'utf8'))) {
-        if (line.kind !== 'ref') continue;
-        const placed = compose(at, line.matrix);
-        if (!circle.test(line.file)) {
-          centres(line.file, placed, found);
-          continue;
-        }
-        const [, b, , , e, , , h] = placed.m;
-        if (Math.abs(b) / Math.hypot(b, e, h) < 0.999) continue;
-        const key = `${Math.round(placed.t[1] * 100) / 100 + 0},${Math.round(placed.t[2] * 100) / 100 + 0}`;
-        found.set(key, (found.get(key) ?? 0) + 1);
-      }
-    };
+  it('turns each hinge primitive, click hinges and the older fingers, about where its round surfaces are centred', () => {
     for (const [name, primitive] of Object.entries(HINGE_PRIMITIVES)) {
-      const found = new Map<string, number>();
-      centres(`${name}.dat`, { m: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0] }, found);
-      const [most] = [...found.entries()].sort((p, q) => q[1] - p[1]);
-      expect(`${name} ${most?.[0]}`).toBe(`${name} ${primitive.through[1]},${primitive.through[2]}`);
+      expect(`${name} ${pivotOf(`${name}.dat`, primitive.axis)}`).toBe(`${name} ${lineThrough(primitive.through, primitive.axis)}`);
     }
   });
 
+  it('sets the older hinges and the turntables turning where their parts’ round surfaces are centred, and where LDraw’s assembled ones put their halves', () => {
+    for (const [file, joints] of Object.entries(HINGE_JOINTS)) {
+      for (const joint of joints) expect(`${file} ${pivotOf(file, joint.axis)}`).toBe(`${file} ${lineThrough(joint.at, joint.axis)}`);
+    }
+    // LDraw's own assembled hinges and turntables: each brings its two halves' joints together
+    const assembled: readonly (readonly [string, FlatConnector['kind'], FlatConnector['kind']])[] = [
+      ['3937c01.dat', 'hingebase', 'hingetop'],
+      ['73983.dat', 'swivelbase', 'swiveltop'],
+      ['3680c01.dat', 'turnbase', 'turntop'],
+      ['4508c01.dat', 'turnbase', 'turntop'],
+      ['3403c01.dat', 'turnbase4', 'turntop4'],
+      ['30516c01.dat', 'turnbase4', 'turntop4'],
+      ['61485c01.dat', 'turnflat', 'turnsnap'],
+    ];
+    for (const [file, base, top] of assembled) expect(`${file} ${together(joinsOf(file), base, top)}`).toBe(`${file} 1`);
+    // the 2 × 2 hinge top and the locking 4 × 4 turntable top are drawn from the plain ones, and turn as they do
+    expect(joinsOf('6134.dat').map((j) => j.kind)).toContain('hingetop');
+    expect(joinsOf('30658.dat').map((j) => j.kind)).toContain('turntop4');
+    // a 1 × 4 hinge brick's top swivels on a pin in its base's hole: put together about one origin, the pin is in the hole
+    const brick = joinsOf('hinge.ldr', withModel('hinge.ldr', '1 16 0 0 0 1 0 0 0 1 0 0 0 1 3831.dat\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 3830.dat'));
+    expect(together(brick, 'pin', 'pinhole')).toBe(1);
+    // a 1 × 4 hinge plate's small pivot is drawn with a Technic pin's primitive at two thirds its size: it is no Technic pin
+    expect(joinsOf('2430.dat').map((j) => j.kind)).toEqual(['swiveltop']);
+  });
+
+  it('leaves a ready-made assembly without the joints its own halves take', () => {
+    // a complete hinge brick keeps only its top's two open studs; complete swivelling hinge plates and turntables keep nothing
+    expect(freeOf('3937c01.dat')).toBe('barhole barhole');
+    for (const file of ['73983.dat', '3680c01.dat', '3403c01.dat', '30516c01.dat', '61485c01.dat']) expect(`${file}: ${freeOf(file)}`).toBe(`${file}: `);
+    // the turntable on a hinge plate keeps the plate's fingers
+    expect(freeOf('4508c01.dat')).toBe('fingers3');
+    // a torso with its arms and hands on keeps its neck, its waist and its hands' grips; hips with their legs on, the two studs a torso goes on
+    expect(freeOf('76382.dat')).toBe('neck waist waist clip clip');
+    expect(freeOf('73200b-f1.dat')).toBe('hips hips');
+    // a lightsaber's blade stands in its hilt: that end of the hilt is taken, the blade is still a bar to hold
+    expect(freeOf('64567ac01.dat')).toBe('bar bar barhole');
+    // the halves on their own keep theirs
+    expect(freeOf('3937.dat')).toBe('hingebase');
+    expect(freeOf('3938.dat')).toBe('barhole barhole hingetop');
+    expect(freeOf('973.dat')).toBe('neck waist waist shoulder shoulder');
+  });
+
+  it('finds the older hinge plates’ fingers, two to go between three, about one pivot', () => {
+    const fingersOf = (file: string) => joinsOf(file).filter((j) => j.kind === 'fingers2' || j.kind === 'fingers3');
+    const [three] = fingersOf('4275b.dat');
+    const [two] = fingersOf('4276b.dat');
+    expect([three?.kind, two?.kind]).toEqual(['fingers3', 'fingers2']);
+    // each 10 LDU beyond its plate's end, half way up it, across its width: turned half a turn, one's fingers go between the other's
+    for (const hinge of [three, two]) expect(hinge?.at.map((v) => Math.round(v * 100) / 100 + 0)).toEqual([30, 4, 0]);
+    expect(Math.abs(three?.axis[2] ?? 0)).toBeCloseTo(1, 6);
+    // a plate with both, one at each end
+    expect(fingersOf('4504.dat').map((j) => j.kind).sort()).toEqual(['fingers2', 'fingers3']);
+  });
+
   it('joins minifigures where LDraw’s own assembled minifigures put their parts', () => {
-    // a source with LDraw's files, and one more of our own on top
-    const withModel = (name: string, text: string): LibrarySource => {
-      const extra = memorySource({ [name]: text });
-      const library = directorySource(LDRAW_DIR ?? '');
-      return { read: (file) => extra.read(file) ?? library.read(file) };
-    };
-    const joinsOf = (file: string, source?: LibrarySource): FlatConnector[] => finishConnectors(new Flattener(source ?? directorySource(LDRAW_DIR ?? '')).flatten(file).connectors);
-    /** Pairs of joints of these kinds that sit together (to half an LDraw unit) along one line. */
-    const together = (joints: readonly FlatConnector[], a: FlatConnector['kind'], b: FlatConnector['kind']): number =>
-      joints
-        .filter((j) => j.kind === a)
-        .filter((j) =>
-          joints.some(
-            (k) =>
-              k.kind === b &&
-              Math.hypot(j.at[0] - k.at[0], j.at[1] - k.at[1], j.at[2] - k.at[2]) < 0.5 &&
-              Math.abs(j.axis[0] * k.axis[0] + j.axis[1] * k.axis[1] + j.axis[2] * k.axis[2]) > 0.999,
-          ),
-        ).length;
     // a torso with arms and hands: both shoulders hold an arm, both wrists a hand
     const torsoWithArms = joinsOf('76382.dat');
     expect(together(torsoWithArms, 'shoulder', 'arm')).toBe(2);
@@ -223,40 +297,8 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
   });
 
   it('holds bars on the line each clip primitive’s bar-sized round surfaces run round', () => {
-    const circle = /^(?:48\\|8\\)?\d+-\d+(?:cyli|cylc|cylo|cyls|ring\d*|ndis|disc|edge|con\d+|chrd|tndis)\.dat$/i;
-    const compose = (p: Transform, c: Transform): Transform => {
-      const [a, b, cc, d, e, f, g, h, i] = p.m;
-      const [A, B, C, D, E, F, G, H, I] = c.m;
-      const [x, y, z] = c.t;
-      return {
-        t: [p.t[0] + a * x + b * y + cc * z, p.t[1] + d * x + e * y + f * z, p.t[2] + g * x + h * y + i * z],
-        m: [a * A + b * D + cc * G, a * B + b * E + cc * H, a * C + b * F + cc * I, d * A + e * D + f * G, d * B + e * E + f * H, d * C + e * F + f * I, g * A + h * D + i * G, g * B + h * E + i * H, g * C + h * F + i * I],
-      };
-    };
     for (const [name, primitive] of Object.entries(ROD_PRIMITIVES)) {
-      const [ux, uy, uz] = primitive.axis;
-      // where the circles of a bar's radius about the primitive's axis are centred, the axis's own part left out
-      const found = new Map<string, number>();
-      const walk = (file: string, at: Transform): void => {
-        for (const line of parseLDraw(readFileSync(join(LDRAW_DIR ?? '', 'p', file.replace(/\\/g, '/').toLowerCase()), 'utf8'))) {
-          if (line.kind !== 'ref') continue;
-          const placed = compose(at, line.matrix);
-          if (!circle.test(line.file)) {
-            walk(line.file, placed);
-            continue;
-          }
-          const [a, b, , d, e, , g, h] = placed.m;
-          const length = Math.hypot(b, e, h);
-          if (Math.abs((b * ux + e * uy + h * uz) / length) < 0.999 || Math.abs(Math.hypot(a, d, g) - 4) > 0.1) continue;
-          const [x, y, z] = placed.t;
-          const along = x * ux + y * uy + z * uz;
-          const key = [x - along * ux, y - along * uy, z - along * uz].map((v) => Math.round(v * 100) / 100 + 0).join(',');
-          found.set(key, (found.get(key) ?? 0) + 1);
-        }
-      };
-      walk(`${name}.dat`, { m: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0] });
-      const [most] = [...found.entries()].sort((p, q) => q[1] - p[1]);
-      expect(`${name} ${most?.[0]}`).toBe(`${name} ${primitive.through.map((v) => v + 0).join(',')}`);
+      expect(`${name} ${pivotOf(`${name}.dat`, primitive.axis, 4)}`).toBe(`${name} ${lineThrough(primitive.through, primitive.axis)}`);
     }
   });
 

@@ -78,13 +78,16 @@ describe('library index', () => {
     const [end, hole] = toPartDef(index.parts[0] as LDrawIndexEntry).connectors ?? [];
     expect(end).toEqual({ kind: 'pin', at: { x: -0.5, y: 0.4, z: 0 }, axis: { x: -1, y: 0, z: 0 }, length: 1 });
     expect(hole?.kind).toBe('pinhole');
+    // a hinge brick's base, as version 12 lists them
+    const hinge: LDrawIndexEntry = { ...BRICK, id: '3937', name: 'Hinge 1 × 2 Base', connectors: [[21, 0, 0.7, 0, 1, 0, 0, 2]] };
+    expect(toPartDef(parseLDrawIndex({ version: 12, generated: '', parts: [hinge] }).parts[0] as LDrawIndexEntry).connectors?.[0]?.kind).toBe('hingebase');
     // a torso's neck, as version 9 lists them
     const torso: LDrawIndexEntry = { ...BRICK, id: '973', name: 'Minifig Torso', connectors: [[6, 0, 1.6, 0, 0, -1, 0, 0.2]] };
     expect(toPartDef(parseLDrawIndex({ version: 9, generated: '', parts: [torso] }).parts[0] as LDrawIndexEntry).connectors?.[0]?.kind).toBe('neck');
     expect(toPartDef(BRICK)).not.toHaveProperty('connectors');
     // no such kind, no axis, no length
     for (const connector of [
-      [19, 0, 0, 0, 1, 0, 0, 1],
+      [31, 0, 0, 0, 1, 0, 0, 1],
       [0, 0, 0, 0, 0, 0, 0, 1],
       [0, 0, 0, 0, 1, 0, 0, 0],
     ]) {
@@ -101,7 +104,7 @@ describe('library index', () => {
   });
 
   it('rejects damaged or unexpected indexes with a readable message', () => {
-    expect(() => parseLDrawIndex({ version: 12, generated: '', parts: [] })).toThrow(/damaged/);
+    expect(() => parseLDrawIndex({ version: 13, generated: '', parts: [] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, id: '../evil' }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex({ version: 2, generated: '', parts: [{ ...BRICK, w: 0 }] })).toThrow(/damaged/);
     expect(() => parseLDrawIndex('nope')).toThrow(/damaged/);

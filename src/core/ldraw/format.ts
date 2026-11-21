@@ -45,9 +45,13 @@ export type SideStudEntry = readonly [number, number, number, number];
  * pins, pin holes, axles and axle holes; click hinges' single fingers and
  * forks of two; minifigures' joints, each with its partner: a torso's
  * neck and a head, its waist and the hips' studs, the hips' axle and a leg,
- * a shoulder and an arm, a wrist and a hand; and bars, and the clips that
+ * a shoulder and an arm, a wrist and a hand; bars, and the clips that
  * hold them (a minifigure's hand among them) and the open studs they stand
- * in.
+ * in; and the older hinges and the turntables, each half with its other:
+ * hinge plates' two fingers and three, the base and top of a 1 × 2 hinge
+ * brick, of a 1 × 4 hinge plate that swivels, of a 2 × 2 and of a 4 × 4
+ * turntable, and a flat 4 × 4 turntable base and the round plate that
+ * snaps into it.
  */
 export const CONNECTOR_KINDS = [
   'pin',
@@ -69,6 +73,18 @@ export const CONNECTOR_KINDS = [
   'bar',
   'clip',
   'barhole',
+  'fingers2',
+  'fingers3',
+  'hingebase',
+  'hingetop',
+  'swivelbase',
+  'swiveltop',
+  'turnbase',
+  'turntop',
+  'turnbase4',
+  'turntop4',
+  'turnflat',
+  'turnsnap',
 ] as const;
 
 /**
@@ -132,12 +148,12 @@ export interface LDrawIndexEntry {
  * plates, version 7 studs on parts' sides, version 8 Technic and
  * click-hinge connections, version 9 minifigures' joints, version 10 bars
  * and clips, and the extent of parts' shapes, version 11 the open studs
- * bars stand in.
+ * bars stand in, version 12 the older hinges and turntables.
  */
-export const LDRAW_INDEX_VERSION = 11;
+export const LDRAW_INDEX_VERSION = 12;
 
 /** Index formats the app reads: in a version 1 library every part fills its whole box. */
-export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
+export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 
 /** Most side studs an index entry lists: a brick with studs all round its sides has a few dozen. */
 export const MAX_SIDE_STUDS = 128;

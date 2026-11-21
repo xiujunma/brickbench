@@ -234,3 +234,61 @@ describe('bars and clips', () => {
     expect(pluggedInto(clip, upright)).toBe(true);
   });
 });
+
+describe('the older hinges and turntables', () => {
+  it('sets a hinge’s top on its base as LDraw’s assembled hinge has it, and only on its own kind of base', () => {
+    const base = makeBrick({ id: 'base', partId: 'hinge-base' });
+    const top = plug(base, 'hinge-top', { x: 1, y: 1.2, z: 0.5 }, UP);
+    if (!top?.m) throw new Error('no top');
+    // closed, square to the base, in the top two plates of the base's own box
+    expect(box(top)).toEqual({ x: [0, 2], y: [0.4, 1.2], z: [0, 1] });
+    expect(top.m[0]).toBeCloseTo(1, 9);
+    expect(top.m[4]).toBeCloseTo(1, 9);
+    expect(pluggedInto(top, base)).toBe(true);
+    // a turntable's top is no hinge top
+    expect(plug(base, 'turn-top', { x: 1, y: 1.2, z: 0.5 }, UP)).toBeNull();
+  });
+
+  it('fits a hinge plate’s two fingers between another’s three, the plates end to end', () => {
+    // three fingers on its +X end, about a pivot half a stud beyond the plate, at x 2.5
+    const three = makeBrick({ id: 'three', partId: 'fingers-3' });
+    const two = plug(three, 'fingers-2', { x: 2.5, y: 0.4, z: 0.5 }, UP);
+    if (!two?.m) throw new Error('no plate');
+    // turned half a turn to face it, flat, its fingers among the other's: the two boxes share the stud the fingers fill
+    expect(box(two)).toEqual({ x: [2, 5], y: [0, 0.4], z: [0, 1] });
+    expect(two.m[0]).toBeCloseTo(-1, 9);
+    expect(two.m[4]).toBeCloseTo(1, 9);
+    expect(pluggedInto(two, three)).toBe(true);
+    // three fingers do not go into three, and a cursor well along the plate from the fingers is at its studs
+    expect(plug(three, 'fingers-3', { x: 2.5, y: 0.4, z: 0.5 }, UP)).toBeNull();
+    expect(plug(three, 'fingers-2', { x: 1.7, y: 0.4, z: 0.5 }, UP)).toBeNull();
+  });
+
+  it('chains a plate with fingers on both ends onto another like it, and never lays it over its twin', () => {
+    // a 1 × 6 with two fingers on its +X end (pivot at x 7.5) and three on the other (at x 0.5)
+    const first = makeBrick({ id: 'first', partId: 'fingers-both' });
+    // turned half a turn it would lie right over the first, the fingers of both its ends in the other's: a part goes into one hinge of another, not through it
+    const next = plug(first, 'fingers-both', { x: 7.5, y: 0.4, z: 0.5 }, UP);
+    if (!next?.m) throw new Error('no plate');
+    expect(box(next)).toEqual({ x: [7, 15], y: [0, 0.4], z: [0, 1] });
+    expect(next.m[0]).toBeCloseTo(1, 9);
+    expect(pluggedInto(next, first)).toBe(true);
+    const before = plug(first, 'fingers-both', { x: 0.5, y: 0.4, z: 0.5 }, UP);
+    expect(before && box(before)).toEqual({ x: [-7, 1], y: [0, 0.4], z: [0, 1] });
+    // R stands it on end on the hinge, its fingers still in the other's
+    const onEnd = plug(first, 'fingers-both', { x: 7.5, y: 0.4, z: 0.5 }, UP, { spin: 1, flipped: false });
+    if (!onEnd?.m) throw new Error('not turned');
+    expect(onEnd.m[4]).toBeCloseTo(0, 9);
+    expect(pluggedInto(onEnd, first)).toBe(true);
+  });
+
+  it('sets a turntable’s top on its base, squared up with it, and turns it a quarter with R', () => {
+    const base = makeBrick({ id: 'base', partId: 'turn-base', r: 1 });
+    const top = plug(base, 'turn-top', { x: 1.2, y: 0.4, z: 0.9 }, UP);
+    if (!top?.m) throw new Error('no top');
+    expect(box(top)).toEqual({ x: [0, 2], y: [0, 0.4], z: [0, 2] });
+    turnOf(1).forEach((v, i) => expect(top.m?.[i]).toBeCloseTo(v, 9));
+    const turned = plug(base, 'turn-top', { x: 1.2, y: 0.4, z: 0.9 }, UP, { spin: 1, flipped: false });
+    turnOf(2).forEach((v, i) => expect(Math.abs(turned?.m?.[i] ?? 9)).toBeCloseTo(Math.abs(v), 9));
+  });
+});

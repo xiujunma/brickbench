@@ -8,6 +8,7 @@ import { makeBrick } from './testUtils';
 import type { Brick } from './types';
 
 const UP = { x: 0, y: 1, z: 0 };
+const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1] as const;
 
 /** Builds `partId` plugged into `target` at the cursor, with id `id`. */
 function plug(target: Brick, partId: string, point: Vec3, normal: Vec3, id: string): Brick {
@@ -43,6 +44,14 @@ describe('connections of placed parts', () => {
     // a minifigure's head on its neck, hips under its waist, legs, arms and hands
     for (const [a, b] of [['neck', 'head'], ['hips', 'waist'], ['hip', 'leg'], ['arm', 'shoulder'], ['wrist', 'hand']] as const) expect(mates(a, b)).toBe(true);
     expect(mates('head', 'waist')).toBe(false);
+    // the older hinges and the turntables: each half with its own other half only
+    for (const [a, b] of [['fingers2', 'fingers3'], ['hingetop', 'hingebase'], ['swivelbase', 'swiveltop'], ['turntop', 'turnbase'], ['turnbase4', 'turntop4'], ['turnsnap', 'turnflat']] as const) {
+      expect(mates(a, b)).toBe(true);
+      expect(turnsFreely(a, b)).toBe(true);
+    }
+    expect(mates('hingetop', 'turnbase')).toBe(false);
+    expect(mates('fingers2', 'fork')).toBe(false);
+    expect(mates('turntop', 'turnbase4')).toBe(false);
     // a bar in a clip, or in a minifigure's hand, which turns in it
     expect(mates('clip', 'bar')).toBe(true);
     expect(mates('barhole', 'bar')).toBe(true);
@@ -84,6 +93,63 @@ describe('what a group hangs by', () => {
       expect(hold.pivot.x).toBeCloseTo(0.5, 9);
       expect(hold.pivot.z).toBeCloseTo(1.5, 9);
     }
+  });
+
+  it('swings a hinge’s top on its base, and with it what stands on the base’s cells over it', () => {
+    const base = makeBrick({ id: 'base', partId: 'hinge-base', y: 3 });
+    // plugged in where LDraw's assembled hinge puts the top: loose, inside the top of the base's box
+    const top = { ...makeBrick({ id: 'top', partId: 'hinge-top', y: 4 }), m: IDENTITY };
+    const hold = holdOf([top], [makeBrick({ id: 'under', partId: 'brick-2x4' }), base, top], lookup);
+    if (hold.kind !== 'joint') throw new Error(`the top is held ${hold.kind}`);
+    expect(Math.abs(hold.axis.x)).toBeCloseTo(1, 9);
+    expect(hold.pivot.y).toBeCloseTo(3 * 0.4 + 0.7, 9);
+    // a plate on the grid over the closed top stands on the base's cells, which reach up round the top: with the top it swings,
+    // for the base holds the two by the hinge, not by studs
+    const plate = makeBrick({ id: 'plate', partId: 'plate-1x2', y: 6 });
+    expect(holdOf([top, plate], [base, top, plate], lookup).kind).toBe('joint');
+    // with a brick on the plate's own studs they stay put, unless it comes along
+    const above = makeBrick({ id: 'above', partId: 'plate-1x2', y: 7 });
+    expect(holdOf([top, plate], [base, top, plate, above], lookup).kind).toBe('rigid');
+    expect(holdOf([top, plate, above], [base, top, plate, above], lookup).kind).toBe('joint');
+    // the top alone swings out from under what stands on it: only what is selected swings
+    expect(holdOf([top], [base, top, plate], lookup).kind).toBe('joint');
+  });
+
+  it('swings with a turntable’s top what stands on it, though the top stops short of the top of its base’s cells', () => {
+    const base = makeBrick({ id: 'base', partId: 'turn-base-4', y: 3 });
+    // on the base as LDraw's assembled turntable has it, three quarters of a plate up: its cells stop a quarter of a plate under the base's
+    const top = { ...makeBrick({ id: 'top', partId: 'turn-top-4', y: 3.75 }), m: IDENTITY };
+    const plate = makeBrick({ id: 'plate', partId: 'plate-1x2', x: 1, y: 6, z: 1 });
+    expect(holdOf([top], [base, top, plate], lookup).kind).toBe('joint');
+    expect(holdOf([top, plate], [base, top, plate], lookup).kind).toBe('joint');
+  });
+
+  it('leaves on a brick’s studs what stands on it beside the part plugged into it, or over a pin in it', () => {
+    // a 1 × 4 hinge plate: its top swivels at x 2, and lies over all of the base but its first stud
+    const base = makeBrick({ id: 'base', partId: 'swivel-base', y: 3 });
+    const top = plug(base, 'swivel-top', { x: 2, y: 1.6, z: 1 }, UP, 'top');
+    expect(holdOf([top], [base, top], lookup).kind).toBe('joint');
+    // a plate on that first stud stands on the base alone: selected with the top, it holds the two where they are
+    const beside = makeBrick({ id: 'beside', partId: 'plate-1x1', y: 4 });
+    expect(holdOf([top, beside], [base, top, beside], lookup).kind).toBe('rigid');
+    // one over the top swings with it
+    const over = makeBrick({ id: 'over', partId: 'plate-1x1', x: 3, y: 4 });
+    expect(holdOf([top, over], [base, top, over], lookup).kind).toBe('joint');
+    // a pin in a Technic brick's hole is nothing to stand on: a plate on the brick's studs, over the pin, stays on them
+    const brick = makeBrick({ id: 'brick', partId: 'technic-brick', y: 3 });
+    const pin = plug(brick, 'pin', { x: 1.05, y: 1.95, z: 1 }, { x: 0, y: 0, z: 1 }, 'pin');
+    const plate = makeBrick({ id: 'plate', partId: 'plate-1x2', y: 6 });
+    expect(holdOf([pin], [brick, pin, plate], lookup).kind).toBe('joint');
+    expect(holdOf([pin, plate], [brick, pin, plate], lookup).kind).toBe('rigid');
+  });
+
+  it('turns on the grid, as a brick on studs always has, when the brick under it happens to hold it by a connection as well', () => {
+    // a bar standing on the grid in a round brick's open stud: stacked there like any brick, no loose part about
+    const round = makeBrick({ id: 'round', partId: 'round-brick' });
+    const bar = makeBrick({ id: 'bar', partId: 'bar', y: 3 });
+    expect(holdOf([bar], [round, bar], lookup).kind).toBe('rigid');
+    // plugged in loose, at the same place, it turns in the stud
+    expect(holdOf([{ ...bar, m: IDENTITY }], [round, bar], lookup).kind).toBe('joint');
   });
 
   it('stays put on the baseplate, whatever is plugged into it', () => {

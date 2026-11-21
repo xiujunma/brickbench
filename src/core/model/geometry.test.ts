@@ -238,6 +238,9 @@ describe('swinging parts about a line', () => {
     // turned a quarter, its 4-stud side runs along Z, centred on the origin
     expect([placed.x, placed.y, placed.z]).toEqual([-1, 0, -2]);
     expect(placed.r).toBe(1);
+    // where the sums leave noise in the last digit, the position comes out clean
+    const third = placeLoose(makeBrick({ partId: 'plate-1x1' }), lookup, { x: 10, y: 8.000000000000002, z: 10 }, [1, 0, 0, 0, 1, 0, 0, 0, 1]);
+    expect([third.x, third.y, third.z]).toEqual([0, 1, 0]);
   });
 });
 

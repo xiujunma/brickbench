@@ -9,7 +9,7 @@ const keys = (...list: string[]) => list.map((key) => <kbd key={key}>{key}</kbd>
 
 const MOUSE: readonly Row[] = [
   ['Place a part (Build)', 'Click'],
-  ['Plug into a Technic pin, hole or axle, a hinge, a minifigure, a bar or a clip', 'Click at it with a part that fits'],
+  ['Plug into a Technic pin, hole or axle, a hinge, a turntable, a minifigure, a bar or a clip', 'Click at it with a part that fits'],
   ['Drop a part from the library', 'Drag its tile'],
   ['Orbit', 'Right-drag · Alt-drag'],
   ['Orbit in Build, Paint, Erase', 'Left-drag'],
@@ -23,7 +23,7 @@ const MOUSE: readonly Row[] = [
 
 const KEYBOARD: readonly Row[] = [
   ['Select · Build · Paint · Erase', keys('V', 'B', 'P', 'E')],
-  ['Rotate (back); a selection on a hinge, pin, axle or minifigure joint swings 15°', keys('R', '⇧R')],
+  ['Rotate (back); a selection on a hinge, turntable, pin, axle or minifigure joint swings 15°', keys('R', '⇧R')],
   ['Tip over, on a side or upside down (back)', keys('T', '⇧T')],
   ['Nudge selection', keys('←', '↑', '→', '↓')],
   ['Raise / lower a plate', keys('⇧↑', '⇧↓')],

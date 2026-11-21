@@ -47,7 +47,7 @@ describe('part library', () => {
       .fn<Fetch>()
       .mockRejectedValueOnce(new TypeError('offline'))
       .mockResolvedValueOnce(json('{not json'))
-      .mockResolvedValueOnce(json({ ...INDEX, version: 12 }))
+      .mockResolvedValueOnce(json({ ...INDEX, version: 13 }))
       .mockResolvedValueOnce(json('', 500))
       .mockResolvedValueOnce(json(INDEX));
     const library = createPartLibrary('/', fetch);

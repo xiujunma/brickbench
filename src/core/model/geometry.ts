@@ -269,11 +269,13 @@ export function placeLoose<B extends PlacedPart>(brick: B, lookup: PartLookup, o
   const part = requirePart(lookup, brick.partId);
   const m = orthonormalize(turn);
   const box = turnBox(m, localBox(part, wholeBox(part)));
+  // to a million-millionth: exact for anything a model can show, without the last-digit noise of the sums, and too fine to drift over many swings
+  const tidy = (value: number): number => Math.round(value * 1e12) / 1e12 + 0;
   return {
     ...brick,
-    x: (origin.x + box.x0) / LDU_PER_STUD + 0,
-    y: (origin.y + box.y0) / LDU_PER_PLATE + 0,
-    z: (origin.z + box.z0) / LDU_PER_STUD + 0,
+    x: tidy((origin.x + box.x0) / LDU_PER_STUD),
+    y: tidy((origin.y + box.y0) / LDU_PER_PLATE),
+    z: tidy((origin.z + box.z0) / LDU_PER_STUD),
     r: nearestOrientation(m),
     m,
   };

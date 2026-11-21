@@ -8,16 +8,11 @@
  * hands; 73200b-f1.dat, hips with legs); the library verify test checks
  * them against those files. Each joint is in its file's LDraw frame.
  */
-import type { FlatConnector } from './connectors.ts';
+import { setJoint as joint, type FlatConnector } from './connectors.ts';
 import type { V3 } from './parse.ts';
 
 const UP: V3 = [0, 1, 0];
 const ACROSS: V3 = [1, 0, 0];
-
-function joint(kind: FlatConnector['kind'], at: V3, [x, y, z]: V3, length: number): FlatConnector {
-  const size = Math.hypot(x, y, z);
-  return { kind, at, axis: [x / size, y / size, z / size], length, outward: 0 };
-}
 
 /** A head's underside, 24 LDU under the hollow stud on its top, which every standard head is drawn with. */
 const HEAD = [joint('head', [0, 24, 0], UP, 4)];
