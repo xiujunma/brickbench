@@ -320,6 +320,40 @@ export const YOKE_BRICK = { ...part('yoke-brick', 5, 1, 5, [{ kind: 'yoke', at: 
 /** A 1 × 1 round brick with an open stud, as LDraw 3062b: a bar-sized hole down its stud. */
 export const ROUND_BRICK = part('round-brick', 1, 1, 3, [{ kind: 'barhole', at: { x: 0, y: 1.3, z: 0 }, axis: Y, length: 0.2 }]);
 
+/** A battle droid's torso, as LDraw 30375: bars across for its shoulders, its neck between them, and its hips, which LDraw draws it about. */
+export const DROID_TORSO = {
+  ...part('droid-torso', 2, 1, 6, [
+    { kind: 'bar', at: { x: -0.7875, y: 1.85, z: -0.05 }, axis: X, length: 0.425 },
+    { kind: 'bar', at: { x: 0, y: 1.85, z: -0.05 }, axis: X, length: 0.6 },
+    { kind: 'bar', at: { x: 0, y: 0.25, z: -0.05 }, axis: X, length: 0.6 },
+    { kind: 'bar', at: { x: 0.7875, y: 1.85, z: -0.05 }, axis: X, length: 0.425 },
+  ]),
+  extent: { min: { x: -1, y: 0, z: -0.6 }, max: { x: 1, y: 2.15, z: 0.4 } },
+  ldraw: { file: '30375.dat', origin: [0, 0.25, -0.05] as const },
+};
+/**
+ * A battle droid's arm, as LDraw 30377: a clip at each end, the shoulder's
+ * at the top, where LDraw draws the arm about, and the hand's 1.91 studs
+ * below and 0.6 in front. And one drawn about neither of its clips: about
+ * a point a stud in front of the upper one.
+ */
+const DROID_ARM_CLIPS: readonly Connector[] = [
+  { kind: 'clip', at: { x: 0, y: 2.2354, z: -0.2986 }, axis: NEG_X, length: 0.4 },
+  { kind: 'clip', at: { x: 0, y: 0.3254, z: 0.3034 }, axis: NEG_X, length: 0.4 },
+];
+const DROID_ARM_EXTENT = { min: { x: -0.2, y: 0, z: -0.63 }, max: { x: 0.2, y: 2.49, z: 0.63 } };
+export const DROID_ARM = { ...part('droid-arm', 1, 1, 6, DROID_ARM_CLIPS), extent: DROID_ARM_EXTENT, ldraw: { file: '30377.dat', origin: [0, 2.2354, -0.2986] as const } };
+export const LINK = { ...part('link', 1, 1, 6, DROID_ARM_CLIPS), extent: DROID_ARM_EXTENT, ldraw: { file: 'link.dat', origin: [0, 2.2354, 0.7] as const } };
+/** A droid's bent arm, as LDraw 87568: drawn about its shoulder's clip, which holds a bar across; its hand's holds one upright, in front. */
+export const BENT_ARM = {
+  ...part('bent-arm', 1, 3, 4, [
+    { kind: 'clip', at: { x: 0, y: 1.135, z: -0.9137 }, axis: NEG_X, length: 0.4 },
+    { kind: 'clip', at: { x: 0, y: 0.225, z: 1.0863 }, axis: Y, length: 0.4 },
+  ]),
+  extent: { min: { x: -0.4, y: 0, z: -1.3 }, max: { x: 0.4, y: 1.51, z: 1.3 } },
+  ldraw: { file: '87568.dat', origin: [0, 1.135, -0.9137] as const },
+};
+
 const TECHNIC = new Map(
   [
     PIN,
@@ -352,6 +386,10 @@ const TECHNIC = new Map(
     ANTENNA,
     SWORD,
     ROUND_BRICK,
+    DROID_TORSO,
+    DROID_ARM,
+    LINK,
+    BENT_ARM,
     HINGE_BASE,
     HINGE_TOP,
     HINGE_TOP_2X2,

@@ -248,6 +248,60 @@ describe('bars and clips', () => {
     expect(plug(hanging, 'sword', { x: 0.5, y: 4.7, z: 0.5 }, { x: 0, y: -1, z: 0 })?.m?.[4]).toBeCloseTo(-1, 9);
   });
 
+  it('hangs a part with a clip at each end by the clip LDraw draws it about: a droid’s arm by its shoulder’s, not its hand’s', () => {
+    // a droid's torso where its legs hold it, 2 studs up: its left shoulder a bar across at x 0.2125, 3.85 up, z 0.45
+    const torso = makeBrick({ id: 'torso', partId: 'droid-torso', y: 5 });
+    const shoulder = { x: 0.2, y: 3.9, z: 0.5 };
+    const LEFT = { x: -1, y: 0, z: 0 };
+    /** Which of the part's two clips holds the bar (0 its upper one), and how far above and in front of it the other is. */
+    const hangs = (partId: string, turned: ConnectTurn, on = torso, at = shoulder): readonly [held: number, above: number, front: number] => {
+      const brick = plug(on, partId, at, LEFT, turned);
+      if (!brick) throw new Error(`no ${partId}`);
+      const clips = brickConnectors(brick, lookup);
+      const held = clips.findIndex((clip) => brickConnectors(on, lookup).some((bar) => engaged(clip, bar)));
+      const [mine, other] = [clips[held], clips[1 - held]];
+      const round = (v: number): number => Math.round(v * 100) / 100 + 0;
+      return [held, round((other?.at.y ?? 0) - (mine?.at.y ?? 0)), round((other?.at.z ?? 0) - (mine?.at.z ?? 0))];
+    };
+    // the arm goes on by its shoulder clip and hangs down from it, its hand's clip 1.91 studs under the bar; T turns it round where
+    // it hangs, hand to the front or to the back: one of the two is the way LDraw's assembled droid has it, hand 0.6 in front
+    expect(hangs('droid-arm', STILL)).toEqual([0, -1.91, -0.6]);
+    expect(hangs('droid-arm', { spin: 0, flipped: true })).toEqual([0, -1.91, 0.6]);
+    // on the right shoulder too, whose free end is its bar's other end
+    expect(hangs('droid-arm', STILL, torso, { x: 1.8, y: 3.9, z: 0.5 }).slice(0, 2)).toEqual([0, -1.91]);
+    // R swings it about the shoulder, forwards, up and back, the same clip on the bar: it never ends up clipped on by its hand
+    expect(hangs('droid-arm', { spin: 1, flipped: false })[0]).toBe(0);
+    expect(hangs('droid-arm', { spin: 2, flipped: false })).toEqual([0, 1.91, 0.6]);
+    expect(hangs('droid-arm', { spin: 3, flipped: false })[0]).toBe(0);
+    // on the bar where LDraw's assembled droid has it: the arm's shoulder clip at the shoulder's outer end, 0.8 studs from the middle
+    const arm = plug(torso, 'droid-arm', shoulder, LEFT);
+    expect(brickConnectors(arm as Brick, lookup)[0]?.at.x).toBeCloseTo(0.2, 9);
+    expect(brickConnectors(arm as Brick, lookup)[0]?.at.y).toBeCloseTo(3.85, 9);
+    // a part with the same two clips that is drawn about neither goes on as ever: by the one that leaves it clearest of the torso,
+    // standing up from the bar
+    expect(hangs('link', STILL).slice(0, 2)).toEqual([1, 1.91]);
+    // and so does the arm on a torso standing on the baseplate, where it would hang into the ground: it stands up from the
+    // shoulder by its hand's clip, a way it can be built
+    const low = makeBrick({ id: 'low', partId: 'droid-torso' });
+    expect(hangs('droid-arm', STILL, low, { x: 0.2, y: 1.9, z: 0.5 }).slice(0, 2)).toEqual([1, 1.91]);
+    // and at the torso's neck, a bar between its shoulders with no free end, where an arm hung by its shoulder's clip would
+    // hang through the torso: there too it stands clear, as ever
+    expect(hangs('droid-arm', STILL, torso, { x: 1, y: 3.9, z: 0.5 }).slice(0, 2)).toEqual([1, 1.91]);
+    /** Which of the part's connections is plugged into the target's, and how upright the part stands (1 as it is drawn). */
+    const heldBy = (on: Brick, partId: string, at: Vec3, normal: Vec3): readonly [held: number, upright: number] => {
+      const brick = plug(on, partId, at, normal);
+      if (!brick) throw new Error(`no ${partId}`);
+      return [brickConnectors(brick, lookup).findIndex((mine) => brickConnectors(on, lookup).some((theirs) => engaged(mine, theirs))), Math.round((brick.m?.[4] ?? 1) * 100) / 100];
+    };
+    // standing upright comes first: a bent arm, drawn about its shoulder's clip too, goes on the shoulder by that clip, but holds an
+    // upright bar by its hand's, which stands it upright, where its shoulder's would lay it on its side
+    expect(heldBy(torso, 'bent-arm', shoulder, LEFT)).toEqual([0, 1]);
+    expect(heldBy(makeBrick({ id: 'bar', partId: 'bar' }), 'bent-arm', { x: 0.8, y: 2.1, z: 0.5 }, { x: 1, y: 0, z: 0 })).toEqual([1, 1]);
+    // and it is clips this goes for: a droid's torso, drawn about the bar of its hips, goes into a clip as ever, by the bar that
+    // leaves it clearest of the clip's part, a shoulder's
+    expect(heldBy(makeBrick({ id: 'plate', partId: 'clip-plate', y: 9 }), 'droid-torso', { x: 0.55, y: 3.95, z: 2 }, { x: 0, y: 0, z: 1 })).toEqual([0, 1]);
+  });
+
   it('slides a clip along a bar, half a stud at a time', () => {
     const upright = makeBrick({ id: 'bar', partId: 'bar' });
     const clip = plug(upright, 'clip-plate', { x: 0.8, y: 2.1, z: 0.5 }, { x: 1, y: 0, z: 0 });

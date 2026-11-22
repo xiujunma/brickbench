@@ -87,6 +87,9 @@ describe('library index', () => {
     // a car roof's fingers and a control stick, as version 13 lists them
     const roof: LDrawIndexEntry = { ...BRICK, id: '4213', name: 'Hinge Car Roof 4 × 4', connectors: [[31, 0, 0.2, -1.8, 1, 0, 0, 3.6], [36, 0, 0, 0, 1, 0, 0, 0.2]] };
     expect(toPartDef(parseLDrawIndex({ version: 13, generated: '', parts: [roof] }).parts[0] as LDrawIndexEntry).connectors?.map((c) => c.kind)).toEqual(['fingers4', 'stick']);
+    // a tile's clip, found by its shape, as version 14 lists them: the same kind of connection as any clip
+    const tile: LDrawIndexEntry = { ...BRICK, id: '2555', name: 'Tile 1 × 1 with Clip', connectors: [[17, 0, 0.7, 0, 0, 0, 1, 0.4]] };
+    expect(toPartDef(parseLDrawIndex({ version: 14, generated: '', parts: [tile] }).parts[0] as LDrawIndexEntry).connectors?.[0]?.kind).toBe('clip');
     expect(toPartDef(BRICK)).not.toHaveProperty('connectors');
     // no such kind, no axis, no length
     for (const connector of [

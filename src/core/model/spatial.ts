@@ -1,7 +1,7 @@
 import { GRID_LIMIT, LDU_PER_UNIT, MAX_LAYER, type Vec3 } from '../grid';
 import type { PartLookup } from '../parts/types';
 import { pluggedTogether } from './connections';
-import { LDU_PER_PLATE, LDU_PER_STUD, WHOLE_CELL, brickCellBox, brickCellQuarters, brickLduSolids, isLoose, isOnGrid, sameBox, type LduBox, brickFloor } from './geometry';
+import { LDU_PER_PLATE, LDU_PER_STUD, WHOLE_CELL, brickCellBox, brickCellQuarters, brickLduSolids, isLoose, isOnGrid, sameBox, type LduBox, type PlacedPart, brickFloor } from './geometry';
 import type { Brick } from './types';
 
 /**
@@ -304,7 +304,7 @@ export function doubles(brick: Brick, others: Iterable<Brick>, lookup: PartLooku
 }
 
 /** Whether a brick reaches out of the build area: below the ground (by its shape, for a loose part at an angle), above the top, or past an edge. */
-export function isOutOfBounds(brick: Brick, lookup: PartLookup): boolean {
+export function isOutOfBounds(brick: PlacedPart, lookup: PartLookup): boolean {
   const box = brickCellBox(brick, lookup);
   return (
     brickFloor(brick, lookup) < -1e-6 ||

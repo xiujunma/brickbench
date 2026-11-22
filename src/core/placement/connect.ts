@@ -26,6 +26,7 @@ import {
   type WorldConnector,
 } from '../model/connections';
 import { brickCellBox, brickTurn, placeLoose } from '../model/geometry';
+import { isOutOfBounds } from '../model/spatial';
 import type { Brick } from '../model/types';
 import { multiplyTurns, rotateBy, transposeTurn, turnAbout, type Turn } from '../orientation';
 import type { Connector, PartDef, PartLookup } from '../parts/types';
@@ -143,13 +144,22 @@ function isSlimAbout(bar: Connector, part: PartDef): boolean {
  */
 function barEnds(bar: Connector, part: PartDef): (1 | -1)[] {
   if (!isSlimAbout(bar, part)) return [];
-  const corners = shapeCorners(part);
-  const reach = (way: 1 | -1): number => Math.max(...corners.map((corner) => way * dot(minus(corner, bar.at), bar.axis)));
   const upright = Math.abs(bar.axis.y) > 0.999;
   // the far end (where the axis points) is the top of an upright bar whose axis points up, the near end of one whose axis points down
   const isTop = (way: 1 | -1): boolean => upright && way * bar.axis.y > 0;
-  const goesIn = (way: 1 | -1): boolean => reach(way) <= bar.length / 2 + FREE_END && !isTop(way);
+  const goesIn = (way: 1 | -1): boolean => isFreeEnd(bar, part, way) && !isTop(way);
   return [...(goesIn(-1) ? [1 as const] : []), ...(goesIn(1) ? [-1 as const] : [])];
+}
+
+/** Whether a bar's end is free: its far end (`way` 1, where its axis points) or its near one, the part reaching no further that way than the bar does. */
+function isFreeEnd(bar: Connector, part: PartDef, way: 1 | -1): boolean {
+  const reach = Math.max(...shapeCorners(part).map((corner) => way * dot(minus(corner, bar.at), bar.axis)));
+  return reach <= bar.length / 2 + FREE_END;
+}
+
+/** Whether a bar sticks out of its part, an end of it free: a droid's shoulder, where its neck and the bar of its hips lie between the rest of it. */
+function sticksOut(bar: Connector, part: PartDef): boolean {
+  return isFreeEnd(bar, part, 1) || isFreeEnd(bar, part, -1);
 }
 
 /**
@@ -279,6 +289,22 @@ const NOTHING_TAKEN: TakenOf = () => [];
  */
 type Seat = readonly [placed: WorldConnector, into: readonly [WorldConnector, ...WorldConnector[]]];
 
+/** How near the point LDraw draws a part about one of its clips must be to be the one the part goes on by, in studs. */
+const DRAWN_ABOUT = 0.05;
+
+/**
+ * Whether a part is drawn about this connection of its own: LDraw draws a
+ * part that turns on something about the point it turns on, a droid's or a
+ * skeleton's arm about the clip at its shoulder. Such a part goes onto a
+ * bar that sticks out of its part, a shoulder, by that clip rather than by
+ * another of its clips, its hand's, where it stands as upright either way
+ * and is not left under the ground (see fitsOf).
+ */
+function drawnAbout(plug: Connector, part: PartDef): boolean {
+  const origin = part.ldraw?.origin;
+  return origin !== undefined && Math.hypot(plug.at.x - origin[0], plug.at.y - origin[1], plug.at.z - origin[2]) < DRAWN_ABOUT;
+}
+
 /** The part's connections that are plugged into the target's, with the part placed at `origin`, turned by `turn`. */
 function seatsOf(plugs: readonly Connector[], sockets: readonly WorldConnector[], origin: Vec3, turn: Turn): Seat[] {
   return plugs.flatMap((plug): Seat[] => {
@@ -326,9 +352,14 @@ function turnsFor(plug: Connector, socket: WorldConnector, hit: Hit, part: PartD
 /**
  * Every way the payload's part plugs into the socket, scored: the most of
  * its connections plugged into the target's (a torso on both the hips'
- * studs, not one), then most upright, then least in the target's way, then
- * (but for round connections, whose turn means nothing) facing most as the
- * target does, then turned least. A hinge's or a turntable's half goes on
+ * studs, not one), then most upright, then, on a bar that sticks out of
+ * its part, by the clip the part is drawn about before any other of its
+ * clips (drawnAbout), unless that would leave it under the ground or out
+ * of the build area, then least in the target's way as its box and the
+ * target's tell it, then (but for round connections, whose turn means nothing)
+ * facing most as the target does, then turned least. Which of its own
+ * connections a part goes on by is settled here: R and T turn it about
+ * that one. A hinge's or a turntable's half goes on
  * one way, as the two are drawn together (restTurn), from which R and T
  * still turn it. A part goes into one of the target's
  * hinges, not into two on different lines at once: fingers hold a part to
@@ -342,21 +373,28 @@ function fitsOf(part: PartDef, brick: PayloadBrick, socket: WorldConnector, hit:
   const targetBox = brickCellBox(target, lookup);
   const facing = isRound(socket.kind) ? null : brickTurn(target);
   const sockets = brickConnectors(target, lookup);
+  // the socket as its own part has it, to tell a bar that sticks out of that part
+  const targetPart = lookup(target.partId);
+  const own = socket.kind === 'bar' ? targetPart?.connectors?.[sockets.findIndex((other) => other.kind === socket.kind && length(minus(other.at, socket.at)) < 1e-9 && Math.abs(dot(other.axis, socket.axis)) > 1 - 1e-9)] : undefined;
   const fits: Fit[] = [];
   for (const plug of plugs) {
     if (!plugsInto(plug, socket, part)) continue;
     const asTarget = dot(rotateBy(brickTurn(target), plug.axis), socket.axis) < 0 ? -1 : 1;
     const middle = placeOn(plug, socket, hit, takenOf(socket), asTarget);
     if (middle === null) continue;
+    // an arm on a shoulder: by the clip it is drawn about (only a clip goes onto a bar), onto a bar with a free end
+    const about = drawnAbout(plug, part) && own !== undefined && targetPart !== undefined && sticksOut(own, targetPart);
     for (const turn of turnsFor(plug, socket, hit, part, target, asTarget)) {
       const origin = minus(middle, rotateBy(turn, plug.at));
       const [a, , , , e, , , , i] = turn;
-      const box = brickCellBox(placedAt(brick, origin, turn, lookup), lookup);
+      const placed = placedAt(brick, origin, turn, lookup);
+      const box = brickCellBox(placed, lookup);
       const seated = seatsOf(plugs, sockets, origin, turn);
       if (!haveRoom(seated, takenOf)) continue;
       const [hinge, ...hinges] = seated.map(([, [into]]) => into).filter((other) => FINGERED.includes(other.kind));
       if (hinge && hinges.some((other) => !onOneLine(hinge, other))) continue;
-      fits.push({ turn, origin, middle, score: [-seated.length, -e, overlap(box, targetBox), facing ? -closeness(facing, turn) : 0, -(a + e + i)] });
+      const byItsOwn = about && !isOutOfBounds(placed, lookup) ? 0 : 1;
+      fits.push({ turn, origin, middle, score: [-seated.length, -e, byItsOwn, overlap(box, targetBox), facing ? -closeness(facing, turn) : 0, -(a + e + i)] });
     }
   }
   return fits;

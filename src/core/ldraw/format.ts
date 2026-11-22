@@ -161,12 +161,14 @@ export interface LDrawIndexEntry {
  * and clips, and the extent of parts' shapes, version 11 the open studs
  * bars stand in, version 12 the older hinges and turntables, version 13
  * the rarer hinges: car roofs and canopies, folding hinge plates, control
- * sticks and 1 × 8 hinge bricks.
+ * sticks and 1 × 8 hinge bricks, version 14 the clips LDraw draws with
+ * plain shapes (the entries read as before; a library built earlier lacks
+ * those clips, and counts as out of date).
  */
-export const LDRAW_INDEX_VERSION = 13;
+export const LDRAW_INDEX_VERSION = 14;
 
 /** Index formats the app reads: in a version 1 library every part fills its whole box. */
-export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const;
+export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] as const;
 
 /** Most side studs an index entry lists: a brick with studs all round its sides has a few dozen. */
 export const MAX_SIDE_STUDS = 128;

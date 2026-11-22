@@ -12,9 +12,10 @@ import { describe, expect, it } from 'bun:test';
 import { decodePartMesh, encodePartMesh } from '../../src/core/ldraw/format.ts';
 import { readColourTable } from './colours.ts';
 import { allConnectors, finishConnectors, HINGE_PRIMITIVES, ROD_PRIMITIVES, type FlatConnector } from './connectors.ts';
+import { CLIP_JOINTS } from './clipJoints.ts';
 import { HINGE_JOINTS } from './hingeJoints.ts';
 import { convertPart } from './convert.ts';
-import { Flattener } from './flatten.ts';
+import { Flattener, type FlatTriangle } from './flatten.ts';
 import { directorySource, memorySource, type LibrarySource } from './library.ts';
 import { parseLDraw, type Transform } from './parse.ts';
 
@@ -107,11 +108,12 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
   };
   const pivotOf = (file: string, axis: readonly [number, number, number], radius?: number): string | undefined => pivotsOf(file, axis, radius)[0];
   /**
-   * Whether a file is drawn with a rod at `s` along a joint's line from its
-   * middle: a surface `radius` from the line, facing out from it. A seat a
-   * rod turns in is that far from the line too, and faces in.
+   * Which way the surface a file is drawn with faces, `radius` from a
+   * joint's line at `s` along it from its middle: above 0 out from the line
+   * (a rod), below 0 in towards it (a seat a rod turns in, the inside of a
+   * clip); 0 where there is none.
    */
-  const rodAt = (file: string, joint: FlatConnector, s: number, radius = 4): boolean => {
+  const facingAt = (file: string, joint: FlatConnector, s: number, radius: number): number => {
     let out = 0;
     for (const { a, b, c } of new Flattener(library).flatten(file).triangles) {
       const corners = [a, b, c].map((p) => {
@@ -125,8 +127,77 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
       const normal = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]] as const;
       for (const { radial } of corners) out += normal[0] * radial[0] + normal[1] * radial[1] + normal[2] * radial[2];
     }
-    return out > 0;
+    return out;
   };
+  /** Whether a file is drawn with a rod at `s` along a joint's line from its middle. */
+  const rodAt = (file: string, joint: FlatConnector, s: number, radius = 4): boolean => facingAt(file, joint, s, radius) > 0;
+
+  const drawings = new Map<string, readonly FlatTriangle[]>();
+  /** The triangles a file is drawn with, flattened once. */
+  const trianglesOf = (file: string): readonly FlatTriangle[] => {
+    const known = drawings.get(file) ?? new Flattener(library).flatten(file).triangles;
+    drawings.set(file, known);
+    return known;
+  };
+  /** How near a bar's radius (4 LDU) a surface must be to count as a bar's or a clip's, in LDU. */
+  const BAR_SURFACE = 0.12;
+  /**
+   * How much of a turn the surfaces a file is drawn with go round a joint's
+   * line, a bar's radius from it, at `s` along it from its middle: those
+   * facing in towards the line (the inside of a clip) and those facing out
+   * from it (a rod), each from 0 to 1.
+   */
+  const wallAt = (file: string, joint: FlatConnector, s: number): { readonly inwards: number; readonly outwards: number } => {
+    const [x, y, z] = joint.axis;
+    const side = Math.abs(y) < 0.9 ? ([z, 0, -x] as const) : ([0, -z, y] as const);
+    const size = Math.hypot(...side);
+    const u = [side[0] / size, side[1] / size, side[2] / size] as const;
+    const v = [y * u[2] - z * u[1], z * u[0] - x * u[2], x * u[1] - y * u[0]] as const;
+    const degrees = { inwards: new Set<number>(), outwards: new Set<number>() };
+    for (const { a, b, c } of trianglesOf(file)) {
+      const corners = [a, b, c].map((p) => {
+        const off = [p[0] - joint.at[0], p[1] - joint.at[1], p[2] - joint.at[2]] as const;
+        return { along: off[0] * x + off[1] * y + off[2] * z, pu: off[0] * u[0] + off[1] * u[1] + off[2] * u[2], pv: off[0] * v[0] + off[1] * v[1] + off[2] * v[2] };
+      });
+      if (corners.some(({ pu, pv }) => Math.abs(Math.hypot(pu, pv) - 4) > BAR_SURFACE)) continue;
+      if (Math.min(...corners.map(({ along }) => along)) > s || Math.max(...corners.map(({ along }) => along)) < s) continue;
+      const [p, q] = [[b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const, [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const];
+      const normal = [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]] as const;
+      const [nu, nv] = [normal[0] * u[0] + normal[1] * u[1] + normal[2] * u[2], normal[0] * v[0] + normal[1] * v[1] + normal[2] * v[2]];
+      const facing = corners.reduce((sum, { pu, pv }) => sum + nu * pu + nv * pv, 0);
+      if (facing === 0) continue;
+      // the degrees round the line the triangle covers: from its first corner to its last, the short way round
+      const angles = corners.map(({ pu, pv }) => ((Math.atan2(pv, pu) * 180) / Math.PI + 360) % 360).sort((m, n) => m - n) as [number, number, number];
+      const gaps = [angles[1] - angles[0], angles[2] - angles[1], angles[0] + 360 - angles[2]];
+      const widest = gaps.indexOf(Math.max(...gaps));
+      const from = [angles[1], angles[2], angles[0]][widest] ?? 0;
+      for (let k = 0; k < Math.round(360 - (gaps[widest] ?? 0)); k++) (facing < 0 ? degrees.inwards : degrees.outwards).add(Math.floor(from + k + 0.5) % 360);
+    }
+    return { inwards: degrees.inwards.size / 360, outwards: degrees.outwards.size / 360 };
+  };
+  /**
+   * What a file is drawn with round a joint's line at `s`: 'clip', the
+   * inside of one, going half to three quarters of the way round with no
+   * rod in it; 'rod', one going all the way round; '-', nothing a bar's
+   * radius from the line; or else how much faces in and out.
+   */
+  const drawnAt = (file: string, joint: FlatConnector, s: number): string => {
+    const { inwards, outwards } = wallAt(file, joint, s);
+    if (inwards === 0 && outwards === 0) return '-';
+    if (outwards === 0 && inwards > 0.45 && inwards < 0.8) return 'clip';
+    if (inwards === 0 && outwards > 0.9) return 'rod';
+    return `in ${inwards.toFixed(2)} out ${outwards.toFixed(2)}`;
+  };
+  /** ... at seven places along it: a third of an LDU beyond each end and inside it, at its middle and near either end. */
+  const drawnAlong = (file: string, joint: FlatConnector): string => {
+    const half = joint.length / 2;
+    return [-half - 0.3, -half + 0.3, -0.8 * half, 0, 0.8 * half, half - 0.3, half + 0.3].map((s) => drawnAt(file, joint, s)).join(' ');
+  };
+  /** A clip is drawn as one from end to end and stops there; so is a rod. */
+  const AS_CLIP = '- clip clip clip clip clip -';
+  const AS_ROD = '- rod rod rod rod rod -';
+  /** The clips a file's part ends up with, free for a bar. */
+  const freeClips = (file: string): FlatConnector[] => finishConnectors(new Flattener(library).flatten(file).connectors).filter((c) => c.kind === 'clip');
 
   it.each(CATALOGUE)('%s fits the grid like the built-in part', (file, w, d, h, origin) => {
     const result = convertPart(file, flattener);
@@ -386,6 +457,121 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(finishConnectors(flattener.flatten('24947.dat').connectors).filter((c) => c.kind === 'barhole')).toHaveLength(4);
     // a round 2 × 2 brick's studs are solid ones cut to its curve: none
     expect(finishConnectors(flattener.flatten('3941.dat').connectors).filter((c) => c.kind === 'barhole')).toEqual([]);
+  });
+
+  it('finds the clips parts draw with plain arcs: five eighths of a turn inside out, a bar’s radius from their line', () => {
+    const clipsOf = (file: string) =>
+      finishConnectors(new Flattener(library).flatten(file).connectors)
+        .filter((c) => c.kind === 'clip')
+        .map((c) => `${c.at.map((v) => Math.round(v * 100) / 100 + 0).join(',')} along ${c.axis.map((v) => Math.abs(Math.round(v))).join('')} ${Math.round(c.length)} long`);
+    // a 1 × 1 tile with a clip on top, the old one drawn in two halves and the thick one in one arc; a 2 × 3 tile with two
+    expect(clipsOf('2555.dat')).toEqual(['0,-6,0 along 001 8 long']);
+    expect(clipsOf('15712.dat')).toEqual(['0,-6,0 along 001 8 long']);
+    expect(clipsOf('30350c.dat')).toEqual(['-10,2,40 along 100 8 long', '10,2,40 along 100 8 long']);
+    // a droid's arm with a clip at each end, a bar with a clip, a skeleton's leg, which clips to its body's bar
+    expect(clipsOf('30377.dat')).toHaveLength(2);
+    expect(clipsOf('3484.dat')).toHaveLength(1);
+    expect(clipsOf('6266.dat')).toHaveLength(1);
+    // an islander's mask with a clip either side, 5 long; a hand on a bar handle, its clip between 9 and 10
+    expect(clipsOf('6030.dat')).toEqual(['-30,-3.5,-0.15 along 001 5 long', '30,-3.5,-0.15 along 001 5 long']);
+    expect(freeClips('109866.dat').map((c) => c.length.toFixed(1))).toEqual(['9.4']);
+    // a plate with a clip LDraw draws with its clip primitive has that one clip still
+    expect(clipsOf('61252.dat')).toEqual(['0,2,-20 along 100 8 long']);
+    // each is drawn as a clip: its inside more than half the way round a bar, from one end of it to the other and no further
+    for (const file of ['2555.dat', '15712.dat', '30350c.dat', '30377.dat', '3484.dat', '6266.dat', '6030.dat', '109866.dat', '61252.dat']) {
+      for (const clip of freeClips(file)) expect(`${file} ${clip.at}: ${drawnAlong(file, clip)}`).toBe(`${file} ${clip.at}: ${AS_CLIP}`);
+    }
+    // not clips: the slot in the hollow end of a pin, the notch of a small wheel's hole, the seat of a hinge brick's top, a hollow
+    // stud's hole, the blocked stud of a minifigure's head
+    for (const file of ['2780.dat', '4624.dat', '3937.dat', '3062b.dat', '3626b.dat', '4213.dat', '4315.dat']) expect(`${file} ${clipsOf(file).length}`).toBe(`${file} 0`);
+  });
+
+  it('holds bars in the clips set on their parts, where each is drawn: its inside half to three quarters of the way round a bar, from end to end', () => {
+    // a clip's inside, a bar's radius from its line, over the clip's length and no further; the bars set with them are rods as long
+    for (const [file, joints] of Object.entries(CLIP_JOINTS)) {
+      for (const joint of joints) {
+        expect(`${file} ${joint.kind} ${joint.at}: ${drawnAlong(file, joint)}`).toBe(`${file} ${joint.kind} ${joint.at}: ${joint.kind === 'clip' ? AS_CLIP : AS_ROD}`);
+      }
+    }
+    const set = Object.entries(CLIP_JOINTS).flatMap(([file, joints]) => joints.map((joint) => `${file} ${joint.kind}`));
+    expect(set.filter((joint) => joint.endsWith(' clip'))).toHaveLength(38);
+    // the bars: the shaft of a bar with a clip that has a hole through it, drawn in pieces; a super battle droid's hips and a
+    // droid's shoulders, drawn closed
+    expect(set.filter((joint) => !joint.endsWith(' clip'))).toEqual(['48729b.dat bar', '41889.dat bar', 's/30375s01.dat bar', 's/30375s01.dat bar']);
+    // that shaft is the bar the plain one's is, which LDraw draws as one cylinder
+    const shaft = (file: string) => joinsOf(file).filter((j) => j.kind === 'bar').map((j) => `${j.at.map((v) => Math.round(v * 10) / 10)} ${Math.round(j.length * 10) / 10}`);
+    expect(shaft('48729b.dat')).toEqual(shaft('48729a.dat'));
+    // every part they are set for has them, by how many clips it ends up with: bars with a clip, droids' arms and legs, figures'
+    // bent arms, a martian's head, saddles, an arm with a towball, a sabre, feathers, ladders, leaves, a panel, a trap door's
+    // frame, Technic connectors, and a tile with clips, plain, printed and with a sticker
+    const clips: Readonly<Record<string, number>> = {
+      '48729a': 1, '48729b': 1, '59230': 2, '53989': 1, '10058': 1, '30376': 1, '41890': 1, '64796': 1, '42687': 1, '66788': 1, '28660': 1,
+      '30529': 1, '30529p01': 1, '30529p02': 1, '4491a': 1, '4491b': 2, '30082': 1, '59229': 1, '30127': 1, '30127p01': 1, '6020': 2, '30095': 4,
+      '30239': 1, '30034': 1, '92107': 2, '47994': 2, '19159': 2, '30350a': 2, '30350ap01': 2, '30350ad01': 2,
+    };
+    for (const [id, count] of Object.entries(clips)) expect(`${id} ${freeClips(`${id}.dat`).length}`).toBe(`${id} ${count}`);
+    expect(freeOf('48729b.dat')).toBe('bar clip');
+    expect(freeOf('48729a.dat')).toBe('bar clip');
+    expect(freeOf('59230.dat')).toBe('clip clip');
+    expect(freeOf('4491b.dat')).toBe('clip clip');
+    // a droid's torso has its shoulders, with its neck and its hips' bar, plain or printed; a super battle droid's body its hips'
+    // bar, with its shoulders
+    expect(freeOf('30375.dat')).toBe('bar bar bar bar barhole');
+    expect(freeOf('30375ps1.dat')).toBe('bar bar bar bar barhole');
+    expect(freeOf('41889.dat')).toBe('bar bar bar');
+    // not a clip: the slit ring at the end of a fishing rod, which goes nearly all the way round, too far for a bar to be pressed in
+    expect(freeClips('93222.dat')).toEqual([]);
+  });
+
+  it('leaves an assembly without the clips and bars its own parts fill, the clips found by their shape among them', () => {
+    // droids and a martian, their arms on their shoulders: the hands' clips are free, the shoulders and the arms' other clips taken,
+    // and so are the clips of a droid's head on its neck and of its legs on its hips, bars that go on past them
+    for (const file of ['30375cs0.dat', '30375cs1.dat', '30375cs2.dat', '30375cs3.dat', '30529c01.dat']) expect(`${file}: ${freeOf(file)}`).toBe(`${file}: bar bar clip clip barhole`);
+    expect(joinsOf('30375cs0.dat').filter((j) => j.kind === 'clip')).toHaveLength(6);
+    // super battle droids, their arms' clips on their shoulders and their legs' on their hips: three bars that go on past the clips
+    for (const file of ['41889c01.dat', '41889c02.dat']) {
+      expect(`${file}: ${freeOf(file)}`).toBe(`${file}: bar bar bar`);
+      expect(joinsOf(file).filter((j) => j.kind === 'clip')).toHaveLength(3);
+    }
+    // a skeleton with its legs' clips on its hips' two bars: its arms and its legs' ends are left; a motorcycle with its handlebars
+    // in its clip: their two grips are left; a dragon with its wings' bars in its body's clips: the bars go on past them
+    expect(freeOf('6260c01.dat')).toBe('head bar bar bar bar barhole barhole');
+    expect(freeOf('18895c01.dat')).toBe(`bar bar${' barhole'.repeat(8)}`);
+    expect(freeOf('75174c01.dat')).toBe('pinhole bar bar barhole barhole barhole barhole');
+    // and no clip left free on the droids and the martian, two hands' on each, has a rod in it
+    const hands = ['30375cs0.dat', '30375cs1.dat', '30375cs2.dat', '30375cs3.dat', '30529c01.dat'].flatMap((file) => freeClips(file).map((clip) => `${file} ${clip.at}: ${drawnAt(file, clip, 0)}`));
+    expect(hands).toHaveLength(10);
+    for (const hand of hands) expect(hand).toEndWith(': clip');
+  });
+
+  it('measures a clip and a bar on the mesh closely enough to tell one a little out of place, a ring, a hole and a clip with a rod in it', () => {
+    const joint = (kind: FlatConnector['kind'], at: readonly [number, number, number], axis: readonly [number, number, number], length: number): FlatConnector => ({ kind, at, axis, length, outward: 0, across: 1 });
+    // a 1 × 1 tile's clip, along Z over the tile, and a bar 3 studs long, along Y
+    const [clip] = freeClips('2555.dat');
+    const [bar] = joinsOf('87994.dat');
+    if (!clip || !bar) throw new Error('no clip or no bar');
+    expect([clip.at, clip.axis.map(Math.abs), clip.length]).toEqual([[0, -6, 0], [0, 0, 1], 8]);
+    expect(drawnAlong('2555.dat', clip)).toBe(AS_CLIP);
+    expect(drawnAlong('87994.dat', bar)).toBe(AS_ROD);
+    // half an LDU along its line, a fifth of one off it either way, an LDU longer or shorter: no clip from end to end, and no rod
+    const [x, y, z] = clip.at;
+    for (const wrong of [joint('clip', [x, y, z + 0.5], clip.axis, 8), joint('clip', [x + 0.2, y, z], clip.axis, 8), joint('clip', [x, y - 0.2, z], clip.axis, 8), joint('clip', clip.at, clip.axis, 9), joint('clip', clip.at, clip.axis, 7)]) {
+      expect(`${wrong.at} ${wrong.length}: ${drawnAlong('2555.dat', wrong) === AS_CLIP}`).toBe(`${wrong.at} ${wrong.length}: false`);
+    }
+    for (const wrong of [joint('bar', [bar.at[0], bar.at[1] + 0.5, bar.at[2]], bar.axis, bar.length), joint('bar', [bar.at[0] + 0.2, bar.at[1], bar.at[2]], bar.axis, bar.length), joint('bar', bar.at, bar.axis, bar.length + 1)]) {
+      expect(`${wrong.at} ${wrong.length}: ${drawnAlong('87994.dat', wrong) === AS_ROD}`).toBe(`${wrong.at} ${wrong.length}: false`);
+    }
+    // a bar read from a line a little beside its own is half a rod, not one; a fence's shallow scallop is too little of a turn for a clip
+    expect(drawnAt('87994.dat', joint('bar', [bar.at[0] + 0.15, bar.at[1], bar.at[2]], bar.axis, bar.length), 0)).toBe('in 0.00 out 0.49');
+    expect(drawnAt('2040.dat', joint('clip', [0, 1.3, 0], [0, 0, 1], 8), 0)).toBe('in 0.37 out 0.00');
+    // the slit ring at the end of a fishing rod goes nearly all the way round; the hole of an open stud all the way
+    expect(drawnAt('93222.dat', joint('clip', [-3.5, -24, -16], [1, 0, 0], 9), 0)).toBe('in 0.87 out 0.00');
+    expect(drawnAt('3062b.dat', joint('barhole', [0, -2, 0], [0, -1, 0], 4), 0)).toBe('in 1.00 out 0.00');
+    // a scooter's clip has the rod of its own handlebars in it, and its rider's hand has a handlebar part of the way in
+    expect(drawnAt('15396c01.dat', joint('clip', [0, -14, -30], [1, 0, 0], 7.2), 0)).toBe('in 0.62 out 0.99');
+    const hand = joinsOf('15396c02.dat').find((j) => j.kind === 'clip' && Math.abs(j.at[0] - 21.86) < 0.1);
+    if (!hand) throw new Error('no hand');
+    expect(drawnAt('15396c02.dat', hand, 0)).toBe('in 0.65 out 0.16');
   });
 
   it('holds bars on the line each clip primitive’s bar-sized round surfaces run round', () => {

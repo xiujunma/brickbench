@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { allConnectors, barPiece, connectorPrimitive, finishConnectors, type FlatConnector } from './connectors.ts';
+import { allConnectors, barPiece, clipArc, connectorPrimitive, finishConnectors, type FlatConnector } from './connectors.ts';
 import { flattenPart } from './flatten.ts';
 import { memorySource } from './library.ts';
 
@@ -174,6 +174,135 @@ describe('bars and clips', () => {
       { kind: 'bar', at: [0, -20, 0], axis: [0, -1, 0], length: 40 },
       { kind: 'clip', at: [-6, 2, 40], axis: [1, 0, 0], length: 4 },
     ]);
+  });
+
+  it('find a clip where a part draws its inside with arcs of a bar’s radius: five eighths of a turn, inside out, a clip long', () => {
+    // an arc about Y, from y to y + long, `radius` from its line; inside out when the reference before it is inverted
+    // (`deep` its radius the other way across, for an oval; `from` where it starts along the line)
+    type Drawn = { radius?: number; deep?: number; long?: number; from?: number; inside?: boolean; mirrored?: boolean };
+    const arc = (file: string, x: number, { radius = 4, deep = radius, long = 8, from = -4, inside = true, mirrored = false }: Drawn = {}): string =>
+      `${inside ? '0 BFC INVERTNEXT\n' : ''}1 16 ${x} ${from} 0 ${mirrored ? -radius : radius} 0 0 0 ${long} 0 0 0 ${deep} ${file}`;
+    const clipsOf = (...lines: string[]) => {
+      const names = ['1-16cyli', '1-8cyli', '3-16cyli', '2-4cyli', '5-16cylo', '5-8cyli', '5-8cylc', '48/5-8cyli', '3-4cyli', '4-4cyli'];
+      const primitives = Object.fromEntries(names.map((name) => [`${name}.dat`, cylinder]));
+      const source = memorySource({
+        ...primitives,
+        'jaw.dat': certified(arc('5-8cyli.dat', 0, { inside: false })),
+        // a stud primitive with such an arc inside it
+        'stud9.dat': certified(arc('5-8cyli.dat', 0)),
+        'part.dat': certified(lines.join('\n')),
+      });
+      return finishConnectors(flattenPart('part.dat', source).connectors).map(round);
+    };
+    const clip = (x: number): ReturnType<typeof round> => ({ kind: 'clip', at: [x, 0, 0], axis: [0, 1, 0], length: 8 });
+    // a thick C-clip: one arc of five eighths; the clip holds a bar along the arc's line, at its middle
+    expect(clipsOf(arc('5-8cyli.dat', 20))).toEqual([clip(20)]);
+    // drawn in two halves, one the other mirrored, or as a half and an eighth: together five eighths
+    expect(clipsOf(arc('5-16cylo.dat', 0), arc('5-16cylo.dat', 0, { mirrored: true }))).toEqual([clip(0)]);
+    expect(clipsOf(arc('2-4cyli.dat', 0), arc('1-8cyli.dat', 0))).toEqual([clip(0)]);
+    // two clips side by side on one part are two
+    expect(clipsOf(arc('5-8cyli.dat', -20), arc('5-8cyli.dat', 20))).toEqual([clip(-20), clip(20)]);
+    // facing out it is the round of a rod, not the inside of a clip
+    expect(clipsOf(arc('5-8cyli.dat', 0, { inside: false }))).toEqual([]);
+    // ... unless the file it is in is drawn inside out; and the same file, drawn as it is, has none
+    expect(clipsOf('0 BFC INVERTNEXT\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 jaw.dat')).toEqual([clip(0)]);
+    expect(clipsOf('1 16 0 0 0 1 0 0 0 1 0 0 0 1 jaw.dat')).toEqual([]);
+    // half a turn is a groove, three quarters the slot of a pin's hollow end, a whole turn a hole: none is a clip by its shape alone
+    for (const file of ['2-4cyli.dat', '3-4cyli.dat', '4-4cyli.dat']) expect(clipsOf(arc(file, 0))).toEqual([]);
+    // five eighths, no less and no more: nine sixteenths of a turn, or eleven, is no clip
+    expect(clipsOf(arc('2-4cyli.dat', 0), arc('1-16cyli.dat', 0))).toEqual([]);
+    expect(clipsOf(arc('2-4cyli.dat', 0), arc('3-16cyli.dat', 0))).toEqual([]);
+    // nor is an arc of another radius, an oval one, or one shorter or longer than a clip
+    expect(clipsOf(arc('5-8cyli.dat', 0, { radius: 6 }))).toEqual([]);
+    expect(clipsOf(arc('5-8cyli.dat', 0, { deep: 6 }))).toEqual([]);
+    expect(clipsOf(arc('5-8cyli.dat', 0, { long: 4.5 }))).toEqual([]);
+    expect(clipsOf(arc('5-8cyli.dat', 0, { long: 11 }))).toEqual([]);
+    // an islander's mask has clips 5 long, and a clip may be 10: clips still
+    expect(clipsOf(arc('5-8cyli.dat', 0, { long: 5 }))).toEqual([{ kind: 'clip', at: [0, -1.5, 0], axis: [0, 1, 0], length: 5 }]);
+    expect(clipsOf(arc('5-8cyli.dat', 0, { long: 10 }))).toEqual([{ kind: 'clip', at: [0, 1, 0], axis: [0, 1, 0], length: 10 }]);
+    // an arc beside another, on another line, does not add to it; nor does one further along the same line
+    expect(clipsOf(arc('2-4cyli.dat', 0), arc('1-8cyli.dat', 9))).toEqual([]);
+    expect(clipsOf(arc('2-4cyli.dat', 0), '0 BFC INVERTNEXT\n1 16 0 0 0 4 0 0 0 8 0 0 0 4 1-8cyli.dat')).toEqual([]);
+    // ... nor one that starts with it and stops short, or starts late and ends with it: one surface is one stretch
+    expect(clipsOf(arc('5-16cylo.dat', 0), arc('5-16cylo.dat', 0, { mirrored: true, long: 6 }))).toEqual([]);
+    expect(clipsOf(arc('5-16cylo.dat', 0), arc('5-16cylo.dat', 0, { mirrored: true, from: -2, long: 6 }))).toEqual([]);
+    // halves drawn a hair apart along the line are one clip still, where the first of them is
+    expect(clipsOf(arc('5-16cylo.dat', 0), arc('5-16cylo.dat', 0, { mirrored: true, from: -3.8 }))).toEqual([clip(0)]);
+    // an arc that faces out, the round of a rod, adds nothing to one that faces in
+    expect(clipsOf(arc('5-16cylo.dat', 0), arc('5-16cylo.dat', 0, { mirrored: true, inside: false }))).toEqual([]);
+    // drawn with one of LDraw's finer arcs it is a clip all the same; an arc closed at one end is the floor of a pocket no bar goes through
+    expect(clipsOf(arc('48\\5-8cyli.dat', 0))).toEqual([clip(0)]);
+    expect(clipsOf(arc('5-8cylc.dat', 0))).toEqual([]);
+    // what a stud is drawn with is the stud's, not a clip
+    expect(clipsOf('1 16 0 0 0 1 0 0 0 1 0 0 0 1 stud9.dat')).toEqual([]);
+    // a file with such an arc, drawn larger by the part that uses it, is no longer a bar's size: half as large again, or a fiftieth;
+    // a hundredth larger is a bar's still, as an arc drawn that much off is
+    expect(clipsOf('0 BFC INVERTNEXT\n1 16 0 0 0 1.5 0 0 0 1 0 0 0 1.5 jaw.dat')).toEqual([]);
+    expect(clipsOf('0 BFC INVERTNEXT\n1 16 0 0 0 1.02 0 0 0 1 0 0 0 1.02 jaw.dat')).toEqual([]);
+    expect(clipsOf('0 BFC INVERTNEXT\n1 16 0 0 0 1.01 0 0 0 1 0 0 0 1.01 jaw.dat')).toEqual([clip(0)]);
+  });
+
+  it('take an arc of a bar’s radius for a piece of a clip’s inside, whichever way it faces, and nothing else for one', () => {
+    const arc = { m: [4, 0, 0, 0, 8, 0, 0, 0, 4] as const, t: [20, -4, 0] as const };
+    expect(clipArc('5-8cyli.dat', arc, true)).toEqual({ kind: 'clip', at: [20, 0, 0], axis: [0, 1, 0], length: 8, outward: -1, across: 1, turn: 5 / 8 });
+    expect(clipArc('48\\5-16cylo.dat', arc, false)).toMatchObject({ outward: 1, turn: 5 / 16 });
+    // a sloped cylinder, or one closed at an end; an oval, either way; another radius; an arc flattened to nothing
+    expect(clipArc('5-8cyls.dat', arc, true)).toBeNull();
+    expect(clipArc('5-8cylc.dat', arc, true)).toBeNull();
+    expect(clipArc('5-8cyli.dat', { ...arc, m: [4, 0, 0, 0, 8, 0, 0, 0, 6] }, true)).toBeNull();
+    expect(clipArc('5-8cyli.dat', { ...arc, m: [6, 0, 0, 0, 8, 0, 0, 0, 4] }, true)).toBeNull();
+    expect(clipArc('5-8cyli.dat', { ...arc, m: [4.1, 0, 0, 0, 8, 0, 0, 0, 4.1] }, true)).toBeNull();
+    expect(clipArc('5-8cyli.dat', { ...arc, m: [4, 0, 0, 0, 0, 0, 0, 0, 4] }, true)).toBeNull();
+  });
+
+  it('keep a connection its part gives twice once: at one place, along one line either way', () => {
+    const clip = (x: number, axis: readonly [number, number, number] = [0, 1, 0]): FlatConnector => ({ kind: 'clip', at: [x, 0, 0], axis, length: 8, outward: 0, across: 1 });
+    expect(allConnectors([clip(0), clip(0.05)])).toHaveLength(1);
+    expect(allConnectors([clip(0), clip(0, [0, -1, 0])])).toHaveLength(1);
+    // an LDU off, along another line, or of another kind, it is another connection
+    expect(allConnectors([clip(0), clip(1)])).toHaveLength(2);
+    expect(allConnectors([clip(0), clip(0, [1, 0, 0])])).toHaveLength(2);
+    expect(allConnectors([clip(0), { ...clip(0), kind: 'bar' }])).toHaveLength(2);
+  });
+
+  it('give the parts whose clips are set on their files those clips, once each, with whatever else they are drawn with', () => {
+    const body = certified('3 16 -20 0 0 20 0 0 0 24 10');
+    const source = memorySource({
+      '4-4cyli.dat': cylinder,
+      '5-8cyli.dat': cylinder,
+      // a bar with a clip on its end: the clip drawn face by face, the bar a cylinder from 6 to 29 LDU down
+      '48729b.dat': certified(`${body}\n1 16 0 6 0 4 0 0 0 23 0 0 0 4 4-4cyli.dat`),
+      // a ladder with a clip either side of its end rung
+      '6020.dat': body,
+      // a tile whose shape, clips and all, is in a file its printed one is drawn from too
+      's/30350as01.dat': body,
+      '30350a.dat': certified('1 16 0 0 0 1 0 0 0 1 0 0 0 1 s\\30350as01.dat'),
+      '30350ap01.dat': certified('1 16 0 0 0 1 0 0 0 1 0 0 0 1 s\\30350as01.dat\n3 16 -10 0 0 10 0 0 0 0 10'),
+      // a part that draws the inside of the clip set on it as an arc as well: found twice, kept once
+      '53989.dat': certified('0 BFC INVERTNEXT\n1 16 0 0 -4 4 0 0 0 0 4 0 8 0 5-8cyli.dat'),
+      // a droid's torso, whose shoulders LDraw draws as closed cylinders: its shape is in a file its printed ones are drawn from too
+      's/30375s01.dat': body,
+      '30375.dat': certified('1 16 0 0 0 1 0 0 0 1 0 0 0 1 s\\30375s01.dat'),
+      // ... and a droid put together so far: an arm's clip, from x -20 to -12, on one shoulder
+      'droid.dat': certified('1 16 0 0 0 1 0 0 0 1 0 0 0 1 30375.dat\n0 BFC INVERTNEXT\n1 16 -20 -32 0 0 8 0 4 0 0 0 0 4 5-8cyli.dat'),
+    });
+    const found = (file: string) => finishConnectors(flattenPart(file, source).connectors).map(round);
+    // (the bar its shaft is drawn as here joins the one set on the file, which LDraw draws in pieces: one bar)
+    expect(found('48729b.dat')).toEqual([
+      { kind: 'bar', at: [0, 17.5, 0], axis: [0, 1, 0], length: 23 },
+      { kind: 'clip', at: [0, 0, 0], axis: [0, 0, 1], length: 8 },
+    ]);
+    expect(found('6020.dat')).toEqual([
+      { kind: 'clip', at: [-16, 0, 0], axis: [1, 0, 0], length: 8 },
+      { kind: 'clip', at: [16, 0, 0], axis: [1, 0, 0], length: 8 },
+    ]);
+    expect(found('30350a.dat')).toHaveLength(2);
+    expect(found('30350ap01.dat')).toEqual(found('30350a.dat'));
+    expect(found('53989.dat')).toEqual([{ kind: 'clip', at: [0, 0, 0], axis: [0, 0, 1], length: 8 }]);
+    // the shoulders are bars for an arm's clip; with an arm on one, that bar and the arm's clip are taken
+    const shoulder = (x: number): ReturnType<typeof round> => ({ kind: 'bar', at: [x, -32, 0], axis: [1, 0, 0], length: 8.5 });
+    expect(found('30375.dat')).toEqual([shoulder(-15.75), shoulder(15.75)]);
+    expect(found('droid.dat')).toEqual([shoulder(15.75)]);
   });
 
   it('know the clips that hold bars, and the road-sign clip that holds a plate', () => {

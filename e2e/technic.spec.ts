@@ -129,6 +129,32 @@ test.describe('Technic, hinges and minifigures', () => {
     expect(Math.abs(bar?.m?.[4] ?? 1)).toBeLessThan(1e-6);
   });
 
+  test('clips a bar into the clip on a 1 × 1 tile, which LDraw draws without its clip primitive', async ({ page }) => {
+    // starts the editor and searches the library twice
+    test.slow();
+    await freshEditor(page);
+    await page.getByRole('button', { name: 'Library', exact: true }).click();
+    await expect(page.locator('#library-category')).toBeVisible();
+
+    // a 1 × 1 tile with a clip standing on it, on the baseplate
+    await chooseLibraryPart(page, '15712');
+    const centre = await viewportCentre(page);
+    await page.mouse.click(centre.x, centre.y);
+    await expect(counts(page)).toHaveText('1 brick');
+
+    // a bar 3 long goes into the clip, level, its middle in the clip: the clip's line is 14 LDraw units up the tile, and the bar's box a stud thick
+    await chooseLibraryPart(page, '87994');
+    const inClip = await plugNear(page, centre, /Y\s*0\.5(?!\d)/, 1);
+    expect(inClip).not.toBeNull();
+    const [tile, bar] = await savedBricks(page, 2);
+    expect(bar?.partId).toBe('ldraw:87994');
+    // lying level: its own up, along the bar, runs across
+    expect(Math.abs(bar?.m?.[4] ?? 1)).toBeLessThan(1e-6);
+    // along the clip, from front to back over the tile: its middle, a stud and a half along the 3.2 studs of its cells, in the clip
+    expect(bar?.x).toBeCloseTo(tile?.x ?? NaN, 6);
+    expect(Math.abs((bar?.z ?? 0) + 1.1 - (tile?.z ?? 0))).toBeCloseTo(0.1, 6);
+  });
+
   test('stands a bar in a round plate’s open stud', async ({ page }) => {
     // starts the editor and searches the library twice
     test.slow();

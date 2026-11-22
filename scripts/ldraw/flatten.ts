@@ -1,4 +1,5 @@
-import { barPiece, connectorOf, connectorPrimitive, placeConnector, type FlatConnector } from './connectors.ts';
+import { CLIP_JOINTS } from './clipJoints.ts';
+import { barPiece, clipArc, connectorOf, connectorPrimitive, placeConnector, type FlatConnector } from './connectors.ts';
 import { HINGE_JOINTS } from './hingeJoints.ts';
 import { MINIFIG_JOINTS } from './minifigJoints.ts';
 import { normalizeName, type LibrarySource } from './library.ts';
@@ -208,16 +209,17 @@ export class Flattener {
           const placed = placeConnector(connector, line.matrix, inverted);
           if (placed) connectors.push(placed);
         }
-        // a bar drawn as a plain cylinder; the cylinders studs are drawn with are studs, not bars
-        const bar = isStud ? null : barPiece(line.file, line.matrix, inverted);
-        if (bar) connectors.push(bar);
+        // a bar drawn as a plain cylinder, or a piece of a clip's inside drawn as an arc of one; the cylinders studs are drawn with are
+        // studs, not bars
+        const plain = isStud ? null : (barPiece(line.file, line.matrix, inverted) ?? clipArc(line.file, line.matrix, inverted));
+        if (plain) connectors.push(plain);
       }
     }
     const primitive = connectorPrimitive(key);
     // a connection primitive is one piece of a connection, whatever smaller ones it is drawn from
     const own = primitive ? connectorOf(primitive, triangles) : null;
-    // the files minifigures, the older hinges and turntables are drawn from carry their joints too
-    const joints = MINIFIG_JOINTS[key] ?? HINGE_JOINTS[key] ?? [];
+    // the files minifigures, the older hinges and turntables are drawn from carry their joints too, and those of some clips theirs
+    const joints = [...(MINIFIG_JOINTS[key] ?? []), ...(HINGE_JOINTS[key] ?? []), ...(CLIP_JOINTS[key] ?? [])];
     return { triangles, topStuds: dedupe(topStuds), sideStuds: dedupeDirected(sideStuds), connectors: own ? [own] : [...connectors, ...joints] };
   }
 }

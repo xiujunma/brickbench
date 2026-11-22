@@ -5,11 +5,12 @@
  * single fingers and forks of two (clh*), the older hinge plates' two and
  * three fingers (h1, h2), and the clips (clip*) and handle bars (phandle*,
  * handle*) LDraw draws as primitives; bars drawn as plain cylinders are
- * found by their size (barPiece). Each primitive in a part is a piece of a
- * connection; pieces along one line join up, so the peg-hole ends on the
- * two faces of a Technic brick make one hole through it. Connections LDraw
- * draws with plain shapes are set on their parts' files instead
- * (minifigJoints.ts, hingeJoints.ts).
+ * found by their size (barPiece), and clips drawn with plain arcs by their
+ * shape (clipArc). Each primitive in a part is a piece of a connection;
+ * pieces along one line join up, so the peg-hole ends on the two faces of
+ * a Technic brick make one hole through it. Connections LDraw draws with
+ * other plain shapes are set on their parts' files instead
+ * (minifigJoints.ts, hingeJoints.ts, clipJoints.ts).
  */
 import { CONNECTOR_KINDS } from '../../src/core/ldraw/format.ts';
 import { mates } from '../../src/core/model/mates.ts';
@@ -39,6 +40,13 @@ export interface FlatConnector {
    * is drawn with from a Technic pin's primitive.
    */
   readonly across: number;
+  /**
+   * For a piece of a clip's inside drawn as an arc (clipArc): how much of a
+   * turn it is. Arcs over one stretch of one line that together make a
+   * clip's five eighths become the clip (allConnectors); any others are
+   * left out.
+   */
+  readonly turn?: number;
 }
 
 /** A connection set by hand on the file that draws its part: there, along that way, that long (see minifigJoints.ts, hingeJoints.ts). */
@@ -149,8 +157,9 @@ const OPEN_STUDS = /^stud(2|6|17)a?(-logo\d*)?$/;
 /** The clip and handle primitives and the line each holds a bar on, for the verify test. */
 export const ROD_PRIMITIVES: Readonly<Record<string, ConnectorPrimitive>> = RODS;
 
-/** A bar's radius, in LDU (3.18 mm), and the shortest stretch of one worth plugging into. */
+/** A bar's radius, in LDU (3.18 mm), how far off it a surface drawn for one may be, and the shortest stretch of a bar worth plugging into. */
 const BAR_RADIUS = 4;
+const RADIUS_SLACK = 0.05;
 const SHORTEST_BAR = 8;
 
 /**
@@ -163,9 +172,35 @@ export function barPiece(file: string, matrix: Transform, inverted: boolean): Fl
   const [a, b, c, d, e, f, g, h, i] = matrix.m;
   const radial = [Math.hypot(a, d, g), Math.hypot(c, f, i)];
   const length = Math.hypot(b, e, h);
-  if (radial.some((r) => Math.abs(r - BAR_RADIUS) > 0.05) || length < SHORTEST_BAR) return null;
+  if (radial.some((r) => Math.abs(r - BAR_RADIUS) > RADIUS_SLACK) || length < SHORTEST_BAR) return null;
   const [x, y, z] = matrix.t;
   return { kind: 'bar', at: [x + b / 2, y + e / 2, z + h / 2], axis: [b / length, e / length, h / length], length, outward: 0, across: 1 };
+}
+
+/** How long a clip is, in LDU: 8 on a plate's or a tile's, 6 on a link of a tread, 5 either side of an islander's mask. */
+const [SHORTEST_CLIP, LONGEST_CLIP] = [5, 10];
+/** How much of a turn the inside of a clip goes round a bar: five eighths, however many arcs it is drawn with. */
+const CLIP_TURN = 5 / 8;
+
+/**
+ * A piece of the inside of a clip, when a reference draws one with a plain
+ * shape: a cylinder, or part of one (5-8cyli, 5-16cylo, 2-4cyli ...), of a
+ * bar's radius. Null for anything else: an arc closed at one end (cylc)
+ * is the floor of a pocket, which no bar goes through. Whether it is a
+ * clip is told once the part's pieces are gathered (clipsOf): the arc must
+ * be inside out, a rod's round being drawn with the same shapes, and five
+ * eighths of a turn with the others on its line, which a whole cylinder,
+ * a hole, never is.
+ */
+export function clipArc(file: string, matrix: Transform, inverted: boolean): FlatConnector | null {
+  const arc = /^(?:48\/)?(\d+)-(\d+)cyl[io]\.dat$/.exec(file.replace(/\\/g, '/').toLowerCase());
+  const turn = arc ? Number(arc[1]) / Number(arc[2]) : 0;
+  if (!(turn > 0)) return null;
+  const [a, b, c, d, e, f, g, h, i] = matrix.m;
+  const length = Math.hypot(b, e, h);
+  if ([Math.hypot(a, d, g), Math.hypot(c, f, i)].some((r) => Math.abs(r - BAR_RADIUS) > RADIUS_SLACK) || length === 0) return null;
+  const [x, y, z] = matrix.t;
+  return { kind: 'clip', at: [x + b / 2, y + e / 2, z + h / 2], axis: [b / length, e / length, h / length], length, outward: inverted ? -1 : 1, across: 1, turn };
 }
 
 /** The connection a primitive draws, by its file name ("p/connect.dat" or "connect.dat"); undefined for any other file. */
@@ -280,6 +315,7 @@ export function placeConnector(connector: FlatConnector, matrix: Transform, inve
     length: connector.length * stretch,
     outward: inverted ? -connector.outward : connector.outward,
     across: connector.across * widening(matrix, connector.axis),
+    ...(connector.turn === undefined ? {} : { turn: connector.turn }),
   };
 }
 
@@ -370,6 +406,30 @@ function alongAxleHole(hole: FlatConnector, axleHoles: readonly FlatConnector[])
 }
 
 
+/**
+ * The clips a part draws with plain arcs (clipArc): arcs inside out, over
+ * one stretch of one line, that together go five eighths of a turn round a
+ * bar, are the inside of a clip, a clip long. Each such set is one clip; an
+ * arc drawn wider or thinner than a bar by the part that uses it, a groove
+ * of half a turn, the slot of a pin's hollow end and arcs that face out are
+ * left out.
+ */
+function clipsOf(arcs: readonly FlatConnector[]): FlatConnector[] {
+  const inside = arcs.filter((arc) => arc.outward < 0 && Math.abs(arc.across - 1) * BAR_RADIUS <= RADIUS_SLACK);
+  const together = (a: FlatConnector, b: FlatConnector): boolean => {
+    if (!coaxial(a, b)) return false;
+    const [from, to] = span(b, a);
+    return Math.abs(from + a.length / 2) < ON_LINE && Math.abs(to - a.length / 2) < ON_LINE;
+  };
+  // each arc with the first one it lies together with: the sets of arcs that are one surface
+  const firsts = inside.filter((arc, i) => !inside.slice(0, i).some((other) => together(other, arc)));
+  return firsts.flatMap((first): FlatConnector[] => {
+    const turn = inside.filter((arc) => together(first, arc)).reduce((sum, arc) => sum + (arc.turn ?? 0), 0);
+    const isClip = Math.abs(turn - CLIP_TURN) < 1e-9 && first.length >= SHORTEST_CLIP && first.length <= LONGEST_CLIP;
+    return isClip ? [{ kind: 'clip', at: first.at, axis: first.axis, length: first.length, outward: 0, across: 1 }] : [];
+  });
+}
+
 /** The same connection given twice, as by a head drawn with two of the files its neck joint is set on: kept once. */
 function once(connectors: readonly FlatConnector[]): FlatConnector[] {
   return connectors.filter(
@@ -379,13 +439,14 @@ function once(connectors: readonly FlatConnector[]): FlatConnector[] {
 
 /**
  * Every connection a part is drawn with, from all its pieces: axles told
- * from axle holes, pieces on one line joined, mouths of axle holes dropped,
- * each once, in a steady order. Those its own pieces take are among them
- * (see finishConnectors): this is how LDraw's ready-made assemblies show
- * where their halves join.
+ * from axle holes, the arcs of a clip's inside made the clip, pieces on
+ * one line joined, mouths of axle holes dropped, each once, in a steady
+ * order. Those its own pieces take are among them (see finishConnectors):
+ * this is how LDraw's ready-made assemblies show where their halves join.
  */
 export function allConnectors(pieces: readonly FlatConnector[]): FlatConnector[] {
-  const joined = once(joinRuns(pieces.map(settled).filter((piece) => piece.length > 0 && isTechnicSized(piece))));
+  const whole = [...pieces.filter((piece) => piece.turn === undefined), ...clipsOf(pieces.filter((piece) => piece.turn !== undefined))];
+  const joined = once(joinRuns(whole.map(settled).filter((piece) => piece.length > 0 && isTechnicSized(piece))));
   const axleHoles = joined.filter((c) => c.kind === 'axlehole');
   const byPlace = (a: FlatConnector, b: FlatConnector): number => {
     for (let k = 0; k < 3; k++) {
