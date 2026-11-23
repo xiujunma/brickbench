@@ -145,8 +145,13 @@ describe('bars and clips', () => {
     const bar = { m: [4, 0, 0, 0, 40, 0, 0, 0, 4] as const, t: [0, -40, 0] as const };
     expect(barPiece('4-4cyli.dat', bar, false)).toEqual({ kind: 'bar', at: [0, -20, 0], axis: [0, 1, 0], length: 40, outward: 0, across: 1 });
     expect(barPiece('48\\4-4cylo.dat', bar, false)?.kind).toBe('bar');
-    // inside out it is a hole; a stud is fatter; a stub is too short to hold; a half cylinder is no bar
+    // closed at one end, as whips, hilts and bars with a stop are drawn, it is a bar all the same, and so is either drawn without
+    // its edge lines
+    expect(barPiece('4-4cylc.dat', bar, false)).toEqual(barPiece('4-4cyli.dat', bar, false));
+    for (const file of ['48\\4-4cylc.dat', '4-4cylc2.dat', '4-4cylc3.dat', '4-4cyli2.dat']) expect(barPiece(file, bar, false)?.kind).toBe('bar');
+    // inside out it is a hole, or a pocket; a stud is fatter; a stub is too short to hold; a half cylinder is no bar
     expect(barPiece('4-4cyli.dat', bar, true)).toBeNull();
+    expect(barPiece('4-4cylc.dat', bar, true)).toBeNull();
     expect(barPiece('4-4cyli.dat', { ...bar, m: [6, 0, 0, 0, 40, 0, 0, 0, 6] }, false)).toBeNull();
     expect(barPiece('4-4cyli.dat', { ...bar, m: [4, 0, 0, 0, 4, 0, 0, 0, 4] }, false)).toBeNull();
     expect(barPiece('2-4cyli.dat', bar, false)).toBeNull();
@@ -269,6 +274,7 @@ describe('bars and clips', () => {
     const body = certified('3 16 -20 0 0 20 0 0 0 24 10');
     const source = memorySource({
       '4-4cyli.dat': cylinder,
+      '4-4cylc.dat': cylinder,
       '5-8cyli.dat': cylinder,
       // a bar with a clip on its end: the clip drawn face by face, the bar a cylinder from 6 to 29 LDU down
       '48729b.dat': certified(`${body}\n1 16 0 6 0 4 0 0 0 23 0 0 0 4 4-4cyli.dat`),
@@ -280,8 +286,9 @@ describe('bars and clips', () => {
       '30350ap01.dat': certified('1 16 0 0 0 1 0 0 0 1 0 0 0 1 s\\30350as01.dat\n3 16 -10 0 0 10 0 0 0 0 10'),
       // a part that draws the inside of the clip set on it as an arc as well: found twice, kept once
       '53989.dat': certified('0 BFC INVERTNEXT\n1 16 0 0 -4 4 0 0 0 0 4 0 8 0 5-8cyli.dat'),
-      // a droid's torso, whose shoulders LDraw draws as closed cylinders: its shape is in a file its printed ones are drawn from too
-      's/30375s01.dat': body,
+      // a droid's torso, whose shoulders LDraw draws as closed cylinders, 8.5 long from x 11.5 to 20 either side, closed at their
+      // outer ends: its shape is in a file its printed ones are drawn from too
+      's/30375s01.dat': `${body}\n1 16 -20 -32 0 0 8.5 0 -4 0 0 0 0 4 4-4cylc.dat\n1 16 20 -32 0 0 -8.5 0 4 0 0 0 0 4 4-4cylc.dat`,
       '30375.dat': certified('1 16 0 0 0 1 0 0 0 1 0 0 0 1 s\\30375s01.dat'),
       // ... and a droid put together so far: an arm's clip, from x -20 to -12, on one shoulder
       'droid.dat': certified('1 16 0 0 0 1 0 0 0 1 0 0 0 1 30375.dat\n0 BFC INVERTNEXT\n1 16 -20 -32 0 0 8 0 4 0 0 0 0 4 5-8cyli.dat'),
@@ -299,8 +306,9 @@ describe('bars and clips', () => {
     expect(found('30350a.dat')).toHaveLength(2);
     expect(found('30350ap01.dat')).toEqual(found('30350a.dat'));
     expect(found('53989.dat')).toEqual([{ kind: 'clip', at: [0, 0, 0], axis: [0, 0, 1], length: 8 }]);
-    // the shoulders are bars for an arm's clip; with an arm on one, that bar and the arm's clip are taken
-    const shoulder = (x: number): ReturnType<typeof round> => ({ kind: 'bar', at: [x, -32, 0], axis: [1, 0, 0], length: 8.5 });
+    // the shoulders are bars for an arm's clip, each pointing in from its closed end; with an arm on one, that bar and the arm's
+    // clip are taken
+    const shoulder = (x: number): ReturnType<typeof round> => ({ kind: 'bar', at: [x, -32, 0], axis: [-Math.sign(x), 0, 0], length: 8.5 });
     expect(found('30375.dat')).toEqual([shoulder(-15.75), shoulder(15.75)]);
     expect(found('droid.dat')).toEqual([shoulder(15.75)]);
   });

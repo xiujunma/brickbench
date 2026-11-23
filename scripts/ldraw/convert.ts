@@ -1,9 +1,9 @@
 import { CONNECTOR_KINDS, MAIN_COLOUR, type ConnectorEntry, type SideStudEntry, type SolidBox } from '../../src/core/ldraw/format.ts';
 import { FACINGS, facingOfVector } from '../../src/core/orientation.ts';
 import { alikeConnectors } from './alike.ts';
+import { partConnections } from './bare.ts';
 import { filledCells } from './cells.ts';
 import { colourFor, type ColourTable } from './colours.ts';
-import { finishConnectors } from './connectors.ts';
 import type { Flattener, FlatTriangle } from './flatten.ts';
 import { fitPart, type PartFit } from './fit.ts';
 import { buildMesh, joinColourMeshes, type LayeredMeshData, type MeshTriangle } from './mesh.ts';
@@ -125,7 +125,7 @@ export function convertPart(file: string, flattener: Flattener, colours: ColourT
     const facing = facingOfVector({ x: dx ?? 0, y: dy ?? 0, z: dz ?? 0 });
     return facing && facing !== '+y' ? [[x, y, z, FACINGS.indexOf(facing)]] : [];
   });
-  const connectors = finishConnectors(part.connectors).map((connector): ConnectorEntry => {
+  const connectors = partConnections(part).map((connector): ConnectorEntry => {
     const [x, y, z] = place(connector.at);
     const [ax, ay, az] = toEditor(connector.axis);
     const size = Math.hypot(ax, ay, az);

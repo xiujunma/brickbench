@@ -211,6 +211,29 @@ test.describe('Technic, hinges and minifigures', () => {
     expect(Math.abs((bar?.z ?? 0) + 1.1 - (tile?.z ?? 0))).toBeCloseTo(0.1, 6);
   });
 
+  test('clips a flame into a tile’s clip by its bar, which LDraw draws as a closed cylinder', async ({ page }) => {
+    // starts the editor and searches the library twice
+    test.slow();
+    await freshEditor(page);
+    await page.getByRole('button', { name: 'Library', exact: true }).click();
+    await expect(page.locator('#library-category')).toBeVisible();
+
+    // a 1 × 1 tile with a clip standing on it, which is all it plugs anything into, on the baseplate
+    await chooseLibraryPart(page, '15712');
+    const centre = await viewportCentre(page);
+    await page.mouse.click(centre.x, centre.y);
+    await expect(counts(page)).toHaveText('1 brick');
+
+    // a flame 7 long with a bar at its foot goes into the clip by that bar
+    await chooseLibraryPart(page, '85959');
+    const inClip = await plugNear(page, centre, /Y/, 1);
+    expect(inClip).not.toBeNull();
+    const flame = (await savedBricks(page, 2))[1];
+    expect(flame?.partId).toBe('ldraw:85959');
+    // lying level along the clip, from front to back over the tile: its own up, along its bar, runs that way
+    expect(Math.abs(flame?.m?.[7] ?? 0)).toBeCloseTo(1, 6);
+  });
+
   test('stands a bar in a round plate’s open stud', async ({ page }) => {
     // starts the editor and searches the library twice
     test.slow();

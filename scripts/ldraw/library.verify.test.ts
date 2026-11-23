@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import { decodePartMesh, encodePartMesh } from '../../src/core/ldraw/format.ts';
 import { readColourTable } from './colours.ts';
+import { partConnections } from './bare.ts';
 import { allConnectors, finishConnectors, HINGE_PRIMITIVES, ROD_PRIMITIVES, type FlatConnector } from './connectors.ts';
 import { CLIP_JOINTS } from './clipJoints.ts';
 import { HINGE_JOINTS } from './hingeJoints.ts';
@@ -50,8 +51,10 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
   };
   /** Every connection a file is drawn with, in LDraw's frame: those an assembly's own halves take among them. */
   const joinsOf = (file: string, source: LibrarySource = library): FlatConnector[] => allConnectors(new Flattener(source).flatten(file).connectors);
-  /** The kinds of connection a file's part ends up with: where another part can plug in. */
-  const freeOf = (file: string): string => finishConnectors(new Flattener(library).flatten(file).connectors).map((j) => j.kind).join(' ');
+  /** Where another part can plug into a file's part, as the build finds it: its connections, its bars where they are bare. */
+  const connectionsOf = (file: string): FlatConnector[] => partConnections(new Flattener(library).flatten(file));
+  /** The kinds of connection a file's part ends up with. */
+  const freeOf = (file: string): string => connectionsOf(file).map((j) => j.kind).join(' ');
   /** Pairs of joints of these kinds that sit together (to half an LDraw unit) along one line; pointing the same way along it, when `sameWay`. */
   const together = (joints: readonly FlatConnector[], a: FlatConnector['kind'], b: FlatConnector['kind'], sameWay = false): number =>
     joints
@@ -197,7 +200,7 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
   const AS_CLIP = '- clip clip clip clip clip -';
   const AS_ROD = '- rod rod rod rod rod -';
   /** The clips a file's part ends up with, free for a bar. */
-  const freeClips = (file: string): FlatConnector[] => finishConnectors(new Flattener(library).flatten(file).connectors).filter((c) => c.kind === 'clip');
+  const freeClips = (file: string): FlatConnector[] => connectionsOf(file).filter((c) => c.kind === 'clip');
 
   it.each(CATALOGUE)('%s fits the grid like the built-in part', (file, w, d, h, origin) => {
     const result = convertPart(file, flattener);
@@ -442,11 +445,18 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
   });
 
   it('finds bars, and the clips and minifigure hands that hold them', () => {
-    const kindsOf = (file: string) => finishConnectors(new Flattener(directorySource(LDRAW_DIR ?? '')).flatten(file).connectors).map((c) => [c.kind, Math.round(c.length)]);
-    // a bar 3 studs long; a plate with a handle along it; a lightsaber blade
+    const kindsOf = (file: string) => connectionsOf(file).map((c) => [c.kind, Math.round(c.length * 10) / 10]);
+    // a bar 3 studs long; a plate with a handle along it, between the posts it runs into; a lightsaber blade
     expect(kindsOf('87994.dat')).toEqual([['bar', 60]]);
-    expect(kindsOf('48336.dat')).toEqual([['bar', 40]]);
+    expect(kindsOf('48336.dat')).toEqual([['bar', 28]]);
     expect(kindsOf('30374.dat')).toEqual([['bar', 80]]);
+    // bars LDraw draws as closed cylinders: a whip, a flame with a bar, a blade on a bar, a cutlass's grip up to its guard
+    expect(kindsOf('2488.dat')).toEqual([['bar', 48]]);
+    expect(kindsOf('85959.dat')).toEqual([['bar', 16]]);
+    expect(kindsOf('87747.dat')).toEqual([['bar', 10]]);
+    expect(kindsOf('2530.dat')).toEqual([['bar', 12]]);
+    // a decoration with two bars, one drawn as a closed cylinder without its edge lines
+    expect(kindsOf('98593.dat')).toEqual([['bar', 12.5], ['bar', 11.9]]);
     // plates with clips; a minifigure's hand, by its pin and its grip
     expect(kindsOf('61252.dat').map(([kind]) => kind)).toEqual(['clip']);
     expect(kindsOf('63868.dat').map(([kind]) => kind)).toEqual(['clip']);
@@ -456,6 +466,39 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(kindsOf('3005.dat')).toEqual([]);
     // the cylinders studs and minifigure torsos are drawn with are not bars
     for (const file of ['3001.dat', '3024.dat', '3023.dat', '973.dat', '3062b.dat']) expect(kindsOf(file).filter(([kind]) => kind === 'bar')).toEqual([]);
+  });
+
+  it('keeps a bar only where it is bare: drawn, and nothing of its part round it', () => {
+    const barsOf = (file: string) => connectionsOf(file).filter((c) => c.kind === 'bar').map((c) => Math.round(c.length * 10) / 10);
+    // a plate with a handle whose ends are free: the ends and the middle, not where it runs through its posts; a shield's grip
+    // between its ends; a lightsaber's blade out of its hilt, and the hilt's end up to the ring round it; the axles of a brick
+    // with train wheels, between brick and wheels
+    expect(barsOf('2540.dat')).toEqual([8, 12, 8]);
+    expect(barsOf('92747.dat')).toEqual([15]);
+    expect(barsOf('42114c01.dat')).toEqual([73, 11]);
+    expect(barsOf('4180c01.dat')).toEqual([18, 18]);
+    // none: a colour sensor's rod sits in a socket, a pull-back motor's axle in a channel, all but its ends
+    expect(barsOf('95650.dat')).toEqual([]);
+    expect(barsOf('10039.dat')).toEqual([]);
+    // where its part closes round it a little further out: no piston rod in a pneumatic cylinder's bore, only the hose
+    // ports, and the rod out of it when it is drawn out; no leads in a speed regulator's plugs; a Fabuland axe's handle
+    // between the rings on it; a skeleton's leg, whose rod has a collar round its middle
+    expect(barsOf('19476-f1.dat')).toEqual([10, 11]);
+    expect(barsOf('19476-f2.dat')).toEqual([122, 10, 11]);
+    expect(barsOf('2869c01.dat')).toEqual([]);
+    expect(barsOf('4438.dat')).toEqual([10.1, 21.3, 9.1]);
+    expect(barsOf('6266.dat')).toEqual([]);
+    // each bar kept has its own surface round it and nothing facing in round it, from one end to the other
+    const bare = (file: string, bar: FlatConnector): string => {
+      const half = bar.length / 2;
+      return [-half + 0.3, -0.8 * half, 0, 0.8 * half, half - 0.3]
+        .map((s) => wallAt(file, bar, s))
+        .map(({ inwards, outwards }) => (inwards === 0 && outwards > 0 ? 'bare' : `in ${inwards.toFixed(2)} out ${outwards.toFixed(2)}`))
+        .join(' ');
+    };
+    for (const file of ['2540.dat', '48336.dat', '92747.dat', '42114c01.dat', '4180c01.dat', '2488.dat', '85959.dat', '2530.dat', '630.dat', '15396c01.dat', '6260c01.dat', '19476-f2.dat', '4438.dat']) {
+      for (const bar of connectionsOf(file).filter((c) => c.kind === 'bar')) expect(`${file} ${bar.at}: ${bare(file, bar)}`).toBe(`${file} ${bar.at}: ${'bare '.repeat(5).trim()}`);
+    }
   });
 
   it('takes for open studs the stud primitives with a bar-sized hole right down their middle', () => {
@@ -514,20 +557,25 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
       }
     }
     const set = Object.entries(CLIP_JOINTS).flatMap(([file, joints]) => joints.map((joint) => `${file} ${joint.kind}`));
-    expect(set.filter((joint) => joint.endsWith(' clip'))).toHaveLength(38);
-    // the bars: the shaft of a bar with a clip that has a hole through it, drawn in pieces; a super battle droid's hips and a
-    // droid's shoulders, drawn closed
-    expect(set.filter((joint) => !joint.endsWith(' clip'))).toEqual(['48729b.dat bar', '41889.dat bar', 's/30375s01.dat bar', 's/30375s01.dat bar']);
+    expect(set.filter((joint) => joint.endsWith(' clip'))).toHaveLength(55);
+    // the one bar: the shaft of a bar with a clip that has a hole through it, drawn in pieces
+    expect(set.filter((joint) => !joint.endsWith(' clip'))).toEqual(['48729b.dat bar']);
+    // a super battle droid's hips and a droid's shoulders, which LDraw draws as closed cylinders, the rule for bars finds
+    const barsAt = (file: string) => joinsOf(file).filter((j) => j.kind === 'bar').map((j) => `${j.at.map((v) => Math.round(v * 100) / 100 + 0)} ${j.length}`);
+    expect(barsAt('41889.dat')).toContain('0,0,0 22.5');
+    expect(barsAt('s/30375s01.dat')).toEqual(expect.arrayContaining(['-15.75,-32,0 8.5', '15.75,-32,0 8.5']));
     // that shaft is the bar the plain one's is, which LDraw draws as one cylinder
     const shaft = (file: string) => joinsOf(file).filter((j) => j.kind === 'bar').map((j) => `${j.at.map((v) => Math.round(v * 10) / 10)} ${Math.round(j.length * 10) / 10}`);
     expect(shaft('48729b.dat')).toEqual(shaft('48729a.dat'));
     // every part they are set for has them, by how many clips it ends up with: bars with a clip, droids' arms and legs, figures'
-    // bent arms, a martian's head, saddles, an arm with a towball, a sabre, feathers, ladders, leaves, a panel, a trap door's
-    // frame, Technic connectors, and a tile with clips, plain, printed and with a sticker
+    // bent arms, a martian's head, saddles, an arm with a towball, a sabre, feathers, ladders, leaves, a panel, two trap doors'
+    // frames, Technic connectors, a tile with clips, plain, printed and with a sticker, a skateboard with wheel clips, a cannon's
+    // base, a conveyor belt's frame, a motorcycle's body and an arch
     const clips: Readonly<Record<string, number>> = {
       '48729a': 1, '48729b': 1, '59230': 2, '53989': 1, '10058': 1, '30376': 1, '41890': 1, '64796': 1, '42687': 1, '66788': 1, '28660': 1,
       '30529': 1, '30529p01': 1, '30529p02': 1, '4491a': 1, '4491b': 2, '30082': 1, '59229': 1, '30127': 1, '30127p01': 1, '6020': 2, '30095': 4,
       '30239': 1, '30034': 1, '92107': 2, '47994': 2, '19159': 2, '30350a': 2, '30350ap01': 2, '30350ad01': 2,
+      '45917': 2, '2527': 4, '633': 6, '30187': 1, '30041': 2, '2145': 2,
     };
     for (const [id, count] of Object.entries(clips)) expect(`${id} ${freeClips(`${id}.dat`).length}`).toBe(`${id} ${count}`);
     expect(freeOf('48729b.dat')).toBe('bar clip');
@@ -545,19 +593,27 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
 
   it('leaves an assembly without the clips and bars its own parts fill, the clips found by their shape among them', () => {
     // droids and a martian, their arms on their shoulders: the hands' clips are free, the shoulders and the arms' other clips taken,
-    // and so are the clips of a droid's head on its neck and of its legs on its hips, bars that go on past them
-    for (const file of ['30375cs0.dat', '30375cs1.dat', '30375cs2.dat', '30375cs3.dat', '30529c01.dat']) expect(`${file}: ${freeOf(file)}`).toBe(`${file}: bar bar clip clip barhole`);
+    // and so are the clips of a droid's head on its neck and of its legs on its hips; the bars those clips are on go on past them,
+    // by less than a clip's length
+    for (const file of ['30375cs0.dat', '30375cs1.dat', '30375cs2.dat', '30375cs3.dat', '30529c01.dat']) expect(`${file}: ${freeOf(file)}`).toBe(`${file}: clip clip barhole`);
     expect(joinsOf('30375cs0.dat').filter((j) => j.kind === 'clip')).toHaveLength(6);
-    // super battle droids, their arms' clips on their shoulders and their legs' on their hips: three bars that go on past the clips
+    // super battle droids, their arms' clips on their shoulders and their legs' on their hips: nothing is left of those bars
     for (const file of ['41889c01.dat', '41889c02.dat']) {
-      expect(`${file}: ${freeOf(file)}`).toBe(`${file}: bar bar bar`);
+      expect(`${file}: ${freeOf(file)}`).toBe(`${file}: `);
       expect(joinsOf(file).filter((j) => j.kind === 'clip')).toHaveLength(3);
     }
-    // a skeleton with its legs' clips on its hips' two bars: its arms and its legs' ends are left; a motorcycle with its handlebars
-    // in its clip: their two grips are left; a dragon with its wings' bars in its body's clips: the bars go on past them
-    expect(freeOf('6260c01.dat')).toBe('head bar bar bar bar barhole barhole');
+    // a skeleton with its legs' clips on its hips' two bars: its arms are left; a motorcycle with its handlebars in its clip:
+    // their two grips are left; a dragon with its wings' bars in its body's clips: too little of them is left
+    expect(freeOf('6260c01.dat')).toBe('head bar bar barhole barhole');
     expect(freeOf('18895c01.dat')).toBe(`bar bar${' barhole'.repeat(8)}`);
-    expect(freeOf('75174c01.dat')).toBe('pinhole bar bar barhole barhole barhole barhole');
+    expect(freeOf('75174c01.dat')).toBe('pinhole barhole barhole barhole barhole');
+    // a conveyor belt: its frame's clips hold its drum's and its axles' ends; the drum's shaft between them and the crank's handle
+    // are left. A cannon on its base: the base's short clips hold its barrel's pivots, too little of which is left, and its two
+    // upright clips are free. A motorcycle with its forks' stem in its body's clip, and one without its forks
+    expect(freeOf('630.dat')).toBe('bar bar');
+    expect(freeOf('2527c01.dat')).toBe('bar clip clip');
+    expect(freeClips('30187c01.dat')).toEqual([]);
+    expect(freeClips('30187c04.dat')).toHaveLength(1);
     // and no clip left free on the droids and the martian, two hands' on each, has a rod in it
     const hands = ['30375cs0.dat', '30375cs1.dat', '30375cs2.dat', '30375cs3.dat', '30529c01.dat'].flatMap((file) => freeClips(file).map((clip) => `${file} ${clip.at}: ${drawnAt(file, clip, 0)}`));
     expect(hands).toHaveLength(10);

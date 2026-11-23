@@ -90,6 +90,13 @@ describe('library index', () => {
     // a tile's clip, found by its shape, as version 14 lists them: the same kind of connection as any clip
     const tile: LDrawIndexEntry = { ...BRICK, id: '2555', name: 'Tile 1 × 1 with Clip', connectors: [[17, 0, 0.7, 0, 0, 0, 1, 0.4]] };
     expect(toPartDef(parseLDrawIndex({ version: 14, generated: '', parts: [tile] }).parts[0] as LDrawIndexEntry).connectors?.[0]?.kind).toBe('clip');
+    // a handle's free ends and middle, cut where it runs through its posts, as version 16 lists them: bars like any other
+    const handle: LDrawIndexEntry = { ...BRICK, id: '2540', name: 'Plate 1 × 2 with Handle', connectors: [[16, -0.8, 0.3, 1, 1, 0, 0, 0.4], [16, 0, 0.3, 1, 1, 0, 0, 0.6], [16, 0.8, 0.3, 1, 1, 0, 0, 0.4]] };
+    expect(toPartDef(parseLDrawIndex({ version: 16, generated: '', parts: [handle] }).parts[0] as LDrawIndexEntry).connectors?.map((c) => [c.kind, c.length])).toEqual([
+      ['bar', 0.4],
+      ['bar', 0.6],
+      ['bar', 0.4],
+    ]);
     expect(toPartDef(BRICK)).not.toHaveProperty('connectors');
     // no such kind, no axis, no length
     for (const connector of [

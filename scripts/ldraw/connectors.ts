@@ -158,17 +158,20 @@ const OPEN_STUDS = /^stud(2|6|17)a?(-logo\d*)?$/;
 export const ROD_PRIMITIVES: Readonly<Record<string, ConnectorPrimitive>> = RODS;
 
 /** A bar's radius, in LDU (3.18 mm), how far off it a surface drawn for one may be, and the shortest stretch of a bar worth plugging into. */
-const BAR_RADIUS = 4;
+export const BAR_RADIUS = 4;
 const RADIUS_SLACK = 0.05;
-const SHORTEST_BAR = 8;
+export const SHORTEST_BAR = 8;
 
 /**
- * A bar, when a reference draws one: a whole cylinder (4-4cyli or 4-4cylo)
- * of a bar's radius, at least SHORTEST_BAR long, its surface facing out.
- * Null for anything else, inside out (a hole) included.
+ * A bar, when a reference draws one: a whole cylinder of a bar's radius,
+ * open (4-4cyli), edged (4-4cylo) or closed at one end (4-4cylc, as whips,
+ * hilts and bars with a stop end), with its edge lines or without (cyli2,
+ * cylc2, cylc3), at least SHORTEST_BAR long, its surface facing out. Null
+ * for anything else, inside out (a hole) included. Where a bar found here
+ * is bare is told once the part is drawn (bareBars in bare.ts).
  */
 export function barPiece(file: string, matrix: Transform, inverted: boolean): FlatConnector | null {
-  if (inverted || !/^(48\/)?4-4cyl[io]\.dat$/.test(file.replace(/\\/g, '/').toLowerCase())) return null;
+  if (inverted || !/^(48\/)?4-4cyl(?:[ioc]|i2|c2|c3)\.dat$/.test(file.replace(/\\/g, '/').toLowerCase())) return null;
   const [a, b, c, d, e, f, g, h, i] = matrix.m;
   const radial = [Math.hypot(a, d, g), Math.hypot(c, f, i)];
   const length = Math.hypot(b, e, h);

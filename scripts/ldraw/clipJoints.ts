@@ -5,11 +5,9 @@
  * drawn face by face. Each is set on the file that draws it: its middle on
  * the line it holds a bar along, a bar's radius from the inside of the
  * clip, the way that line runs and how long the clip is along it. With
- * them, the bars the rule for bars (a whole open cylinder) does not find
- * where a clip found here would otherwise seem free: a shaft drawn in
- * pieces round the hole through it, and a droid's shoulders and a super
- * battle droid's hips, drawn as closed cylinders, which their arms' and
- * legs' clips go on. The library verify test checks each against the
+ * them, a bar the rule for bars (a whole cylinder) does not find where a
+ * clip found here would otherwise seem free: a shaft drawn in pieces round
+ * the hole through it. The library verify test checks each against the
  * part's shape: surface a bar's radius from the line, half to three
  * quarters of the way round it and facing in for a clip, all the way
  * round and facing out for a bar, from one end to the other and no
@@ -40,12 +38,10 @@ export const CLIP_JOINTS: Readonly<Record<string, readonly FlatConnector[]>> = {
   '10058.dat': [clip(AT_ORIGIN, ACROSS)],
   // a battle droid's legs, which clip onto the bar of its torso's hips
   '30376.dat': [clip([0, -38, 0], ACROSS)],
-  // a super battle droid: its arms, plain and with a blaster, clip onto its body's shoulders, and its legs onto the bar of its
-  // hips, 22.5 long, which LDraw draws as a closed cylinder
+  // a super battle droid: its arms, plain and with a blaster, clip onto its body's shoulders, and its legs onto the bar of its hips
   '41890.dat': [clip(AT_ORIGIN, ACROSS)],
   '64796.dat': [clip(AT_ORIGIN, ACROSS)],
   '42687.dat': [clip([0, -62.5, 0], ACROSS)],
-  '41889.dat': [joint('bar', AT_ORIGIN, ACROSS, 22.5)],
   // figures' bent arms, whose hands are clips eleven long
   '66788.dat': [clip([9.7, 24.4, 0], ALONG, 11)],
   '28660.dat': [clip([10.4, 16.4, 0], ALONG, 11)],
@@ -74,7 +70,20 @@ export const CLIP_JOINTS: Readonly<Record<string, readonly FlatConnector[]>> = {
   '19159.dat': [clip([-30, -9.75, 0], UPRIGHT), clip([-30, 9.75, 0], UPRIGHT)],
   // a 2 × 3 tile with two angled clips: its shape is in a file its printed one is drawn from too
   's/30350as01.dat': [clip([-10, 2, 40], ACROSS), clip([10, 2, 40], ACROSS)],
-  // a droid's torso, in the file its printed ones are drawn from too: its shoulders, 8.5 long from x 11.5 to 20 either side, which
-  // LDraw draws as closed cylinders. A droid's arm goes on one by its clip
-  's/30375s01.dat': [joint('bar', [-15.75, -32, 0], ACROSS, 8.5), joint('bar', [15.75, -32, 0], ACROSS, 8.5)],
+  // a skateboard's two wheel clips, which go three quarters of the way round its wheels' axles
+  '45917.dat': [clip([-30, 15, 0], ALONG), clip([30, 15, 0], ALONG)],
+  // a cannon's base: the two short clips its barrel turns in, four long, and two upright at its back
+  '2527.dat': [clip([-18, -28, -30], ACROSS, 4), clip([18, -28, -30], ACROSS, 4), clip([-30, -12, 10], UPRIGHT), clip([30, -12, 10], UPRIGHT)],
+  // a conveyor belt's frame: two short clips its drum turns in, and two each end its axles turn in
+  '633.dat': [
+    clip([-18, 0, 0], ACROSS, 4),
+    clip([18, 0, 0], ACROSS, 4),
+    ...[-140, 140].flatMap((z) => [clip([-32, -34, z], ACROSS), clip([32, -34, z], ACROSS)]),
+  ],
+  // a three-wheeled motorcycle's body, which holds its forks' stem upright
+  '30187.dat': [clip([0, -4, -84], UPRIGHT)],
+  // a trap door's frame, older than 92107, which holds the door's bar in two flat clips
+  '30041.dat': [clip([-50, 10, -30], ALONG), clip([-50, 10, 30], ALONG)],
+  // an ornamented arch, with a clip either side
+  '2145.dat': [clip([-50, 18, 10], ACROSS), clip([50, 18, 10], ACROSS)],
 };
