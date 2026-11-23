@@ -144,6 +144,13 @@ export interface LDrawIndexEntry {
   /** Its Technic and click-hinge connections, where parts plug in. */
   readonly connectors?: readonly ConnectorEntry[];
   /**
+   * For each of its connections, the first of them alike with it: a quarter
+   * turn of the part takes its whole shape and its connections onto
+   * themselves, the one connection onto the other, so plugged in by either
+   * it stands the same (a Technic pin's two ends). Absent, none are alike.
+   */
+  readonly alike?: readonly number[];
+  /**
    * The box its shape really fills, [x0, y0, z0, x1, y1, z1] in studs on
    * every axis, from the middle of its footprint at its bottom, y up, when
    * that is well inside its cells, as a bar's is: how far a part at an angle
@@ -163,12 +170,13 @@ export interface LDrawIndexEntry {
  * the rarer hinges: car roofs and canopies, folding hinge plates, control
  * sticks and 1 × 8 hinge bricks, version 14 the clips LDraw draws with
  * plain shapes (the entries read as before; a library built earlier lacks
- * those clips, and counts as out of date).
+ * those clips, and counts as out of date), version 15 which of a part's
+ * connections are alike.
  */
-export const LDRAW_INDEX_VERSION = 14;
+export const LDRAW_INDEX_VERSION = 15;
 
 /** Index formats the app reads: in a version 1 library every part fills its whole box. */
-export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] as const;
+export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
 
 /** Most side studs an index entry lists: a brick with studs all round its sides has a few dozen. */
 export const MAX_SIDE_STUDS = 128;

@@ -59,6 +59,23 @@ describe('building', () => {
     expect(state().buildRotation).toBe(3);
   });
 
+  it('plugs the part being built in by the connection of its own chosen, until another part is', () => {
+    const { state } = withBricks(makeBrick({ id: 'a', partId: 'plate-1x6' }));
+    expect(state().buildVia).toBeNull();
+    state().setBuildVia(2);
+    expect(state().buildVia).toBe(2);
+    // R and T turn it about that connection, and keep it
+    state().rotateBuild(1);
+    state().tipBuild('x', 1);
+    expect(state().buildVia).toBe(2);
+    // another part, or one picked up, goes on by whichever fits best again
+    state().setActivePart('brick-2x2');
+    expect(state().buildVia).toBeNull();
+    state().setBuildVia(1);
+    state().eyedrop('a');
+    expect(state().buildVia).toBeNull();
+  });
+
   it('ignores unknown parts and colours', () => {
     const { state } = setup();
     state().setActivePart('nope');
@@ -332,7 +349,25 @@ describe('documents and ui state', () => {
     state().setHover(null);
     state().setCursor(null);
     state().setPlacementValid(null);
+    state().setPlugChoice(null);
     expect(calls).toBe(0);
+  });
+
+  it('keeps which of the ways it could plug in the build preview shows, and how many there are', () => {
+    const { store, state } = setup();
+    state().setPlugChoice({ at: 1, of: 3 });
+    expect(state().plugChoice).toEqual({ at: 1, of: 3 });
+    let calls = 0;
+    store.subscribe(() => (calls += 1));
+    state().setPlugChoice({ at: 1, of: 3 });
+    expect(calls).toBe(0);
+    state().setPlugChoice({ at: 2, of: 3 });
+    // the same way of more, where the cursor has moved on to a connection it could plug into more ways
+    state().setPlugChoice({ at: 2, of: 4 });
+    expect(state().plugChoice).toEqual({ at: 2, of: 4 });
+    state().setPlugChoice(null);
+    expect(calls).toBe(3);
+    expect(state().plugChoice).toBeNull();
   });
 });
 

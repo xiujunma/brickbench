@@ -90,6 +90,11 @@ function plain(controller: EditorController, event: KeyboardEvent, key: string):
       if (state.tool !== 'build' || state.pastePayload) return false;
       controller.tipBuild(event.shiftKey);
       return true;
+    case 'c':
+      // plug the part to build in by another of its connections; a pasted copy goes on as it fits best, choosing none
+      if (state.tool !== 'build' || state.pastePayload) return false;
+      controller.stepConnection(event.shiftKey);
+      return true;
     case 'delete':
     case 'backspace':
       state.deleteSelection();

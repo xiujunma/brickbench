@@ -67,6 +67,12 @@ export interface PartDef {
   /** Technic pins, holes and axles, and click hinges, where parts plug in (library parts that have them). */
   readonly connectors?: readonly Connector[] | undefined;
   /**
+   * For each of its connections, the first of them alike with it: plugged
+   * in by either, the part stands the same, however it is turned (a Technic
+   * pin's two ends; see LDrawIndexEntry.alike). Absent, none are alike.
+   */
+  readonly alike?: readonly number[] | undefined;
+  /**
    * The box its shape really fills, in world units around its origin, when
    * that is well inside its cells (library parts such as bars): how far it
    * reaches once at an angle.

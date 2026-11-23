@@ -8,29 +8,8 @@ import { makeBrick } from '../model/testUtils';
 import { multiplyTurns, turnOf, type Turn } from '../orientation';
 import type { Brick } from '../model/types';
 import { attachToConnector, type ConnectTurn } from './connect';
-import { materialize, payloadFromPart } from './payload';
-import type { Hit } from './ray';
-
-const STILL: ConnectTurn = { spin: 0, flipped: false };
-
-function hit(point: Vec3, normal: Vec3, brickId: string): Hit {
-  return { kind: 'brick', brickId, point, normal, t: 1, base: 0 };
-}
-
-/** Where `partId` plugs into `target` at the cursor, and whether it has room there, or null; `others` are the bricks already there besides the target. */
-function ask(target: Brick, partId: string, point: Vec3, normal: Vec3, turned: ConnectTurn, id: string, others: readonly Brick[]): { readonly brick: Brick; readonly free: boolean } | null {
-  const part = lookup(partId);
-  if (!part) throw new Error(partId);
-  const attached = attachToConnector(hit(point, normal, target.id), target, payloadFromPart(part, 4, 0), turned, lookup, [target, ...others]);
-  const [brick] = attached ? materialize(attached.payload, attached.offset, () => id) : [];
-  return attached && brick ? { brick, free: attached.free } : null;
-}
-
-/** Builds `partId` plugged into `target` at the cursor, where it has room; null where it does not plug in, or has none. */
-function plug(target: Brick, partId: string, point: Vec3, normal: Vec3, turned: ConnectTurn = STILL, id = 'new', others: readonly Brick[] = []): Brick | null {
-  const asked = ask(target, partId, point, normal, turned, id, others);
-  return asked?.free ? asked.brick : null;
-}
+import { ask, box, hit, plug, STILL, UP } from './connectTesting';
+import { payloadFromPart } from './payload';
 
 /** As `plug`, with the bricks already plugged in around the target. */
 function plugAmong(others: readonly Brick[], target: Brick, partId: string, point: Vec3, normal: Vec3, id = 'new'): Brick | null {
@@ -52,18 +31,10 @@ function connectionIn(brick: Brick, into: Brick) {
   return brickConnectors(brick, lookup).find((mine) => brickConnectors(into, lookup).some((theirs) => engaged(mine, theirs)));
 }
 
-/** A brick's box in the world, in studs on every axis, to 0.001. */
-function box(brick: Brick): { x: number[]; y: number[]; z: number[] } {
-  const cells = brickCellBox(brick, lookup);
-  const r = (v: number) => Math.round(v * 1000) / 1000 + 0;
-  return { x: [r(cells.x0), r(cells.x1)], y: [r(cells.y0 * PLATE_HEIGHT), r(cells.y1 * PLATE_HEIGHT)], z: [r(cells.z0), r(cells.z1)] };
-}
-
 function pluggedInto(a: Brick, b: Brick): boolean {
   return brickConnectors(a, lookup).some((mine) => brickConnectors(b, lookup).some((theirs) => engaged(mine, theirs)));
 }
 
-const UP = { x: 0, y: 1, z: 0 };
 const beam = makeBrick({ id: 'beam', partId: 'beam' });
 
 describe('plugging a pin into a hole', () => {
@@ -175,13 +146,22 @@ describe('putting a minifigure together', () => {
   });
 
   it('hangs an arm from a shoulder, out from the torso, tilted as the shoulder is', () => {
-    const torso = makeBrick({ id: 'torso', partId: 'torso' });
-    const arm = plug(torso, 'arm', { x: 0, y: 1.15, z: 0.55 }, { x: -1, y: 0, z: 0 });
+    // the torso where hips and legs hold it, 2 studs up
+    const torso = makeBrick({ id: 'torso', partId: 'torso', y: 5 });
+    const arm = plug(torso, 'arm', { x: 0, y: 3.15, z: 0.55 }, { x: -1, y: 0, z: 0 });
     if (!arm?.m) throw new Error('no arm');
     expect(arm.m[4]).toBeCloseTo(0.985 / Math.hypot(0.985, 0.17), 9);
     const { x } = box(arm);
     expect(((x[0] ?? 0) + (x[1] ?? 0)) / 2).toBeLessThan(0);
     expect(pluggedInto(arm, torso)).toBe(true);
+    // on a torso standing on the baseplate, hanging would put the arm's hand into the ground: it goes on held out level from the
+    // shoulder, a way it can be built
+    const low = makeBrick({ id: 'low', partId: 'torso' });
+    const held = plug(low, 'arm', { x: 0, y: 1.15, z: 0.55 }, { x: -1, y: 0, z: 0 });
+    if (!held?.m) throw new Error('no arm');
+    expect(isOutOfBounds(held, lookup)).toBe(false);
+    expect(held.m[4]).toBeCloseTo(0, 9);
+    expect(pluggedInto(held, low)).toBe(true);
   });
 });
 
@@ -273,6 +253,9 @@ describe('bars and clips', () => {
     expect(hangs('droid-arm', { spin: 1, flipped: false })[0]).toBe(0);
     expect(hangs('droid-arm', { spin: 2, flipped: false })).toEqual([0, 1.91, 0.6]);
     expect(hangs('droid-arm', { spin: 3, flipped: false })[0]).toBe(0);
+    // unless C chooses its hand's clip: on by that, it stands up from the shoulder, and R swings it about that clip
+    expect(hangs('droid-arm', { spin: 0, flipped: false, via: 1 }).slice(0, 2)).toEqual([1, 1.91]);
+    expect(hangs('droid-arm', { spin: 2, flipped: false, via: 1 }).slice(0, 2)).toEqual([1, -1.91]);
     // on the bar where LDraw's assembled droid has it: the arm's shoulder clip at the shoulder's outer end, 0.8 studs from the middle
     const arm = plug(torso, 'droid-arm', shoulder, LEFT);
     expect(brickConnectors(arm as Brick, lookup)[0]?.at.x).toBeCloseTo(0.2, 9);

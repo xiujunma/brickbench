@@ -22,9 +22,25 @@ function Hint() {
   const tool = useEditor((s) => s.tool);
   const isPasting = useEditor((s) => s.pastePayload !== null);
   const isBlocked = useEditor((s) => s.placementValid === false);
+  const choice = useEditor((s) => s.plugChoice);
   const colorName = useEditor((s) => getColor(s.activeColorId)?.name ?? '');
 
-  if (isBlocked) return <span className="status-hint is-blocked">No room here: the part would overlap another brick.</span>;
+  // where the part being built could plug in more than one way, C steps through them; not for a pasted copy
+  const another =
+    choice && choice.of > 1 && !isPasting ? (
+      <>
+        {' '}
+        · <kbd>C</kbd> by another connection ({choice.at + 1} of {choice.of})
+      </>
+    ) : null;
+  if (isBlocked) return <span className="status-hint is-blocked">No room here: the part would overlap another brick.{another}</span>;
+  if (tool === 'build' && !isPasting && another) {
+    return (
+      <span className="status-hint">
+        Click to plug in · <kbd>R</kbd> rotate{another} · <kbd>Esc</kbd> stop building
+      </span>
+    );
+  }
   if (isPasting) {
     return (
       <span className="status-hint">

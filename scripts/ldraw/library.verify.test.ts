@@ -225,6 +225,26 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     for (const file of ['3001.dat', '3024.dat', '3794b.dat']) expect(sideOf(file)).toEqual([]);
   });
 
+  it('finds which of a part’s connections are alike by its whole shape, not by its box and connections alone', () => {
+    const alikeOf = (file: string): readonly number[] | null => {
+      const result = convertPart(file, flattener);
+      if (!result.ok) throw new Error(`${file} was skipped: ${result.reason}`);
+      return result.alike;
+    };
+    // a pin's two ends, with friction ridges or without; the holes at the two ends of a beam 3, not its middle one; the four
+    // holes round a dome's rim, not the one at its top; a gear rack's two holes, and its two axle holes
+    expect(alikeOf('3673.dat')).toEqual([0, 0]);
+    expect(alikeOf('2780.dat')).toEqual([0, 0]);
+    expect(alikeOf('32523.dat')).toEqual([0, 1, 0]);
+    // a beam 7, one of whose end holes LDraw draws the other way round: a hole goes right through, so it is alike all the same
+    expect(alikeOf('32524.dat')).toEqual([0, 1, 2, 3, 2, 1, 0]);
+    expect(alikeOf('57587.dat')).toEqual([0, 1, 0, 0, 0]);
+    expect(alikeOf('64781.dat')).toEqual([0, 0, 2, 2]);
+    // a shock absorber's two ends: the same holes and box both ways round, but a cylinder at one end and a rod at the other;
+    // a long pin's long and short ends; an axle pin's pin and axle; a droid's arm, its shoulder's clip and its hand's
+    for (const file of ['47373-f1.dat', '6558.dat', '43093.dat', '30377.dat']) expect(alikeOf(file)).toBeNull();
+  });
+
   it('finds the Technic and click-hinge connections of real parts', () => {
     const connectorsOf = (file: string) => {
       const result = convertPart(file, flattener);

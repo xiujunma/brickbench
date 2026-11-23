@@ -46,11 +46,13 @@ export function initialData(): EditorData {
     activePartId: DEFAULT_PART_ID,
     activeColorId: DEFAULT_COLOR_ID,
     buildRotation: 0,
+    buildVia: null,
     clipboard: null,
     pastePayload: null,
     cursor: null,
     hoverBrickId: null,
     placementValid: null,
+    plugChoice: null,
     toasts: [],
     dialog: null,
     lastSavedAt: null,
@@ -138,7 +140,8 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
 
       setActivePart: (partId) => {
         if (!lookup(partId)) return;
-        set({ activePartId: partId, tool: 'build', pastePayload: null, stepEditor: null });
+        // a connection chosen is one of the last part's
+        set({ activePartId: partId, buildVia: null, tool: 'build', pastePayload: null, stepEditor: null });
       },
 
       setActiveColor: (colorId) => {
@@ -158,6 +161,8 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
 
       tipBuild: (axis, dir) =>
         set((s) => (s.pastePayload ? s : { buildRotation: compose(quarterTurn(axis, dir), s.buildRotation) })),
+
+      setBuildVia: (via) => set((s) => (s.buildVia === via ? s : { buildVia: via })),
 
       placePayload: (offset, turned) => {
         const payload = turned ?? buildPayload();
@@ -209,6 +214,7 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
           activePartId: brick.partId,
           activeColorId: brick.colorId,
           buildRotation: brick.r,
+          buildVia: null,
           tool: 'build',
           pastePayload: null,
         });
@@ -322,6 +328,7 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
       setCursor: (cursor) => set((s) => (sameVec(s.cursor, cursor) ? s : { cursor })),
       setHover: (brickId) => set((s) => (s.hoverBrickId === brickId ? s : { hoverBrickId: brickId })),
       setPlacementValid: (valid) => set((s) => (s.placementValid === valid ? s : { placementValid: valid })),
+      setPlugChoice: (choice) => set((s) => (s.plugChoice?.at === choice?.at && s.plugChoice?.of === choice?.of ? s : { plugChoice: choice })),
 
       toast,
       dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),

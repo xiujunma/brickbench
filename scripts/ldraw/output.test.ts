@@ -59,6 +59,27 @@ describe('converting a library folder', () => {
     expect(readFileSync(join(out, 'CAreadme.txt'), 'utf8')).toBe('licence');
   });
 
+  it('lists which of a part’s connections its shape makes alike, and none where something on it tells them apart', () => {
+    const root = makeLibrary();
+    // a pin hole drawn as a square ring, the same seen from either side
+    const ring = ['4 16 -6 0 -6 6 0 -6 6 -2 -6 -6 -2 -6', '4 16 6 0 6 -6 0 6 -6 -2 6 6 -2 6', '4 16 -6 0 6 -6 0 -6 -6 -2 -6 -6 -2 6', '4 16 6 0 -6 6 0 6 6 -2 6 6 -2 -6'];
+    writeFileSync(join(root, 'p', 'peghole.dat'), ['0 Peg Hole', '0 BFC CERTIFY CCW', ...ring].join('\n'));
+    // a beam two holes long: its body a box, a hole near each end
+    const beam = ['0 Technic Beam  2', '0 !LDRAW_ORG Part', '0 BFC CERTIFY CCW', '4 16 -30 0 -10 30 0 -10 30 0 10 -30 0 10', '4 16 -30 -20 -10 -30 -20 10 30 -20 10 30 -20 -10',
+      '4 16 -30 0 -10 -30 -20 -10 30 -20 -10 30 0 -10', '4 16 -30 0 10 30 0 10 30 -20 10 -30 -20 10',
+      '1 16 -10 0 0 1 0 0 0 1 0 0 0 1 peghole.dat', '1 16 10 0 0 1 0 0 0 1 0 0 0 1 peghole.dat'];
+    writeFileSync(join(root, 'parts', '9001.dat'), beam.join('\n'));
+    // the same beam with a mark printed by one hole
+    writeFileSync(join(root, 'parts', '9001p01.dat'), ['0 Technic Beam  2 with Mark', '0 !LDRAW_ORG Part', '0 BFC CERTIFY CCW', '1 16 0 0 0 1 0 0 0 1 0 0 0 1 9001.dat', '3 0 14 -20 -4 18 -20 -4 16 -20 4'].join('\n'));
+    const out = join(dir, 'out');
+    mkdirSync(join(out, 'parts'), { recursive: true });
+    const { entries } = convertLibrary(root, join(out, 'parts'), { only: null, limit: Infinity });
+    expect(entries.find((e) => e.id === '9001')).toMatchObject({ connectors: [expect.anything(), expect.anything()], alike: [0, 0] });
+    expect(entries.find((e) => e.id === '9001p01')?.connectors).toHaveLength(2);
+    expect(entries.find((e) => e.id === '9001p01')).not.toHaveProperty('alike');
+    expect(entries.find((e) => e.id === '3005')).not.toHaveProperty('alike');
+  });
+
   it('lists the old numbers LDraw moved or aliased, followed to the parts it keeps', () => {
     const root = makeLibrary();
     // 3005a moved to 3005b, which moved on to 3005; 3005x is an alias drawing 3005; 3005z moved to a part left out

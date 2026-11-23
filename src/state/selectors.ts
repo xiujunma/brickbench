@@ -3,7 +3,9 @@ import { brickWorldBoxes, isLoose } from '../core/model/geometry';
 import { allBricks, getBricks } from '../core/model/model';
 import { buildSpatialIndex, collides, doubles, isOutOfBounds, type SpatialIndex } from '../core/model/spatial';
 import type { Brick, Model } from '../core/model/types';
+import { facingOf, spinOf } from '../core/orientation';
 import type { PartLookup } from '../core/parts/types';
+import type { ConnectTurn } from '../core/placement/connect';
 import type { EditorState } from './types';
 
 /** Undo and redo flip between neighbouring snapshots, so two slots cover the common cases. */
@@ -42,6 +44,18 @@ export function bricksOf(model: Model): Brick[] {
 /** Number of distinct part-and-colour combinations in a model. */
 export function distinctPieces(model: Model): number {
   return varietyCache(model, () => new Set(bricksOf(model).map((b) => `${b.partId}|${b.colorId}`)).size);
+}
+
+/**
+ * How the part being built is held where it plugs in (see ConnectTurn):
+ * turned by R and T, and by the connection of its own C chose. A pasted
+ * copy goes on as it fits best: R and T turn the copy, not how it plugs
+ * in, and the connection chosen, like the turn, is the active part's.
+ */
+export function buildTurn(state: Pick<EditorState, 'buildRotation' | 'buildVia' | 'pastePayload'>): ConnectTurn {
+  const { buildRotation, buildVia, pastePayload } = state;
+  if (pastePayload) return { spin: 0, flipped: false };
+  return { spin: spinOf(buildRotation), flipped: facingOf(buildRotation) !== '+y', ...(buildVia === null ? {} : { via: buildVia }) };
 }
 
 export function currentModel(state: Pick<EditorState, 'history'>): Model {

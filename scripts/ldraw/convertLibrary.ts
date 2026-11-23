@@ -92,7 +92,7 @@ function round(n: number): number {
 }
 
 function toEntry(id: string, header: PartHeader, conversion: Extract<Conversion, { ok: true }>): LDrawIndexEntry {
-  const { fit, solids, sideStuds, connectors, extent } = conversion;
+  const { fit, solids, sideStuds, connectors, extent, alike } = conversion;
   // the cells it sits in, around its origin: its extent is worth listing only when well inside them
   const cells = [-fit.w / 2, 0, -fit.d / 2, fit.w / 2, fit.h * PLATE_STUDS, fit.d / 2];
   const inside = extent.some((v, k) => (k < 3 ? v - (cells[k] ?? 0) : (cells[k] ?? 0) - v) > EXTENT_SLACK);
@@ -120,6 +120,8 @@ function toEntry(id: string, header: PartHeader, conversion: Extract<Conversion,
             .map(([kind, x, y, z, ax, ay, az, length]): ConnectorEntry => [kind, round(x), round(y), round(z), round(ax), round(ay), round(az), round(length)]),
         }
       : {}),
+    // each names the first alike with it, never a later one, so those listed still name only those listed
+    ...(alike ? { alike: alike.slice(0, MAX_CONNECTORS) } : {}),
     ...(inside ? { extent: outwards(extent) } : {}),
     ...(isPrintedPart(header) ? { printed: true as const } : {}),
   };

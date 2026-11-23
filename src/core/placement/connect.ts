@@ -4,7 +4,8 @@
  * wheel along an axle, a hinge's finger into its fork. The part being built
  * turns so its connection lines up with the one under the cursor and goes
  * exactly where that puts it, loose: at any angle, and plugged into its
- * neighbour rather than colliding with it.
+ * neighbour rather than colliding with it. Of its connections that fit,
+ * it goes on by the one that leaves it best placed, or the one C chooses.
  */
 import { LDU_PER_UNIT, PLATE_HEIGHT, type Vec3 } from '../grid';
 import {
@@ -34,10 +35,26 @@ import type { Attachment } from './attach';
 import type { Payload, PayloadBrick } from './payload';
 import type { Hit } from './ray';
 
-/** How the part being built is turned by R and T: quarter turns about the connection from the best fit, and turned end over end. */
+/**
+ * How the part being built is held: which of its own connections it goes
+ * on by (C), and how R and T turn it from the way it fits best by that
+ * one, quarter turns about the connection and end over end.
+ */
 export interface ConnectTurn {
   readonly spin: number;
   readonly flipped: boolean;
+  /** The connection it goes on by, as its index among its own, where that one plugs in; unset, or where it does not, whichever fits best. */
+  readonly via?: number;
+}
+
+/**
+ * The ways a part can plug in where it does, and which it takes: for each
+ * way, the connection of its own it goes on by (its index among them), the
+ * way it takes by itself first; and `at`, the way it takes.
+ */
+export interface PlugWays {
+  readonly at: number;
+  readonly plugs: readonly number[];
 }
 
 /**
@@ -174,8 +191,9 @@ function plugsInto(plug: Connector, socket: WorldConnector, part: PartDef): bool
   return socket.kind !== 'barhole' || barEnds(plug, part).length > 0;
 }
 
-/** One way the part can plug in: how it is turned, where its origin and its connection's middle go (world units), and how well it sits. */
+/** One way the part can plug in: by which of its connections (its index among them), how it is turned, where its origin and that connection's middle go (world units), and how well it sits. */
 interface Fit {
+  readonly plug: number;
   readonly turn: Turn;
   readonly origin: Vec3;
   readonly middle: Vec3;
@@ -350,23 +368,23 @@ function turnsFor(plug: Connector, socket: WorldConnector, hit: Hit, part: PartD
 }
 
 /**
- * Every way the payload's part plugs into the socket, scored: the most of
- * its connections plugged into the target's (a torso on both the hips'
- * studs, not one), then most upright, then, on a bar that sticks out of
- * its part, by the clip the part is drawn about before any other of its
- * clips (drawnAbout), unless that would leave it under the ground or out
- * of the build area, then least in the target's way as its box and the
- * target's tell it, then (but for round connections, whose turn means nothing)
- * facing most as the target does, then turned least. Which of its own
- * connections a part goes on by is settled here: R and T turn it about
- * that one. A hinge's or a turntable's half goes on
- * one way, as the two are drawn together (restTurn), from which R and T
- * still turn it. A part goes into one of the target's
- * hinges, not into two on different lines at once: fingers hold a part to
- * one side of them, so that would lay it through the target, as a hinge
- * plate with fingers on both ends lies turned round onto its twin. And it
- * goes into none of the target's connections where another part already
- * is: a pin into no hole a pin fills, a second top onto no hinge.
+ * Every way the payload's part plugs into the socket, scored: first a way
+ * it can be built, inside the build area and not into the ground, then the
+ * most of its connections plugged into the target's (a torso on both the
+ * hips' studs, not one), then most upright, then, on a bar that sticks out
+ * of its part, by the clip the part is drawn about before any other of its
+ * clips (drawnAbout), then least in the target's way as its box and the
+ * target's tell it, then (but for round connections, whose turn means
+ * nothing) facing most as the target does, then turned least. Which of its
+ * own connections a part goes on by is settled here, unless C chooses
+ * another: R and T turn it about that one. A hinge's or a turntable's half
+ * goes on one way, as the two are drawn together (restTurn), from which R
+ * and T still turn it. A part goes into one of the target's hinges, not
+ * into two on different lines at once: fingers hold a part to one side of
+ * them, so that would lay it through the target, as a hinge plate with
+ * fingers on both ends lies turned round onto its twin. And it goes into
+ * none of the target's connections where another part already is: a pin
+ * into no hole a pin fills, a second top onto no hinge.
  */
 function fitsOf(part: PartDef, brick: PayloadBrick, socket: WorldConnector, hit: Hit, target: Brick, lookup: PartLookup, takenOf: TakenOf): Fit[] {
   const plugs = part.connectors ?? [];
@@ -377,7 +395,7 @@ function fitsOf(part: PartDef, brick: PayloadBrick, socket: WorldConnector, hit:
   const targetPart = lookup(target.partId);
   const own = socket.kind === 'bar' ? targetPart?.connectors?.[sockets.findIndex((other) => other.kind === socket.kind && length(minus(other.at, socket.at)) < 1e-9 && Math.abs(dot(other.axis, socket.axis)) > 1 - 1e-9)] : undefined;
   const fits: Fit[] = [];
-  for (const plug of plugs) {
+  for (const [index, plug] of plugs.entries()) {
     if (!plugsInto(plug, socket, part)) continue;
     const asTarget = dot(rotateBy(brickTurn(target), plug.axis), socket.axis) < 0 ? -1 : 1;
     const middle = placeOn(plug, socket, hit, takenOf(socket), asTarget);
@@ -393,8 +411,8 @@ function fitsOf(part: PartDef, brick: PayloadBrick, socket: WorldConnector, hit:
       if (!haveRoom(seated, takenOf)) continue;
       const [hinge, ...hinges] = seated.map(([, [into]]) => into).filter((other) => FINGERED.includes(other.kind));
       if (hinge && hinges.some((other) => !onOneLine(hinge, other))) continue;
-      const byItsOwn = about && !isOutOfBounds(placed, lookup) ? 0 : 1;
-      fits.push({ turn, origin, middle, score: [-seated.length, -e, byItsOwn, overlap(box, targetBox), facing ? -closeness(facing, turn) : 0, -(a + e + i)] });
+      const outside = isOutOfBounds(placed, lookup) ? 1 : 0;
+      fits.push({ plug: index, turn, origin, middle, score: [outside, -seated.length, -e, about ? 0 : 1, overlap(box, targetBox), facing ? -closeness(facing, turn) : 0, -(a + e + i)] });
     }
   }
   return fits;
@@ -430,25 +448,78 @@ function better(a: Fit, b: Fit): boolean {
   return false;
 }
 
-/** The best way the part plugs into the nearest of `sockets` that has room for it, with that socket. */
-function bestFit(part: PartDef, brick: PayloadBrick, sockets: readonly WorldConnector[], hit: Hit, target: Brick, lookup: PartLookup, takenOf: TakenOf): { readonly socket: WorldConnector; readonly best: Fit } | null {
+function bestOf(fits: readonly Fit[]): Fit | null {
+  return fits.reduce<Fit | null>((top, fit) => (top === null || better(fit, top) ? fit : top), null);
+}
+
+/** Every way the part plugs into the nearest of `sockets` that has room for it, with that socket. */
+function fitsAt(part: PartDef, brick: PayloadBrick, sockets: readonly WorldConnector[], hit: Hit, target: Brick, lookup: PartLookup, takenOf: TakenOf): { readonly socket: WorldConnector; readonly fits: readonly Fit[] } | null {
   for (const socket of sockets) {
-    const best = fitsOf(part, brick, socket, hit, target, lookup, takenOf).reduce<Fit | null>((top, fit) => (top === null || better(fit, top) ? fit : top), null);
-    if (best) return { socket, best };
+    const fits = fitsOf(part, brick, socket, hit, target, lookup, takenOf);
+    if (fits.length > 0) return { socket, fits };
   }
   return null;
 }
 
-/** Where a part plugs in, and whether it has room there: false where another part already is, and it has nowhere else to go. */
+/** One way a part plugs in: the connections of its own it goes on by that way, and its best fit. */
+interface Way {
+  readonly plugs: readonly number[];
+  readonly best: Fit;
+}
+
+/** Whether a unit axis runs along one of the grid's, either way. */
+function onGridAxis(axis: Vec3): boolean {
+  return Math.max(Math.abs(axis.x), Math.abs(axis.y), Math.abs(axis.z)) > 1 - 1e-6;
+}
+
+/**
+ * The ways a part can plug in at a connection, best first: one for each of
+ * its own connections that goes on there, but one for all of those its
+ * shape makes alike (PartDef.alike): a pin goes into a hole by either of its
+ * two ends, and a beam onto a pin by the hole at one end lies as it would by
+ * the hole at the other, turned half round. That holds while the quarter
+ * turns R gives keep to the grid, the connection's axis and the part's own
+ * running along the grid's; at a tilted one, a minifigure hand's clip, R's
+ * quarters by one alike connection are not those by the other, so each is
+ * a way of its own. Of two that fit as well, the one whose best fit came
+ * first goes first, as that fit is the one the part takes by itself.
+ */
+function waysOf(part: PartDef, fits: readonly Fit[], socket: WorldConnector): Way[] {
+  const ways = new Map<number, Way>();
+  for (const fit of fits) {
+    const own = part.connectors?.[fit.plug];
+    const like = own && onGridAxis(own.axis) && onGridAxis(socket.axis) ? (part.alike?.[fit.plug] ?? fit.plug) : fit.plug;
+    const way = ways.get(like);
+    ways.set(like, way ? { plugs: way.plugs.includes(fit.plug) ? way.plugs : [...way.plugs, fit.plug], best: better(fit, way.best) ? fit : way.best } : { plugs: [fit.plug], best: fit });
+  }
+  const order = new Map(fits.map((fit, index) => [fit, index]));
+  return [...ways.values()].sort((a, b) => (better(a.best, b.best) ? -1 : better(b.best, a.best) ? 1 : (order.get(a.best) ?? 0) - (order.get(b.best) ?? 0)));
+}
+
+/** The connection to plug in by for the way after the one taken (C), or before it (`back`); null where there is no other way. */
+export function nextWay(ways: PlugWays, back: boolean): number | null {
+  const count = ways.plugs.length;
+  if (count < 2) return null;
+  return ways.plugs[(ways.at + (back ? count - 1 : 1)) % count] ?? null;
+}
+
+/**
+ * Where a part plugs in, whether it has room there (false where another
+ * part already is, and it has nowhere else to go), and the ways it could
+ * plug in there, C's to choose from.
+ */
 export interface Plugging extends Attachment {
   readonly free: boolean;
+  readonly ways: PlugWays;
 }
 
 /**
  * Where the payload plugs into the connection of `target` under the cursor:
- * the best fit, turned by R (`spin`) about the connection and end over end
- * by T (`flipped`); null when the payload is more than one part, has no
- * connection that mates one of the target's, or the cursor is not at one.
+ * the best fit by the connection of its own C chose (`via`), where that one
+ * plugs in there, by whichever fits best otherwise, turned by R (`spin`)
+ * about the connection and end over end by T (`flipped`); null when the
+ * payload is more than one part, has no connection that mates one of the
+ * target's, or the cursor is not at one.
  *
  * A connection that a part among `others` (the bricks already there; the
  * target among them is skipped) is plugged into is taken: the payload goes
@@ -479,10 +550,9 @@ export function attachToConnector(hit: Hit, target: Brick, payload: Payload, tur
     taken.set(socket, known);
     return known;
   };
-  const free = bestFit(part, only, near, hit, target, lookup, takenOf);
   const found =
-    free ??
-    bestFit(
+    fitsAt(part, only, near, hit, target, lookup, takenOf) ??
+    fitsAt(
       part,
       only,
       near.filter((socket) => !BRICK_JOINTS.includes(socket.kind)),
@@ -492,7 +562,11 @@ export function attachToConnector(hit: Hit, target: Brick, payload: Payload, tur
       NOTHING_TAKEN,
     );
   if (!found) return null;
-  const { socket, best } = found;
+  const { socket, fits } = found;
+  const ways = waysOf(part, fits, socket);
+  // by the connection chosen, where it goes on here; the best fit otherwise
+  const best = bestOf(fits.filter((fit) => fit.plug === turned.via)) ?? bestOf(fits);
+  if (!best) return null;
   // from the best fit, T turns the part end over end where it stands (but in an open stud, open only at its top), and R a quarter turn about the connection for each press
   const bestBox = brickCellBox(placedAt(only, best.origin, best.turn, lookup), lookup);
   const centre = { x: (bestBox.x0 + bestBox.x1) / 2, y: ((bestBox.y0 + bestBox.y1) / 2) * PLATE_HEIGHT, z: (bestBox.z0 + bestBox.z1) / 2 };
@@ -508,5 +582,6 @@ export function attachToConnector(hit: Hit, target: Brick, payload: Payload, tur
     offset: { x: placed.x, y: placed.y, z: placed.z },
     // as it ends up, turned by R and T: another of its connections may have come to one that is taken, or clear of one
     free: haveRoom(seatsOf(plugs, brickConnectors(target, lookup), origin, facing), takenOf),
+    ways: { at: ways.findIndex((way) => way.plugs.includes(best.plug)), plugs: ways.map((way) => way.best.plug) },
   };
 }

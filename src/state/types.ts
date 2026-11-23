@@ -30,6 +30,12 @@ export interface Toast {
   readonly tone: ToastTone;
 }
 
+/** Which of the ways the part being built could plug in where the cursor is the preview shows (`at`, from 0), of how many. */
+export interface PlugChoice {
+  readonly at: number;
+  readonly of: number;
+}
+
 export interface EditorData {
   readonly name: string;
   readonly settings: SceneSettings;
@@ -40,6 +46,8 @@ export interface EditorData {
   readonly activeColorId: number;
   /** How the part to build is turned: spun about its top (R) and tipped over (T). See ../core/orientation. */
   readonly buildRotation: Orientation;
+  /** Which of its own connections the part to build plugs in by (C), as its index among them; null for whichever fits best. */
+  readonly buildVia: number | null;
   readonly clipboard: Payload | null;
   /** Copied bricks waiting to be placed with the build tool. */
   readonly pastePayload: Payload | null;
@@ -48,6 +56,8 @@ export interface EditorData {
   readonly hoverBrickId: string | null;
   /** Whether the build preview can be placed; null when there is no preview. */
   readonly placementValid: boolean | null;
+  /** With the build preview plugged into a connection: which of the ways it could plug in there it shows; null otherwise. */
+  readonly plugChoice: PlugChoice | null;
   readonly toasts: readonly Toast[];
   readonly dialog: DialogId | null;
   readonly lastSavedAt: number | null;
@@ -70,6 +80,8 @@ export interface EditorActions {
   rotateBuild(dir: 1 | -1): void;
   /** Tips the part to build over a quarter turn about a level world axis; pasted groups stay as they are. */
   tipBuild(axis: 'x' | 'z', dir: 1 | -1): void;
+  /** Plugs the part to build in by this one of its own connections (its index among them), or by whichever fits best (null). */
+  setBuildVia(via: number | null): void;
   /** Places the build payload (active part or paste) at a grid offset. */
   /** Places the build payload (or `turned`, the same turned to meet studs facing another way) at an offset. */
   placePayload(offset: Vec3, turned?: Payload): boolean;
@@ -102,6 +114,7 @@ export interface EditorActions {
   setCursor(cursor: Vec3 | null): void;
   setHover(brickId: string | null): void;
   setPlacementValid(valid: boolean | null): void;
+  setPlugChoice(choice: PlugChoice | null): void;
   toast(message: string, tone?: ToastTone): void;
   dismissToast(id: number): void;
   openDialog(dialog: DialogId): void;

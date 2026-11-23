@@ -50,6 +50,62 @@ test.describe('Technic, hinges and minifigures', () => {
     expect(swung?.y).toBe(2.5);
   });
 
+  test('plugs a beam onto a pin by the hole C chooses, and says when a part plugs in only one way', async ({ page }) => {
+    // starts the editor and searches the library three times
+    test.slow();
+    await freshEditor(page);
+    await page.getByRole('button', { name: 'Library', exact: true }).click();
+    await expect(page.locator('#library-category')).toBeVisible();
+
+    // a Technic beam 3 lying flat on the baseplate
+    await chooseLibraryPart(page, '32523');
+    const centre = await viewportCentre(page);
+    await page.mouse.click(centre.x, centre.y);
+    await expect(counts(page)).toHaveText('1 brick');
+
+    // over one of its holes, a pin: its two ends are alike, so whichever goes in, it stands the same, and C says so
+    await chooseLibraryPart(page, '3673');
+    const hole = await findSpot(page, centre, /X\s*-?\d+\.[19](?!\d).*Y\s*0\b|Z\s*-?\d+\.[19](?!\d)/);
+    expect(hole).not.toBeNull();
+    await page.keyboard.press('c');
+    await expect(page.getByText('It plugs in there only one way.')).toBeVisible();
+    await page.mouse.click(hole?.x ?? 0, hole?.y ?? 0);
+    await expect(counts(page)).toHaveText('2 bricks');
+
+    // another beam over the pin's standing end goes onto it by an end hole, and could by its middle one
+    await chooseLibraryPart(page, '32523');
+    const onPin = await findSpot(page, hole ?? centre, /Y\s*2\.5(?!\d)/);
+    expect(onPin).not.toBeNull();
+    const hint = page.locator('.status-hint');
+    const coords = page.locator('.status-coords');
+    await expect(hint).toContainText('by another connection (1 of 2)');
+    /** Where the build preview is, as the status bar shows it. */
+    const shown = async (): Promise<number[]> => ((await coords.textContent()) ?? '').match(/-?\d+(\.\d+)?/g)?.map(Number) ?? [];
+    const byEnd = await shown();
+
+    // C puts it on by its middle hole: the beam moves a stud along itself, still 2.5 plates up; ⇧C goes back, and C again
+    await page.keyboard.press('c');
+    await expect(hint).toContainText('(2 of 2)');
+    await expect.poll(shown).not.toEqual(byEnd);
+    const byMiddle = await shown();
+    const [dx = 0, dy = 0, dz = 0] = byMiddle.map((v, k) => v - (byEnd[k] ?? 0));
+    expect(Math.abs(dx) + Math.abs(dz)).toBeCloseTo(1, 6);
+    expect(dy).toBe(0);
+    await page.keyboard.press('Shift+C');
+    await expect(hint).toContainText('(1 of 2)');
+    await expect.poll(shown).toEqual(byEnd);
+    await page.keyboard.press('c');
+    await expect.poll(shown).toEqual(byMiddle);
+
+    // built there, by its middle hole
+    await page.mouse.click(onPin?.x ?? 0, onPin?.y ?? 0);
+    await expect(counts(page)).toHaveText('3 bricks');
+    const top = (await savedBricks(page, 3))[2];
+    expect(top?.partId).toBe('ldraw:32523');
+    // the status bar shows where it is to a thousandth
+    [top?.x, top?.y, top?.z].forEach((v, k) => expect(v ?? NaN).toBeCloseTo(byMiddle[k] ?? NaN, 3));
+  });
+
   test('puts a minifigure together: hips and legs, a torso on them, a head on top that turns', async ({ page }) => {
     // starts the editor and searches the library three times
     test.slow();

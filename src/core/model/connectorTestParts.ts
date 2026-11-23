@@ -19,18 +19,36 @@ const NEG_Y = { x: 0, y: -1, z: 0 };
 const Z = { x: 0, y: 0, z: 1 };
 const NEG_Z = { x: 0, y: 0, z: -1 };
 
-/** A Technic pin: two ends a stud long, pointing out from its collar in the middle, 0.4 studs up. */
-export const PIN = part('pin', 2, 1, 2, [
-  { kind: 'pin', at: { x: -0.5, y: 0.4, z: 0 }, axis: NEG_X, length: 1 },
-  { kind: 'pin', at: { x: 0.5, y: 0.4, z: 0 }, axis: X, length: 1 },
-]);
+/** A Technic pin: two ends a stud long, pointing out from its collar in the middle, 0.4 studs up, alike as its shape makes them. */
+export const PIN = {
+  ...part('pin', 2, 1, 2, [
+    { kind: 'pin', at: { x: -0.5, y: 0.4, z: 0 }, axis: NEG_X, length: 1 },
+    { kind: 'pin', at: { x: 0.5, y: 0.4, z: 0 }, axis: X, length: 1 },
+  ]),
+  alike: [0, 0],
+};
 
-/** A Technic beam 3 lying flat: three upright holes a stud apart, through its stud-thick body. */
-export const BEAM = part('beam', 1, 3, 3, [
+const BEAM_HOLES: readonly Connector[] = [
   { kind: 'pinhole', at: { x: 0, y: 0.5, z: -1 }, axis: Y, length: 1 },
   { kind: 'pinhole', at: { x: 0, y: 0.5, z: 0 }, axis: Y, length: 1 },
   { kind: 'pinhole', at: { x: 0, y: 0.5, z: 1 }, axis: Y, length: 1 },
-]);
+];
+
+/** A Technic beam 3 lying flat: three upright holes a stud apart, through its stud-thick body, those at its ends alike. */
+export const BEAM = { ...part('beam', 1, 3, 3, BEAM_HOLES), alike: [0, 1, 0] };
+
+/** The same beam printed at one end, as LDraw 32523p01: the print tells its end holes apart, so none are alike. */
+export const PRINTED_BEAM = part('printed-beam', 1, 3, 3, BEAM_HOLES);
+
+/**
+ * A beam whose first hole sits high on it, as no real part's does, and
+ * which the index takes for alike with its last: for how ways that fit as
+ * well are ordered, whatever the index groups together.
+ */
+export const TIE_BEAM = {
+  ...part('tie-beam', 1, 3, 3, [{ kind: 'pinhole', at: { x: 0, y: 2, z: -1 }, axis: Y, length: 1 }, ...BEAM_HOLES.slice(1)]),
+  alike: [0, 1, 0],
+};
 
 /** A Technic brick 1 × 2 with its hole from front to back, 0.7 studs up. */
 export const TECHNIC_BRICK = part('technic-brick', 2, 1, 3, [{ kind: 'pinhole', at: { x: 0, y: 0.7, z: 0 }, axis: Z, length: 1 }]);
@@ -69,7 +87,7 @@ export const TRIPLE_PIN = part('triple-pin', 3, 1, 2, [
   { kind: 'pin', at: { x: 1, y: 0.39, z: 0 }, axis: X, length: 1 },
 ]);
 
-/** A double pin, as LDraw 32138: two pins a stud apart, one over the other, on each side of its body. */
+/** A double pin, as LDraw 32138: two pins a stud apart, one over the other, on each side of its body; its shape tells all four apart. */
 export const DOUBLE_PIN = part('double-pin', 3, 1, 5, [
   { kind: 'pin', at: { x: -1, y: 1.45, z: 0 }, axis: NEG_X, length: 1 },
   { kind: 'pin', at: { x: -1, y: 0.45, z: 0 }, axis: NEG_X, length: 1 },
@@ -189,6 +207,25 @@ export const HAND = {
 export const BAR = {
   ...part('bar', 1, 1, 8, [{ kind: 'bar', at: { x: 0, y: 1.5, z: 0 }, axis: Y, length: 3 }]),
   extent: { min: { x: -0.2, y: 0, z: -0.2 }, max: { x: 0.2, y: 3, z: 0.2 } },
+};
+
+/** A bar with a stretch at each end to hold by, alike as its shape makes them, as LDraw's minifigure handlebars. */
+export const TWIN_BAR = {
+  ...part('twin-bar', 3, 1, 2, [
+    { kind: 'bar', at: { x: -1, y: 0.4, z: 0 }, axis: NEG_X, length: 0.8 },
+    { kind: 'bar', at: { x: 1, y: 0.4, z: 0 }, axis: X, length: 0.8 },
+  ]),
+  extent: { min: { x: -1.5, y: 0.2, z: -0.2 }, max: { x: 1.5, y: 0.6, z: 0.2 } },
+  alike: [0, 0],
+};
+
+/** A part with a pin hole at each end, both leaning in, alike under a half turn about its middle, as an angled connector's are. */
+export const LEANING_HOLES = {
+  ...part('leaning-holes', 3, 1, 3, [
+    { kind: 'pinhole', at: { x: -1, y: 0.6, z: 0 }, axis: { x: 0.6, y: 0.8, z: 0 }, length: 1 },
+    { kind: 'pinhole', at: { x: 1, y: 0.6, z: 0 }, axis: { x: -0.6, y: 0.8, z: 0 }, length: 1 },
+  ]),
+  alike: [0, 0],
 };
 
 /** A 1 × 1 plate with a clip on its front, holding a bar across, as LDraw 61252. */
@@ -358,6 +395,8 @@ const TECHNIC = new Map(
   [
     PIN,
     BEAM,
+    PRINTED_BEAM,
+    TIE_BEAM,
     TECHNIC_BRICK,
     AXLE,
     BUSH,
@@ -381,6 +420,8 @@ const TECHNIC = new Map(
     ARM_LEFT,
     HAND,
     BAR,
+    TWIN_BAR,
+    LEANING_HOLES,
     CLIP_PLATE,
     HANDLE_PLATE,
     ANTENNA,

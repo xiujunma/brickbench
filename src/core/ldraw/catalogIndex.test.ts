@@ -101,6 +101,24 @@ describe('library index', () => {
     }
   });
 
+  it('reads which of a part’s connections are alike (version 15), and refuses a list that does not match them', () => {
+    const beam: LDrawIndexEntry = {
+      ...BRICK,
+      id: '32523',
+      name: 'Technic Beam 3',
+      connectors: [-1, 0, 1].map((z) => [0, 0, 0.5, z, 0, -1, 0, 1] as const),
+      alike: [0, 1, 0],
+    };
+    expect(toPartDef(parseLDrawIndex({ version: 15, generated: '', parts: [beam] }).parts[0] as LDrawIndexEntry).alike).toEqual([0, 1, 0]);
+    expect(toPartDef(BRICK)).not.toHaveProperty('alike');
+    // one too few or too many; one naming a later connection, or one that is not first of its own
+    for (const alike of [[0, 1], [0, 1, 0, 0], [0, 2, 2], [0, 0, 1]]) {
+      expect(() => parseLDrawIndex({ version: 15, generated: '', parts: [{ ...beam, alike }] })).toThrow(/damaged/);
+    }
+    // and none for a part with no connections
+    expect(() => parseLDrawIndex({ version: 15, generated: '', parts: [{ ...BRICK, alike: [0] }] })).toThrow(/damaged/);
+  });
+
   it('reads how far a part’s shape really reaches, when that is well inside its cells', () => {
     const bar: LDrawIndexEntry = { ...BRICK, id: '87994', name: 'Bar 3L', extent: [-0.2, 0, -0.2, 0.2, 3, 0.2] };
     const [part] = parseLDrawIndex({ version: 10, generated: '', parts: [bar] }).parts;

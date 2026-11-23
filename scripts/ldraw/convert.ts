@@ -1,5 +1,6 @@
 import { CONNECTOR_KINDS, MAIN_COLOUR, type ConnectorEntry, type SideStudEntry, type SolidBox } from '../../src/core/ldraw/format.ts';
 import { FACINGS, facingOfVector } from '../../src/core/orientation.ts';
+import { alikeConnectors } from './alike.ts';
 import { filledCells } from './cells.ts';
 import { colourFor, type ColourTable } from './colours.ts';
 import { finishConnectors } from './connectors.ts';
@@ -26,6 +27,8 @@ export type Conversion =
       readonly connectors: readonly ConnectorEntry[];
       /** The box its whole shape fills, studs and all, in the placed part's frame (see LDrawIndexEntry.extent). */
       readonly extent: readonly [number, number, number, number, number, number];
+      /** For each connection, the first of those alike with it (see LDrawIndexEntry.alike); null when none is alike with another. */
+      readonly alike: readonly number[] | null;
       readonly triangles: number;
     }
   | { readonly ok: false; readonly reason: 'empty' | 'too detailed' };
@@ -130,5 +133,6 @@ export function convertPart(file: string, flattener: Flattener, colours: ColourT
   });
   const all = bounds(part.triangles, () => true) ?? body;
   const extent = [all.min[0] + ox, all.min[1] + oy, all.min[2] + oz, all.max[0] + ox, all.max[1] + oy, all.max[2] + oz] as const;
-  return { ok: true, mesh, fit, solids: filledCells(placed, fit), sideStuds, connectors, extent, triangles: part.triangles.length };
+  const alike = alikeConnectors(placed, connectors, extent);
+  return { ok: true, mesh, fit, solids: filledCells(placed, fit), sideStuds, connectors, extent, alike, triangles: part.triangles.length };
 }

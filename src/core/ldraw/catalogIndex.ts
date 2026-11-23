@@ -29,6 +29,11 @@ function fitsPart([x0, y0, z0, x1, y1, z1]: SolidBox, { w, d, h }: { readonly w:
   return x0 < x1 && x1 <= w && y0 < y1 && y1 <= h && z0 < z1 && z1 <= d;
 }
 
+/** Whether `alike` names, for each of `count` connections, the first of those alike with it: one no later than itself, and first of its own. */
+function isAlikeOf(alike: readonly number[], count: number): boolean {
+  return alike.length === count && alike.every((first, index) => first <= index && alike[first] === first);
+}
+
 const finite = z.number().finite();
 /** A connection: its kind, middle, unit axis (to within rounding) and length (see ConnectorEntry). */
 const connector = z
@@ -56,6 +61,7 @@ const entrySchema = z
       .max(MAX_SIDE_STUDS)
       .optional(),
     connectors: z.array(connector).max(MAX_CONNECTORS).optional(),
+    alike: z.array(z.number().int().min(0).max(MAX_CONNECTORS - 1)).max(MAX_CONNECTORS).optional(),
     extent: z
       .tuple([finite, finite, finite, finite, finite, finite])
       .refine(([x0, y0, z0, x1, y1, z1]) => x0 <= x1 && y0 <= y1 && z0 <= z1, { message: 'a part’s extent is inside out' })
@@ -64,6 +70,10 @@ const entrySchema = z
   .refine((entry) => (entry.solids ?? []).every((box) => fitsPart(box, entry)), {
     message: 'a part fills cells outside its own box',
     path: ['solids'],
+  })
+  .refine((entry) => entry.alike === undefined || isAlikeOf(entry.alike, entry.connectors?.length ?? 0), {
+    message: 'a part’s alike connections do not match its connections',
+    path: ['alike'],
   });
 
 const indexSchema = z.object({
@@ -110,6 +120,7 @@ export function toPartDef(entry: LDrawIndexEntry): PartDef {
     ...(entry.studOffset ? { studOffset: entry.studOffset } : {}),
     ...(entry.sideStuds ? { sideStuds: entry.sideStuds.map(([x, y, z, facing]) => ({ at: { x, y, z }, facing: FACINGS[facing] ?? '-y' })) } : {}),
     ...(entry.connectors ? { connectors: entry.connectors.map(toConnector) } : {}),
+    ...(entry.alike ? { alike: entry.alike } : {}),
     ...(entry.extent ? { extent: { min: { x: entry.extent[0], y: entry.extent[1], z: entry.extent[2] }, max: { x: entry.extent[3], y: entry.extent[4], z: entry.extent[5] } } } : {}),
   };
 }

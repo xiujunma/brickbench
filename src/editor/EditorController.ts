@@ -10,8 +10,7 @@ import { materialize, payloadFromPart, reuseIds, type Payload } from '../core/pl
 import { pickBricks, type Hit } from '../core/placement/ray';
 import { GROUND_GRIDS, gridsOf, offsetPhase } from '../core/placement/grids';
 import { attachToStuds } from '../core/placement/attach';
-import { attachToConnector, type ConnectTurn } from '../core/placement/connect';
-import { facingOf, spinOf } from '../core/orientation';
+import { attachToConnector, nextWay, type ConnectTurn, type PlugWays } from '../core/placement/connect';
 import { solvePlacement, type PlacementResult } from '../core/placement/solver';
 import { BrickBatches } from '../engine/brickBatches';
 import { exportGlb } from '../engine/exporters';
@@ -22,7 +21,7 @@ import { MaterialLibrary } from '../engine/materials';
 import type { MeshSource } from '../engine/meshStore';
 import { castsNoOcclusion } from '../engine/occlusionMark';
 import { Viewport, type Bounds3 } from '../engine/viewport';
-import { bricksFit, bricksOf, selectedBricks, spatialIndexFor, worldBounds } from '../state/selectors';
+import { bricksFit, bricksOf, buildTurn, selectedBricks, spatialIndexFor, worldBounds } from '../state/selectors';
 import { shownStep } from '../state/stepEditor';
 import type { EditorState, StepEditor } from '../state/types';
 import type { ViewPreferences } from '../state/viewPreferences';
@@ -62,6 +61,9 @@ interface StepLayers {
   readonly after: readonly Brick[];
   readonly shown: readonly Brick[];
 }
+
+/** Where a payload would land; and where it plugs into a connection, the ways it could plug in there (see attachToConnector). */
+type Solved = PlacementResult & { readonly ways?: PlugWays };
 
 /**
  * Connects the store to the 3D scene: keeps the instanced model, selection,
@@ -173,6 +175,7 @@ export class EditorController {
       state.activePartId !== previous.activePartId ||
       state.activeColorId !== previous.activeColorId ||
       state.buildRotation !== previous.buildRotation ||
+      state.buildVia !== previous.buildVia ||
       state.pastePayload !== previous.pastePayload;
     if (modelChanged || buildChanged) this.refreshPreview();
   }
@@ -278,19 +281,20 @@ export class EditorController {
    * being dragged: they are ignored for collisions and keep their grab point
    * under the cursor.
    */
-  solveAt(clientX: number, clientY: number, payload: Payload, ids: readonly string[] | null): PlacementResult | null {
+  solveAt(clientX: number, clientY: number, payload: Payload, ids: readonly string[] | null): Solved | null {
     const moving = new Set(ids ?? []);
     const hit = this.pick(clientX, clientY, { ground: true, exclude: moving });
     if (!hit) return null;
     const model = this.state.history.present;
     const ray = ids ? this.viewport.rayFromClient(clientX, clientY) : undefined;
     const under = hit.brickId === null ? undefined : model.bricks.get(hit.brickId);
-    // at a pin, hole, axle or hinge under the cursor, a part with one to match plugs into it, where no other part already is
-    const turned: ConnectTurn = ids ? { spin: 0, flipped: false } : { spin: spinOf(this.state.buildRotation), flipped: facingOf(this.state.buildRotation) !== '+y' };
+    // at a pin, hole, axle or hinge under the cursor, a part with one to match plugs into it, where no other part already is: held
+    // as R, T and C have it; a part being moved, by whichever of its connections fits best
+    const turned: ConnectTurn = ids ? { spin: 0, flipped: false } : buildTurn(this.state);
     const plugged = under ? attachToConnector(hit, under, payload, turned, this.lookup, without(model.bricks.values(), moving)) : null;
     if (plugged) {
       const bricks = materialize(plugged.payload, plugged.offset, ids ? reuseIds(ids) : ghostIds());
-      return { offset: plugged.offset, payload: plugged.payload, valid: plugged.free && bricksFit(model, bricks, this.lookup, moving) };
+      return { offset: plugged.offset, payload: plugged.payload, valid: plugged.free && bricksFit(model, bricks, this.lookup, moving), ways: plugged.ways };
     }
     // on studs facing out of the face under the cursor, sideways or down, the payload turns to meet them
     const attached = under ? attachToStuds(hit, under, payload, this.lookup) : null;
@@ -341,17 +345,21 @@ export class EditorController {
       if (!payload || !result) {
         this.ghosts.clear();
         state.setPlacementValid(null);
+        state.setPlugChoice(null);
         state.setCursor(null);
       } else {
         const ghostBricks = materialize(result.payload ?? payload, result.offset, ghostIds());
         this.ghosts.setLook(result.valid ? 'ghost' : 'ghost-invalid');
         this.ghosts.update(ghostBricks, allStuds(ghostBricks, this.lookup));
         state.setPlacementValid(result.valid);
+        // C chooses for the part being built, not for a pasted copy
+        state.setPlugChoice(result.ways && !state.pastePayload ? { at: result.ways.at, of: result.ways.plugs.length } : null);
         state.setCursor(result.offset);
       }
     } else {
       this.ghosts.clear();
       state.setPlacementValid(null);
+      state.setPlugChoice(null);
       const hit = this.pick(pointer.x, pointer.y, { ground: false });
       const brick = hit?.brickId ? this.state.history.present.bricks.get(hit.brickId) : undefined;
       this.showHover(brick ?? null);
@@ -378,6 +386,7 @@ export class EditorController {
     const state = this.state;
     state.setHover(null);
     state.setPlacementValid(null);
+    state.setPlugChoice(null);
     state.setCursor(null);
     this.viewport.requestRender();
   }
@@ -509,6 +518,28 @@ export class EditorController {
     // a turn about X takes the top towards +Z; one about Z, towards -X
     if (alongX) this.state.tipBuild('z', (-ahead * away) as 1 | -1);
     else this.state.tipBuild('x', (ahead * away) as 1 | -1);
+  }
+
+  /**
+   * Plugs the part to build in by the next of the ways it could plug in at
+   * the connection under the cursor (C), or the one before (`back`), each
+   * by another of its own connections; says why not where there is no other.
+   */
+  stepConnection(back: boolean): void {
+    const state = this.state;
+    const pointer = this.lastPointer;
+    const payload = this.buildPayload();
+    const ways = pointer && payload ? this.solveAt(pointer.x, pointer.y, payload, null)?.ways : undefined;
+    if (!ways) {
+      state.toast('Point the part at a pin, hole, axle, bar, clip, hinge or joint it plugs into, then press C.');
+      return;
+    }
+    const next = nextWay(ways, back);
+    if (next === null) {
+      state.toast('It plugs in there only one way.');
+      return;
+    }
+    state.setBuildVia(next);
   }
 
   dispose(): void {

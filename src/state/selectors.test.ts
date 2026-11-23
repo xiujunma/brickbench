@@ -4,7 +4,8 @@ import { modelFromBricks } from '../core/model/model';
 import { connectorLookup } from '../core/model/connectorTestParts';
 import { makeBrick } from '../core/model/testUtils';
 import { getPart } from '../core/parts/catalog';
-import { bricksFit, bricksOf, distinctPieces, selectedBricks, spatialIndexFor, worldBounds } from './selectors';
+import { orientationFacing } from '../core/orientation';
+import { bricksFit, bricksOf, buildTurn, distinctPieces, selectedBricks, spatialIndexFor, worldBounds } from './selectors';
 import { createHistory } from '../core/history';
 
 const model = modelFromBricks([
@@ -71,6 +72,21 @@ describe('selectors', () => {
     const top = makeBrick({ id: 'top', partId: 'turn-top', m: SQUARE });
     expect(bricksFit(modelFromBricks([base]), [top], connectorLookup)).toBe(true);
     expect(bricksFit(modelFromBricks([base, top]), [{ ...top, id: 'n' }], connectorLookup)).toBe(false);
+  });
+
+  it('holds the part being built as R, T and C turn and choose, and a pasted copy as it fits best', () => {
+    const copy = { bricks: [makeBrick({ id: 'p' })], size: { w: 2, h: 3, d: 4 }, grab: { x: 1, y: 1.5, z: 2 } };
+    expect(buildTurn({ buildRotation: 0, buildVia: null, pastePayload: null })).toEqual({ spin: 0, flipped: false });
+    expect(buildTurn({ buildRotation: 0, buildVia: 2, pastePayload: null })).toEqual({ spin: 0, flipped: false, via: 2 });
+    expect(buildTurn({ buildRotation: 0, buildVia: 0, pastePayload: null })).toEqual({ spin: 0, flipped: false, via: 0 });
+    // turned a quarter by R, and over by T: about its top no more, upside down
+    expect(buildTurn({ buildRotation: orientationFacing('+y', 1), buildVia: 1, pastePayload: null })).toEqual({ spin: 1, flipped: false, via: 1 });
+    expect(buildTurn({ buildRotation: orientationFacing('-y', 2), buildVia: null, pastePayload: null })).toEqual({ spin: 2, flipped: true });
+    // tipped onto a side, it is turned over too: T has turned it from standing as it is drawn
+    expect(buildTurn({ buildRotation: orientationFacing('+x', 0), buildVia: null, pastePayload: null })).toEqual({ spin: 0, flipped: true });
+    // the connection chosen and the turn are the active part's: a pasted copy goes on as it fits best
+    expect(buildTurn({ buildRotation: 0, buildVia: 2, pastePayload: copy })).toEqual({ spin: 0, flipped: false });
+    expect(buildTurn({ buildRotation: orientationFacing('-y', 1), buildVia: null, pastePayload: copy })).toEqual({ spin: 0, flipped: false });
   });
 
   it('measures world bounds with headroom for studs', () => {

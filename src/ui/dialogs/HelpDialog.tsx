@@ -25,6 +25,7 @@ const KEYBOARD: readonly Row[] = [
   ['Select · Build · Paint · Erase', keys('V', 'B', 'P', 'E')],
   ['Rotate (back); a selection on a hinge, turntable, pin, axle or minifigure joint swings 15°', keys('R', '⇧R')],
   ['Tip over, on a side or upside down (back)', keys('T', '⇧T')],
+  ['Plug in by another of the part’s own connections (back): another hole of a beam onto a pin', keys('C', '⇧C')],
   ['Nudge selection', keys('←', '↑', '→', '↓')],
   ['Raise / lower a plate', keys('⇧↑', '⇧↓')],
   ['Delete', keys('Del')],
