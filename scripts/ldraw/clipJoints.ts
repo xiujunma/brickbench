@@ -1,8 +1,10 @@
 /**
  * Clips LDraw draws in ways their shape alone does not tell from a groove
- * or a hole (see clipArc in connectors.ts): clips of half a turn with
- * straight jaws, clips that go three quarters of the way round, and clips
- * drawn face by face. Each is set on the file that draws it: its middle on
+ * or a hole (see clipArc in connectors.ts): clips of half a turn, as the
+ * hands of Friends figures and a few other figures are, which grooves,
+ * sockets and wheels' notched holes are drawn like; clips with straight
+ * jaws, clips that go three quarters of the way round, and clips drawn
+ * face by face. Each is set on the file that draws it: its middle on
  * the line it holds a bar along, a bar's radius from the inside of the
  * clip, the way that line runs and how long the clip is along it. With
  * them, a bar the rule for bars (a whole cylinder) does not find where a
@@ -86,4 +88,15 @@ export const CLIP_JOINTS: Readonly<Record<string, readonly FlatConnector[]>> = {
   '30041.dat': [clip([-50, 10, -30], ALONG), clip([-50, 10, 30], ALONG)],
   // an ornamented arch, with a clip either side
   '2145.dat': [clip([-50, 18, 10], ACROSS), clip([50, 18, 10], ACROSS)],
+  // the hands of Friends figures, which hold a bar front to back, eleven long: a female arm's, in the file its printed ones are
+  // drawn from, which a right arm and torsos with arms are drawn from too, mirrored or not, and a male arm's
+  's/92244s01.dat': [clip([15, 27.5, 1.8], ALONG, 11)],
+  's/92246s01.dat': [clip([13.5, 30.3, 6.8], ALONG, 11)],
+  // a short curved arm with a hand, which a cloud and a creature with arms are drawn with
+  '24129.dat': [clip([8.5, 17, 0], ALONG, 11)],
+  // a samurai's helmet and a dragon helmet, whose clips hold a crest: a horn
+  '30175.dat': [clip([0, -6, -18], ACROSS)],
+  '6122.dat': [clip([0, -19.4, -12.6], ACROSS)],
+  // a link of a chain tread, whose two clips, six long, go onto the bar of the next link
+  '69910.dat': [clip([-11, 0, -30], ACROSS, 6), clip([11, 0, -30], ACROSS, 6)],
 };

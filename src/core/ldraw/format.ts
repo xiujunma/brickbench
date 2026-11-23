@@ -174,12 +174,13 @@ export interface LDrawIndexEntry {
  * connections are alike, version 16 the bars LDraw draws as closed
  * cylinders, each bar only where nothing of its part wraps round it, and
  * more clips (the entries read as before; a library built earlier lacks
- * them, and counts as out of date).
+ * them, and counts as out of date), version 17 the hands of Friends
+ * figures and other clips of half a turn (read as before, too).
  */
-export const LDRAW_INDEX_VERSION = 16;
+export const LDRAW_INDEX_VERSION = 17;
 
 /** Index formats the app reads: in a version 1 library every part fills its whole box. */
-export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] as const;
+export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17] as const;
 
 /** Most side studs an index entry lists: a brick with studs all round its sides has a few dozen. */
 export const MAX_SIDE_STUDS = 128;

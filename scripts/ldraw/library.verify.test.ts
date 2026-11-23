@@ -557,7 +557,7 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
       }
     }
     const set = Object.entries(CLIP_JOINTS).flatMap(([file, joints]) => joints.map((joint) => `${file} ${joint.kind}`));
-    expect(set.filter((joint) => joint.endsWith(' clip'))).toHaveLength(55);
+    expect(set.filter((joint) => joint.endsWith(' clip'))).toHaveLength(62);
     // the one bar: the shaft of a bar with a clip that has a hole through it, drawn in pieces
     expect(set.filter((joint) => !joint.endsWith(' clip'))).toEqual(['48729b.dat bar']);
     // a super battle droid's hips and a droid's shoulders, which LDraw draws as closed cylinders, the rule for bars finds
@@ -570,12 +570,17 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     // every part they are set for has them, by how many clips it ends up with: bars with a clip, droids' arms and legs, figures'
     // bent arms, a martian's head, saddles, an arm with a towball, a sabre, feathers, ladders, leaves, a panel, two trap doors'
     // frames, Technic connectors, a tile with clips, plain, printed and with a sticker, a skateboard with wheel clips, a cannon's
-    // base, a conveyor belt's frame, a motorcycle's body and an arch
+    // base, a conveyor belt's frame, a motorcycle's body and an arch; the hands of Friends figures' arms, left and right, female
+    // and male, and of their torsos with arms; a short curved arm with a hand, and the cloud and the creature drawn with two of
+    // it; a samurai's helmet and a dragon helmet, which hold a crest, the one with a dragon plume on its crest its clip still
+    // free; a link of a chain tread, which clips onto the next one's bar
     const clips: Readonly<Record<string, number>> = {
       '48729a': 1, '48729b': 1, '59230': 2, '53989': 1, '10058': 1, '30376': 1, '41890': 1, '64796': 1, '42687': 1, '66788': 1, '28660': 1,
       '30529': 1, '30529p01': 1, '30529p02': 1, '4491a': 1, '4491b': 2, '30082': 1, '59229': 1, '30127': 1, '30127p01': 1, '6020': 2, '30095': 4,
       '30239': 1, '30034': 1, '92107': 2, '47994': 2, '19159': 2, '30350a': 2, '30350ap01': 2, '30350ad01': 2,
       '45917': 2, '2527': 4, '633': 6, '30187': 1, '30041': 2, '2145': 2,
+      '92244': 1, '92245': 1, '92246': 1, '92247': 1, '92456': 2, '11408': 2, '73161': 2, '73141': 2, '92815': 2, '92816': 2,
+      '24129': 1, '27039': 2, '24133': 2, '30175': 1, '6122': 1, '6122c01': 1, '69910': 2,
     };
     for (const [id, count] of Object.entries(clips)) expect(`${id} ${freeClips(`${id}.dat`).length}`).toBe(`${id} ${count}`);
     expect(freeOf('48729b.dat')).toBe('bar clip');
@@ -614,6 +619,10 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(freeOf('2527c01.dat')).toBe('bar clip clip');
     expect(freeClips('30187c01.dat')).toEqual([]);
     expect(freeClips('30187c04.dat')).toHaveLength(1);
+    // a samurai's helmet with its horn in its clip, a dragon helmet with a cattle horn in its: taken, and the horns' bars with
+    // them
+    expect(freeOf('30175c01.dat')).toBe('');
+    expect(freeOf('6122c02.dat')).toBe('');
     // and no clip left free on the droids and the martian, two hands' on each, has a rod in it
     const hands = ['30375cs0.dat', '30375cs1.dat', '30375cs2.dat', '30375cs3.dat', '30529c01.dat'].flatMap((file) => freeClips(file).map((clip) => `${file} ${clip.at}: ${drawnAt(file, clip, 0)}`));
     expect(hands).toHaveLength(10);

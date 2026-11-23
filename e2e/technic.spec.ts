@@ -224,14 +224,39 @@ test.describe('Technic, hinges and minifigures', () => {
     await page.mouse.click(centre.x, centre.y);
     await expect(counts(page)).toHaveText('1 brick');
 
-    // a flame 7 long with a bar at its foot goes into the clip by that bar
+    // a flame 7 long with a bar at its foot goes into the clip by that bar: the clip's line is 14 LDraw units up the tile, and the
+    // flame's box, lying level, a stud thick
     await chooseLibraryPart(page, '85959');
-    const inClip = await plugNear(page, centre, /Y/, 1);
+    const inClip = await plugNear(page, centre, /Y\s*0\.5(?!\d)/, 1);
     expect(inClip).not.toBeNull();
     const flame = (await savedBricks(page, 2))[1];
     expect(flame?.partId).toBe('ldraw:85959');
     // lying level along the clip, from front to back over the tile: its own up, along its bar, runs that way
     expect(Math.abs(flame?.m?.[7] ?? 0)).toBeCloseTo(1, 6);
+  });
+
+  test('puts a bar in a Friends figure’s hand', async ({ page }) => {
+    // starts the editor and searches the library twice
+    test.slow();
+    await freshEditor(page);
+    await page.getByRole('button', { name: 'Library', exact: true }).click();
+    await expect(page.locator('#library-category')).toBeVisible();
+
+    // a Friends girl's torso with her arms on, whose hands are all a bar plugs into, on the baseplate
+    await chooseLibraryPart(page, '92456');
+    const centre = await viewportCentre(page);
+    await page.mouse.click(centre.x, centre.y);
+    await expect(counts(page)).toHaveText('1 brick');
+
+    // a bar 3 long goes into a hand: the hands are 0.2285 studs up the torso, and the bar's box, a stud thick, reaches under the
+    // ground, its bottom 0.679 plates under it
+    await chooseLibraryPart(page, '87994');
+    const inHand = await plugNear(page, centre, /Y\s*-0\.679(?!\d)/, 1);
+    expect(inHand).not.toBeNull();
+    const bar = (await savedBricks(page, 2))[1];
+    expect(bar?.partId).toBe('ldraw:87994');
+    // held front to back, as the hand holds it: its own up, along the bar, runs that way
+    expect(Math.abs(bar?.m?.[7] ?? 0)).toBeCloseTo(1, 6);
   });
 
   test('stands a bar in a round plate’s open stud', async ({ page }) => {
