@@ -623,6 +623,15 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     // them
     expect(freeOf('30175c01.dat')).toBe('');
     expect(freeOf('6122c02.dat')).toBe('');
+    // clips its own parts fill: a scooter's and a motorcycle's riders' hands, on their handlebars a little off their line or at a
+    // slant, where the kinds of their connections don't pair them, and a Friends template figure's left hand round a screwdriver's
+    // handle, which LDraw does not draw as a bar, its right hand free; and the grips the riders' hands hold are taken with them,
+    // where a scooter without its rider has both free
+    expect(freeClips('15396c02.dat')).toEqual([]);
+    expect(freeClips('30187c03.dat')).toEqual([]);
+    expect(freeClips('92198c01.dat').map((c) => Math.sign(c.at[0]))).toEqual([-1]);
+    expect(freeOf('15396c02.dat')).toBe('barhole barhole barhole barhole');
+    expect(freeOf('15396c01.dat')).toBe('bar bar barhole barhole barhole');
     // and no clip left free on the droids and the martian, two hands' on each, has a rod in it
     const hands = ['30375cs0.dat', '30375cs1.dat', '30375cs2.dat', '30375cs3.dat', '30529c01.dat'].flatMap((file) => freeClips(file).map((clip) => `${file} ${clip.at}: ${drawnAt(file, clip, 0)}`));
     expect(hands).toHaveLength(10);

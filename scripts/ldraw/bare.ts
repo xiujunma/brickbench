@@ -11,7 +11,13 @@
  * surface a little wider goes most of the way round it; each at least
  * SHORTEST_BAR long, as a plate's clip is. This is how LDraw's assemblies
  * show what their own parts leave of a bar that goes on past the clip
- * holding it, a droid's neck with its head on.
+ * holding it, a droid's neck with its head on. Clips likewise: a clip is
+ * somewhere a bar can go only where nothing of its part is in it already
+ * (emptyClips): a screwdriver in a figure's hand, which LDraw does not
+ * draw as a bar, or a rider's hands on a scooter's handlebars, which hold
+ * them a little off their line or at a slant, where the kinds of their
+ * connections don't pair them (finishConnectors); and a bar its part's
+ * hand or clip holds so is not bare there either (heldBars).
  */
 import { BAR_RADIUS, finishConnectors, SHORTEST_BAR, type FlatConnector } from './connectors.ts';
 import type { FlatPart, FlatTriangle } from './flatten.ts';
@@ -164,18 +170,133 @@ export function bareBars(connectors: readonly FlatConnector[], triangles: readon
     if (connector.kind !== 'bar') return [connector];
     const half = connector.length / 2;
     const kept = bareStretches(half, surfacesRound(connector, triangles)).filter((s) => s.to - s.from >= SHORTEST_BAR - SLACK);
-    const [only] = kept;
-    if (kept.length === 1 && only && only.from <= -half + SLACK && only.to >= half - SLACK) return [connector];
-    return kept.map(({ from, to }) => {
-      const middle = (from + to) / 2;
-      const [x, y, z] = connector.at;
-      const [ax, ay, az] = connector.axis;
-      return { ...connector, at: [x + ax * middle, y + ay * middle, z + az * middle], length: to - from };
-    });
+    return piecesOf(connector, kept);
   });
 }
 
-/** Where other parts can plug into a part: its connections (finishConnectors), its bars where they are bare. */
+/** A bar as the stretches of it given, from its middle: itself when one of them reaches both its ends. */
+function piecesOf(bar: FlatConnector, stretches: readonly Stretch[]): FlatConnector[] {
+  const half = bar.length / 2;
+  const [only] = stretches;
+  if (stretches.length === 1 && only && only.from <= -half + SLACK && only.to >= half - SLACK) return [bar];
+  return stretches.map(({ from, to }) => {
+    const middle = (from + to) / 2;
+    const [x, y, z] = bar.at;
+    const [ax, ay, az] = bar.axis;
+    return { ...bar, at: [x + ax * middle, y + ay * middle, z + az * middle], length: to - from };
+  });
+}
+
+/** How many ways out of a clip's line, square to it, its fill is looked for along at each place, and in how many of them it must be found. */
+const WAYS_OUT = 16;
+const FILLED_WAYS = 4;
+/** Where along a clip, as a share of its length from its middle, its fill is looked for: its middle, and towards either end. */
+const ALONG_CLIP = [-0.4, 0, 0.4];
+/**
+ * Anything a clip's line meets nearer than this, in LDU, is in the clip,
+ * whichever way it faces: the flat sides a clip's inside is drawn with,
+ * eight to a turn at the fewest, come no nearer to its line than 3.7.
+ */
+const WELL_INSIDE = 3.5;
+
+/** How far along a ray from `from`, going `way`, it meets a triangle, and whether it meets its back (it starts inside a solid); null when it misses it. */
+function meet(from: V3, way: V3, t: FlatTriangle): { readonly far: number; readonly back: boolean } | null {
+  const e1 = sub(t.b, t.a);
+  const e2 = sub(t.c, t.a);
+  const p = cross(way, e2);
+  const det = dot(e1, p);
+  if (Math.abs(det) < 1e-12) return null;
+  const s = sub(from, t.a);
+  const u = dot(s, p) / det;
+  if (u < 0 || u > 1) return null;
+  const q = cross(s, e1);
+  const v = dot(way, q) / det;
+  if (v < 0 || u + v > 1) return null;
+  const far = dot(e2, q) / det;
+  return far > SAME ? { far, back: !t.doubleSided && dot(cross(e1, e2), way) > 0 } : null;
+}
+
+/**
+ * Whether something of a clip's part is in it: at some place along it, the
+ * ways out of its line meet first, in FILLED_WAYS of WAYS_OUT or more, the
+ * inside of a solid no further out than a bar's surface (a rod or a handle
+ * in it, a little off its line or not) or anything at all well inside its
+ * own wall (WELL_INSIDE). A surface drawn to be seen from both sides says
+ * nothing of whether the line is inside it.
+ */
+function isFilled(clip: FlatConnector, triangles: readonly FlatTriangle[]): boolean {
+  const [u, v] = across(clip.axis);
+  const half = clip.length / 2;
+  const reach = BAR_RADIUS + SURFACE;
+  // the triangles that come within reach of its line, by their boxes
+  const ends = [-half, half].map((s): V3 => [clip.at[0] + clip.axis[0] * s, clip.at[1] + clip.axis[1] * s, clip.at[2] + clip.axis[2] * s]);
+  const lo = [0, 1, 2].map((k) => Math.min(...ends.map((e) => e[k] ?? 0)) - reach);
+  const hi = [0, 1, 2].map((k) => Math.max(...ends.map((e) => e[k] ?? 0)) + reach);
+  const near = triangles.filter((t) => [0, 1, 2].every((k) => Math.max(t.a[k] ?? 0, t.b[k] ?? 0, t.c[k] ?? 0) >= (lo[k] ?? 0) && Math.min(t.a[k] ?? 0, t.b[k] ?? 0, t.c[k] ?? 0) <= (hi[k] ?? 0)));
+  return ALONG_CLIP.some((share) => {
+    const from: V3 = [clip.at[0] + clip.axis[0] * share * clip.length, clip.at[1] + clip.axis[1] * share * clip.length, clip.at[2] + clip.axis[2] * share * clip.length];
+    let filled = 0;
+    for (let k = 0; k < WAYS_OUT; k++) {
+      const angle = (2 * Math.PI * k) / WAYS_OUT;
+      const way: V3 = [u[0] * Math.cos(angle) + v[0] * Math.sin(angle), u[1] * Math.cos(angle) + v[1] * Math.sin(angle), u[2] * Math.cos(angle) + v[2] * Math.sin(angle)];
+      const first = near.reduce<{ readonly far: number; readonly back: boolean } | null>((best, t) => {
+        const met = meet(from, way, t);
+        return met && (!best || met.far < best.far) ? met : best;
+      }, null);
+      if (first && (first.far < WELL_INSIDE || (first.back && first.far <= reach))) filled++;
+    }
+    return filled >= FILLED_WAYS;
+  });
+}
+
+/** A part's connections without the clips something of the part is in already (isFilled); the others as they are. */
+export function emptyClips(connectors: readonly FlatConnector[], triangles: readonly FlatTriangle[]): FlatConnector[] {
+  return connectors.filter((connector) => connector.kind !== 'clip' || !isFilled(connector, triangles));
+}
+
+/**
+ * How far from a clip's line, in LDU, a bar's line may be at either end of
+ * the clip and the bar still run through it: half a bar's radius, as a
+ * rider's hand holds a handlebar a little off its line or at a slant.
+ */
+const THROUGH = BAR_RADIUS / 2;
+
+/** The stretch along a bar, from its middle, that a clip holds when the bar runs through it; null when it does not. */
+function heldStretch(bar: FlatConnector, clip: FlatConnector): Stretch | null {
+  const ends = [-clip.length / 2, clip.length / 2].map((s): V3 => [clip.at[0] + clip.axis[0] * s, clip.at[1] + clip.axis[1] * s, clip.at[2] + clip.axis[2] * s]);
+  const along = ends.map((end) => dot(sub(end, bar.at), bar.axis));
+  const through = ends.every((end, k) => {
+    const s = along[k] ?? 0;
+    return Math.hypot(...sub(sub(end, bar.at), [bar.axis[0] * s, bar.axis[1] * s, bar.axis[2] * s])) <= THROUGH;
+  });
+  const [from, to] = [Math.min(...along), Math.max(...along)];
+  return through && to > -bar.length / 2 && from < bar.length / 2 ? { from, to } : null;
+}
+
+/** A part's bars cut where clips that are filled hold them (heldStretch), each piece left at least SHORTEST_BAR long; the others as they are. */
+function heldBars(connectors: readonly FlatConnector[], holders: readonly FlatConnector[]): FlatConnector[] {
+  return connectors.flatMap((connector): FlatConnector[] => {
+    if (connector.kind !== 'bar') return [connector];
+    const held = holders.flatMap((holder) => heldStretch(connector, holder) ?? []);
+    if (held.length === 0) return [connector];
+    const half = connector.length / 2;
+    const left = held.reduce<readonly Stretch[]>(
+      (pieces, h) => pieces.flatMap((p) => [{ from: p.from, to: Math.min(p.to, h.from) }, { from: Math.max(p.from, h.to), to: p.to }].filter((q) => q.to - q.from > SAME)),
+      [{ from: -half, to: half }],
+    );
+    return piecesOf(connector, left.filter((p) => p.to - p.from >= SHORTEST_BAR - SLACK));
+  });
+}
+
+/**
+ * Where other parts can plug into a part: its connections (finishConnectors),
+ * its bars where they are bare and no clip its part fills holds them, its
+ * clips that are empty.
+ */
 export function partConnections(part: Pick<FlatPart, 'connectors' | 'triangles'>): FlatConnector[] {
-  return bareBars(finishConnectors(part.connectors), part.triangles);
+  const finished = finishConnectors(part.connectors);
+  const empty = emptyClips(finished, part.triangles);
+  // the clips emptyClips leaves out are those its own part fills
+  const filled = finished.filter((c) => !empty.includes(c));
+  return heldBars(bareBars(empty, part.triangles), filled);
 }

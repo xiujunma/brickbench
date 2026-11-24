@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { bareBars, partConnections } from './bare.ts';
+import { bareBars, emptyClips, partConnections } from './bare.ts';
 import type { FlatConnector } from './connectors.ts';
 import type { FlatTriangle } from './flatten.ts';
 import type { V3 } from './parse.ts';
@@ -23,10 +23,10 @@ interface Round {
 const SIDES = 16;
 
 /** A round surface about a line along Y, in flat sides with their corners on the circle, as LDraw's cylinder primitives are. */
-function round({ y0, y1, radius = 4, inwards = false, turn = 1, x = 0, z = 0, doubleSided = false }: Round): FlatTriangle[] {
-  const steps = Math.round(SIDES * turn);
+function round({ y0, y1, radius = 4, inwards = false, turn = 1, x = 0, z = 0, doubleSided = false, sides = SIDES }: Round & { readonly sides?: number }): FlatTriangle[] {
+  const steps = Math.round(sides * turn);
   const corner = (k: number, y: number): V3 => {
-    const angle = (2 * Math.PI * k) / SIDES;
+    const angle = (2 * Math.PI * k) / sides;
     return [x + radius * Math.cos(angle), y, z + radius * Math.sin(angle)];
   };
   return Array.from({ length: steps }, (_, k) => {
@@ -38,6 +38,9 @@ function round({ y0, y1, radius = 4, inwards = false, turn = 1, x = 0, z = 0, do
 
 /** A point turned half round the Y axis. */
 const flip = ([x, y, z]: V3): V3 => [-x, y, -z];
+
+/** A point turned about the Y axis, from +X towards +Z, by the angle whose cosine and sine are given. */
+const turn = ([x, y, z]: V3, c: number, s: number): V3 => [c * x - s * z, y, s * x + c * z];
 
 /** A point of a round surface about Y moved out to `radius` where it is at height `y`: one way of drawing a cone. */
 const widen = ([x, y, z]: V3, radius: number, at: number): V3 => {
@@ -164,5 +167,83 @@ describe('where a bar is bare', () => {
     const kept = bareBars([tilted], drawn);
     expect(kept.map((k) => Math.round(k.length * 100) / 100)).toEqual([16, 16]);
     expect(kept.map((k) => k.at.map((v) => Math.round(v * 100) / 100 + 0))).toEqual([turn([0, 8, 0]), turn([0, 32, 0])].map((p) => p.map((v) => Math.round(v * 100) / 100 + 0)));
+  });
+});
+
+describe('where a clip is empty', () => {
+  /** A clip along Y from 0 to 8, and its inside: five eighths of a turn of a bar's radius, facing in. */
+  const clip: FlatConnector = { kind: 'clip', at: [0, 4, 0], axis: [0, 1, 0], length: 8, outward: 0, across: 1 };
+  const inside = round({ y0: 0, y1: 8, inwards: true, turn: 5 / 8 });
+  const kept = (...drawn: FlatTriangle[][]) => emptyClips([clip], [...inside, ...drawn.flat()]).length;
+  /** A flat face across Y at `x`, from y0 to y1, its front towards -X: towards the clip's line, when x is above 0. */
+  const fin = (x: number, y0: number, y1: number): FlatTriangle[] => [
+    { a: [x, y0, -6], b: [x, y0, 6], c: [x, y1, 6], color: 16, doubleSided: false, stud: false },
+    { a: [x, y0, -6], b: [x, y1, 6], c: [x, y1, -6], color: 16, doubleSided: false, stud: false },
+  ];
+
+  it('keeps a clip with nothing in it, whatever is round it', () => {
+    expect(emptyClips([clip], inside)).toEqual([clip]);
+    // its outside, the part it is on beside it, and a hand round it a little wider
+    expect(kept(round({ y0: 0, y1: 8, turn: 5 / 8, radius: 6 }), fin(-9, -10, 20), round({ y0: 0, y1: 8, inwards: true, radius: 7 }))).toBe(1);
+    // its inside drawn with as few as eight flat sides to a turn, which come in to 3.7 from its line
+    expect(emptyClips([clip], round({ y0: 0, y1: 8, inwards: true, turn: 5 / 8, sides: 8 }))).toEqual([clip]);
+  });
+
+  it('leaves out a clip its part fills: a rod through it, a handle in it, a rod off its line or part of the way in', () => {
+    expect(kept(round({ y0: -10, y1: 18 }))).toBe(0);
+    // a screwdriver's handle, thinner than a bar
+    expect(kept(round({ y0: -10, y1: 18, radius: 3 }))).toBe(0);
+    // a handlebar a rider's hand holds a little off its line
+    expect(kept(round({ y0: -10, y1: 18, x: 0.6 }))).toBe(0);
+    // a rod that goes no further into it than a quarter of its length
+    expect(kept(round({ y0: -10, y1: 2 }))).toBe(0);
+    // a rod drawn a tenth of an LDU wider than a bar
+    expect(kept(round({ y0: -10, y1: 18, radius: 4.1 }))).toBe(0);
+  });
+
+  it('leaves out a clip something pokes into, but not for a stray few of the ways out of it', () => {
+    // a fin 2 from its line meets a third of the ways out of it, nearer than 3.5; one 3.6 out, just inside its wall, none
+    expect(kept(fin(2, -10, 20))).toBe(0);
+    expect(kept(fin(3.6, -10, 20))).toBe(1);
+    // a fin 2.5 out, turned to meet four of the sixteen ways out, a quarter of them, fills it
+    const [c, s] = [Math.cos(Math.PI / 16), Math.sin(Math.PI / 16)];
+    const turned = fin(2.5, -10, 20).map((t) => ({ ...t, a: turn(t.a, c, s), b: turn(t.b, c, s), c: turn(t.c, c, s) }));
+    expect(kept(turned)).toBe(0);
+    // a sliver 2.5 out, which only one or two of them meet, does not, nor does a fin 3 out, which three of them meet, fewer than a
+    // quarter
+    expect(kept(round({ y0: -10, y1: 20, radius: 0.5, x: 2.5 }))).toBe(1);
+    expect(kept(fin(3, -10, 20))).toBe(1);
+  });
+
+  it('tells nothing from surfaces drawn to be seen from both sides, but where they come well inside it', () => {
+    expect(kept(round({ y0: -10, y1: 18, doubleSided: true }))).toBe(1);
+    expect(kept(round({ y0: -10, y1: 18, radius: 3, doubleSided: true }))).toBe(0);
+  });
+
+  it('cuts a bar its part holds in a clip it fills, a little off the clip’s line or at a slant, where the clip holds it', () => {
+    // a handlebar, a bar from -10 to 18, that a rider's hand holds 0.7 off its line, and at a slant of 5 degrees
+    const handlebar: FlatConnector = { ...bar(-10, 18), at: [0.7, 4, 0] };
+    const off = round({ y0: -10, y1: 18, x: 0.7 });
+    expect(stretches(partConnections({ connectors: [clip, handlebar], triangles: [...inside, ...off] }))).toEqual(['-10..0', '8..18']);
+    const [c, s] = [Math.cos((5 * Math.PI) / 180), Math.sin((5 * Math.PI) / 180)];
+    const tilt = ([x, y, z]: V3): V3 => [x, c * (y - 4) - s * z + 4, s * (y - 4) + c * z];
+    const slanted: FlatConnector = { ...bar(-10, 18), axis: tilt([0, 5, 0]).map((v, k) => v - ([0, 4, 0][k] ?? 0)) as unknown as V3 };
+    const drawn = round({ y0: -10, y1: 18 }).map((t) => ({ ...t, a: tilt(t.a), b: tilt(t.b), c: tilt(t.c) }));
+    expect(partConnections({ connectors: [clip, slanted], triangles: [...inside, ...drawn] }).map((k) => `${k.kind} ${Math.round(k.length)}`)).toEqual(['bar 10', 'bar 10']);
+    // what the clip leaves of it shorter than a clip goes: a handlebar from -2
+    expect(stretches(partConnections({ connectors: [clip, { ...bar(-2, 18), at: [0.7, 8, 0] }], triangles: [...inside, ...round({ y0: -2, y1: 18, x: 0.7 })] }))).toEqual(['8..18']);
+    // a bar that crosses the clip's line at one end only, at a slant, and one beside it, through none of it, are left as they are
+    const crossing: FlatConnector = { ...bar(-15, 15), at: [0, 0, 0], axis: [0, Math.SQRT1_2, Math.SQRT1_2] };
+    const slant = ([x, y, z]: V3): V3 => [x, Math.SQRT1_2 * (y - z), Math.SQRT1_2 * (y + z)];
+    const crossingDrawn = round({ y0: -15, y1: 15 }).map((t) => ({ ...t, a: slant(t.a), b: slant(t.b), c: slant(t.c) }));
+    expect(partConnections({ connectors: [clip, crossing], triangles: [...inside, ...round({ y0: -10, y1: 18, radius: 3 }), ...crossingDrawn] })).toEqual([crossing]);
+    const beside = bar(-10, 18, 8);
+    expect(stretches(partConnections({ connectors: [clip, beside], triangles: [...inside, ...round({ y0: -10, y1: 18, radius: 3 }), ...round({ y0: -10, y1: 18, x: 8 })] }))).toEqual(['-10..18']);
+  });
+
+  it('keeps every other connection, and leaves the part’s connections as the build keeps them', () => {
+    const pin: FlatConnector = { ...clip, kind: 'pin' };
+    expect(emptyClips([pin, clip], [...inside, ...round({ y0: -10, y1: 18 })])).toEqual([pin]);
+    expect(partConnections({ connectors: [clip, bar(20, 40)], triangles: [...inside, ...round({ y0: -10, y1: 18, radius: 3 }), ...round({ y0: 20, y1: 40 })] }).map((c) => c.kind)).toEqual(['bar']);
   });
 });

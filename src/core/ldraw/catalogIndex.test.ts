@@ -100,6 +100,9 @@ describe('library index', () => {
     // a Friends figure's arm, as version 17 lists it: its hand's clip, eleven LDraw units long
     const arm: LDrawIndexEntry = { ...BRICK, id: '92244', name: 'Figure Friends Female Left Arm', connectors: [[17, 0.25, 0.4, -0.09, 0, 0, 1, 0.55]] };
     expect(toPartDef(parseLDrawIndex({ version: 17, generated: '', parts: [arm] }).parts[0] as LDrawIndexEntry).connectors?.map((c) => [c.kind, c.length])).toEqual([['clip', 0.55]]);
+    // a Friends figure holding a screwdriver, as version 18 lists it: only its empty hand's clip
+    const holding: LDrawIndexEntry = { ...BRICK, id: '92198c01', name: 'Figure Friends Girl/Woman Template', connectors: [[17, -1.3, 2.4, 0.3, 0, 0, 1, 0.55]] };
+    expect(toPartDef(parseLDrawIndex({ version: 18, generated: '', parts: [holding] }).parts[0] as LDrawIndexEntry).connectors?.map((c) => c.kind)).toEqual(['clip']);
     expect(toPartDef(BRICK)).not.toHaveProperty('connectors');
     // no such kind, no axis, no length
     for (const connector of [
