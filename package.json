@@ -15,7 +15,7 @@
     "preview": "bunx --bun vite preview",
     "agent": "bun agent/main.ts",
     "api": "bun server/local.ts",
-    "typecheck": "bun check -p tsconfig.json && bun check -p tsconfig.test.json && bun check -p tsconfig.node.json && bun check -p tsconfig.scripts.json && bun check -p tsconfig.electron.json && bun check -p tsconfig.server.json",
+    "typecheck": "bun check -p tsconfig.app.json && bun check -p tsconfig.test.json && bun check -p tsconfig.node.json && bun check -p tsconfig.scripts.json && bun check -p tsconfig.electron.json && bun check -p tsconfig.server.json",
     "ldraw": "bun scripts/ldraw/build.ts",
     "test": "bun test",
     "test:watch": "bun test --watch",
@@ -51,6 +51,7 @@
     "electron": "44.10.2",
     "electron-builder": "26.18.0",
     "fast-png": "^6.4.0",
+    "typescript": "6.0.3",
     "vite": "^8.3.7"
   }
 }

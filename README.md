@@ -279,6 +279,8 @@ The bridge listens on this computer only (127.0.0.1) and answers only pages serv
 
 The first time you run the browser tests, install a browser with `bunx playwright install chromium`. Unit tests share one process, so they must not depend on each other's state: `bun test --randomize` and `bun test --isolate` should pass too.
 
+Editors check types with the TypeScript in the dev dependencies: 6.0, the last release with the `tsserver` that editors' language servers run (TypeScript 7 has none), which agrees with `bun check`. `tsconfig.json` only lists the six configs, so an editor checks each file with the settings `bun run typecheck` uses for it.
+
 `bun scripts/colourNumbers.ts <colours.json> <LDConfig.ldr>` rewrites the table that matches Rebrickable's and BrickLink's colour numbers to LDraw's, from Rebrickable's colour list (as its API gives it) and LDraw's colour table. Run it when the catalogues add colours.
 
 `bun scripts/ldrawColours.ts .ldraw-cache/ldraw/LDConfig.ldr` rewrites the table of every LDraw colour (name, value and finish) that opened models in colours outside the palette are matched by. Run it when LDraw adds colours.
