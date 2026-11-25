@@ -56,6 +56,15 @@ export const TECHNIC_BRICK = part('technic-brick', 2, 1, 3, [{ kind: 'pinhole', 
 /** A Technic axle 4, along X, 0.3 studs up. */
 export const AXLE = part('axle', 4, 1, 2, [{ kind: 'axle', at: { x: 0, y: 0.3, z: 0 }, axis: NEG_X, length: 4 }]);
 
+/**
+ * A Technic axle 5.5 with a stop on it, along X, 0.4 studs up, as the
+ * library build gives LDraw 32209: an axle either side of the stop, which
+ * its part holds, 4.375 and 0.9 studs long, a tenth of a stud apart.
+ */
+export const STOPPED_AXLE = part('stopped-axle', 5, 1, 2, [
+  { kind: 'axle', at: { x: 0.5, y: 0.4, z: 0 }, axis: NEG_X, length: 4.375 },
+  { kind: 'axle', at: { x: -2.2375, y: 0.4, z: 0 }, axis: NEG_X, length: 0.9 },
+]);
 /** A Technic bush: an axle hole a stud long, from front to back. */
 export const BUSH = part('bush', 1, 1, 2, [{ kind: 'axlehole', at: { x: 0, y: 0.45, z: 0 }, axis: Z, length: 1 }]);
 
@@ -399,6 +408,7 @@ const TECHNIC = new Map(
     TIE_BEAM,
     TECHNIC_BRICK,
     AXLE,
+    STOPPED_AXLE,
     BUSH,
     PIN_JOINER,
     SLOT_JOINER,

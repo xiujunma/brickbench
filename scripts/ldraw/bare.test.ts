@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { bareBars, emptyClips, partConnections } from './bare.ts';
+import { bareBars, emptyClips, freeAxles, partConnections } from './bare.ts';
 import type { FlatConnector } from './connectors.ts';
 import type { FlatTriangle } from './flatten.ts';
 import type { V3 } from './parse.ts';
@@ -52,9 +52,9 @@ const widen = ([x, y, z]: V3, radius: number, at: number): V3 => {
 /** A bar along Y from y0 to y1, as the part's connections give it. */
 const bar = (y0: number, y1: number, x = 0): FlatConnector => ({ kind: 'bar', at: [x, (y0 + y1) / 2, 0], axis: [0, 1, 0], length: y1 - y0, outward: 0, across: 1 });
 
-/** Each bar as where it starts and ends along Y. */
+/** Each bar and axle as where it starts and ends along Y. */
 const stretches = (connectors: readonly FlatConnector[]): string[] =>
-  connectors.map((c) => (c.kind === 'bar' ? `${Math.round((c.at[1] - c.length / 2) * 100) / 100 + 0}..${Math.round((c.at[1] + c.length / 2) * 100) / 100 + 0}` : c.kind));
+  connectors.map((c) => (c.kind === 'bar' || c.kind === 'axle' ? `${Math.round((c.at[1] - c.length / 2) * 100) / 100 + 0}..${Math.round((c.at[1] + c.length / 2) * 100) / 100 + 0}` : c.kind));
 
 describe('where a bar is bare', () => {
   it('keeps a bar drawn all the way round with nothing about it whole', () => {
@@ -245,5 +245,146 @@ describe('where a clip is empty', () => {
     const pin: FlatConnector = { ...clip, kind: 'pin' };
     expect(emptyClips([pin, clip], [...inside, ...round({ y0: -10, y1: 18 })])).toEqual([pin]);
     expect(partConnections({ connectors: [clip, bar(20, 40)], triangles: [...inside, ...round({ y0: -10, y1: 18, radius: 3 }), ...round({ y0: 20, y1: 40 })] }).map((c) => c.kind)).toEqual(['bar']);
+  });
+});
+
+describe('where an axle is free', () => {
+  /** An axle along Y from y0 to y1, as the part's connections give it. */
+  const axle = (y0: number, y1: number, x = 0): FlatConnector => ({ kind: 'axle', at: [x, (y0 + y1) / 2, 0], axis: [0, 1, 0], length: y1 - y0, outward: 0, across: 1 });
+  /** The outline of an axle as LDraw draws it, its cross's arms 4 wide and their ends 5.6 out, in turn from +X towards +Z. */
+  const OUTLINE: readonly (readonly [number, number])[] = [
+    [5.6, -2], [5.6, 2], [2, 2], [2, 5.6], [-2, 5.6], [-2, 2], [-5.6, 2], [-5.6, -2], [-2, -2], [-2, -5.6], [2, -5.6], [2, -2],
+  ];
+  /** An axle's own surface from y0 to y1, facing out from its line; facing in, the walls of an axle hole it lies against. */
+  const cross = (y0: number, y1: number, inwards = false): FlatTriangle[] =>
+    OUTLINE.flatMap(([x0, z0], k) => {
+      const [x1, z1] = OUTLINE[(k + 1) % OUTLINE.length] ?? [0, 0];
+      const [p0, p1, p2, p3]: [V3, V3, V3, V3] = [[x0, y0, z0], [x1, y0, z1], [x1, y1, z1], [x0, y1, z0]];
+      const quad: [V3, V3, V3][] = inwards ? [[p0, p1, p2], [p0, p2, p3]] : [[p0, p3, p2], [p0, p2, p1]];
+      return quad.map(([a, b, c]) => ({ a, b, c, color: 16, doubleSided: false, stud: false }));
+    });
+  const rod = cross(0, 40);
+  const free = (...drawn: FlatTriangle[][]): string[] => stretches(freeAxles([axle(0, 40)], [...rod, ...drawn.flat()]));
+
+  it('keeps an axle with nothing of its part round it whole, drawn or not', () => {
+    expect(freeAxles([axle(0, 40)], rod)).toEqual([axle(0, 40)]);
+    expect(freeAxles([axle(0, 40)], [])).toEqual([axle(0, 40)]);
+  });
+
+  it('cuts an axle where a hole of its part holds it: a round hole, or an axle hole whose walls it lies against', () => {
+    expect(free(round({ y0: 16, y1: 24, inwards: true, radius: 6 }))).toEqual(['0..16', '24..40']);
+    expect(free(cross(16, 24, true))).toEqual(['0..16', '24..40']);
+    // the counterbored mouth of a pin hole, 8 out, and a hole all along it: nothing is left
+    expect(free(round({ y0: 34, y1: 40, inwards: true, radius: 8 }))).toEqual(['0..34']);
+    expect(free(round({ y0: 0, y1: 40, inwards: true, radius: 6 }))).toEqual([]);
+  });
+
+  it('cuts it where it runs through a solid of its part: a stop on it, a hub drawn without the hole it is in', () => {
+    expect(free(round({ y0: 18, y1: 20, radius: 8 }))).toEqual(['0..18', '20..40']);
+    expect(free(round({ y0: 30, y1: 40, radius: 15 }))).toEqual(['0..30']);
+    // a solid reaching further out than 16 from it is something it runs past, not through
+    expect(free(round({ y0: 30, y1: 40, radius: 17 }))).toEqual(['0..40']);
+  });
+
+  it('leaves it where its part goes only part of the way round it, or leaves room round it', () => {
+    // a wall three quarters of the way round holds it; eleven sixteenths does not
+    expect(free(round({ y0: 16, y1: 24, inwards: true, radius: 6, turn: 0.75 }))).toEqual(['0..16', '24..40']);
+    expect(free(round({ y0: 16, y1: 24, inwards: true, radius: 6, turn: 11 / 16 }))).toEqual(['0..40']);
+    // a bore 9 out leaves room for a bush; one 8 out does not; a hole beside it is not round it
+    expect(free(round({ y0: 0, y1: 40, inwards: true, radius: 9 }))).toEqual(['0..40']);
+    expect(free(round({ y0: 0, y1: 40, inwards: true, radius: 8 }))).toEqual([]);
+    expect(free(round({ y0: 0, y1: 40, inwards: true, radius: 6, x: 20 }))).toEqual(['0..40']);
+  });
+
+  it('meets each side of a round wall clear of the diagonal it is cut along, where a drawing may leave a hairline crack', () => {
+    // each triangle a hair smaller about its middle: a crack along every edge, and down the middle of every side
+    const hairline = (t: FlatTriangle): FlatTriangle => {
+      const [mx, my, mz] = [0, 1, 2].map((k) => ((t.a[k] ?? 0) + (t.b[k] ?? 0) + (t.c[k] ?? 0)) / 3) as [number, number, number];
+      const pull = ([x, y, z]: V3): V3 => [x + (mx - x) * 0.0002, y + (my - y) * 0.0002, z + (mz - z) * 0.0002];
+      return { ...t, a: pull(t.a), b: pull(t.b), c: pull(t.c) };
+    };
+    expect(free(round({ y0: 16, y1: 24, inwards: true, radius: 6 }).map(hairline))).toEqual(['0..16', '24..40']);
+  });
+
+  it('finds the same whichever way an axle’s connection points along it, round a part drawn unevenly round it', () => {
+    // a ring drawn with every other one of 32 sides, as some holes are: the ways out meet it as often either way round
+    const facets = round({ y0: 16, y1: 24, inwards: true, radius: 6, sides: 32 }).filter((_, k) => Math.floor(k / 2) % 2 === 0);
+    const up = freeAxles([axle(0, 40)], [...rod, ...facets]);
+    const down = freeAxles([{ ...axle(0, 40), axis: [0, -1, 0] }], [...rod, ...facets]);
+    // each lists its pieces from where it starts, so the other way round
+    expect(stretches(down).reverse()).toEqual(stretches(up));
+  });
+
+  it('looks past what is inside the axle’s own surface: a hollow axle on a steel one', () => {
+    expect(free(round({ y0: 0, y1: 40, inwards: true, radius: 2 }), round({ y0: 0, y1: 40, radius: 2 }))).toEqual(['0..40']);
+    // and takes for its own an axle drawn a little wider than one, its sixteen flat sides 6.08 from its line and the edges between
+    // them 6.2: measured, as every surface is, across the middle of a side
+    expect(stretches(freeAxles([axle(0, 40)], round({ y0: 0, y1: 40, radius: 6.2 })))).toEqual(['0..40']);
+  });
+
+  it('takes a hold shorter than an LDU and a tenth for none, and leaves out what is left shorter than the thinnest gear', () => {
+    // a rim an LDU long where it runs out of its part, or a coil of a spring, does not cut it; an LDU and a quarter does
+    expect(free(round({ y0: 20, y1: 21, inwards: true, radius: 6 }))).toEqual(['0..40']);
+    expect(free(round({ y0: 20, y1: 21.25, inwards: true, radius: 6 }))).toEqual(['0..20', '21.25..40']);
+    // between two holds, three and a half LDU is too short for anything to go on; four, a thin bevel gear's hole, is not
+    expect(free(round({ y0: 10, y1: 20, inwards: true, radius: 6 }), round({ y0: 23.5, y1: 30, inwards: true, radius: 6 }))).toEqual(['0..10', '30..40']);
+    expect(free(round({ y0: 10, y1: 20, inwards: true, radius: 6 }), round({ y0: 24, y1: 30, inwards: true, radius: 6 }))).toEqual(['0..10', '20..24', '30..40']);
+    // two holds less than a tenth of an LDU apart are one, long enough to cut it; a sixth of an LDU apart, each is too short
+    const ring = (y0: number) => round({ y0, y1: y0 + 0.8, inwards: true, radius: 6 });
+    expect(free(ring(10), ring(10.8001))).toEqual(['0..10', '11.6..40']);
+    expect(free(ring(10), ring(10.95))).toEqual(['0..40']);
+  });
+
+  it('keeps an axle shorter than that whole when nothing holds it, as the ends of a flexible axle are', () => {
+    expect(freeAxles([axle(0, 3.6)], cross(0, 3.6))).toEqual([axle(0, 3.6)]);
+    // but what its part's hold leaves of one that short goes
+    expect(freeAxles([axle(0, 6)], [...cross(0, 6), ...round({ y0: 0, y1: 2.5, inwards: true, radius: 6 })])).toEqual([]);
+  });
+
+  it('takes a hole of its own it runs through as holding it, however its part is drawn round the hole', () => {
+    const hole = (kind: 'pinhole' | 'axlehole', y0: number, y1: number, x = 0): FlatConnector => ({ kind, at: [x, (y0 + y1) / 2, 0], axis: [0, 1, 0], length: y1 - y0, outward: 0, across: 1 });
+    expect(stretches(freeAxles([axle(0, 40)], rod, [hole('pinhole', 16, 24)]))).toEqual(['0..16', '24..40']);
+    expect(stretches(freeAxles([axle(0, 40)], rod, [hole('axlehole', 34, 54)]))).toEqual(['0..34']);
+    // a hole pointing the other way along the line, off the axle's middle, holds it where it is
+    expect(stretches(freeAxles([axle(0, 40)], rod, [{ ...hole('axlehole', 26, 34), axis: [0, -1, 0] }]))).toEqual(['0..26', '34..40']);
+    // not a hole beside it, nor one on its line past its end
+    expect(freeAxles([axle(0, 40)], rod, [hole('pinhole', 16, 24, 20), hole('axlehole', 40, 60)])).toEqual([axle(0, 40)]);
+  });
+
+  it('tells its own surface from a hole’s only by which way they face: drawn to be seen from both sides, one where it is is its own', () => {
+    const seenBoth = (t: FlatTriangle): FlatTriangle => ({ ...t, doubleSided: true });
+    expect(stretches(freeAxles([axle(0, 40)], [...rod.map(seenBoth), ...round({ y0: 16, y1: 24, inwards: true, radius: 6, doubleSided: true })]))).toEqual(['0..40']);
+    // further out than its own surface, such a wall holds it
+    expect(stretches(freeAxles([axle(0, 40)], [...rod.map(seenBoth), ...round({ y0: 16, y1: 24, radius: 7, doubleSided: true })]))).toEqual(['0..16', '24..40']);
+  });
+
+  it('cuts each axle on its own line, in its place among the part’s other connections, from where it starts', () => {
+    const hole: FlatConnector = { kind: 'pinhole', at: [20, 20, 0], axis: [0, 1, 0], length: 20, outward: 0, across: 1 };
+    const down: FlatConnector = { ...axle(0, 40, 40), axis: [0, -1, 0] };
+    const drawn = [...rod, ...round({ y0: 16, y1: 24, inwards: true, radius: 6 }), ...round({ y0: 0, y1: 10, inwards: true, radius: 6, x: 40 })];
+    const kept = freeAxles([axle(0, 40), hole, bar(0, 40, -40), down], drawn);
+    expect(stretches(kept)).toEqual(['0..16', '24..40', 'pinhole', '0..40', '10..40']);
+    expect(kept.map((c) => c.axis[1])).toEqual([1, 1, 1, 1, -1]);
+    expect(kept[2]).toBe(hole);
+  });
+
+  it('measures an axle on a line that runs between the axes', () => {
+    const [c, s] = [Math.cos(Math.PI / 4), Math.sin(Math.PI / 4)];
+    const tilt = ([x, y, z]: V3): V3 => [c * x - s * y, s * x + c * y, z];
+    const drawn = [...rod, ...round({ y0: 16, y1: 24, inwards: true, radius: 6 })].map((t) => ({ ...t, a: tilt(t.a), b: tilt(t.b), c: tilt(t.c) }));
+    const kept = freeAxles([{ ...axle(0, 40), at: tilt([0, 20, 0]), axis: tilt([0, 1, 0]) }], drawn);
+    expect(kept.map((k) => Math.round(k.length * 100) / 100)).toEqual([16, 16]);
+    expect(kept.map((k) => k.at.map((v) => Math.round(v * 100) / 100 + 0))).toEqual([tilt([0, 8, 0]), tilt([0, 32, 0])].map((p) => p.map((v) => Math.round(v * 100) / 100 + 0)));
+  });
+
+  it('gives a part’s connections as the build keeps them: an axle through a hole of its own, cut where the hole holds it', () => {
+    // a wheel's hole round the axle's middle: the hole is taken, and the axle goes on either side of it, whether the wheel is drawn
+    // round it or not
+    const pieces: FlatConnector[] = [axle(0, 40), { kind: 'pinhole', at: [0, 20, 0], axis: [0, 1, 0], length: 8, outward: 0, across: 1 }];
+    expect(stretches(partConnections({ connectors: pieces, triangles: [...rod, ...round({ y0: 16, y1: 24, inwards: true, radius: 6 })] }))).toEqual(['0..16', '24..40']);
+    expect(stretches(partConnections({ connectors: pieces, triangles: rod }))).toEqual(['0..16', '24..40']);
+    // and a gear's axle hole on it, its part drawn open round it
+    const geared: FlatConnector[] = [axle(0, 40), { kind: 'axlehole', at: [0, 20, 0], axis: [0, 1, 0], length: 8, outward: 0, across: 1 }];
+    expect(stretches(partConnections({ connectors: geared, triangles: rod }))).toEqual(['0..16', '24..40']);
   });
 });

@@ -88,6 +88,42 @@ describe('plugging a part onto a pin or an axle', () => {
     expect(hole?.at.z).toBeCloseTo(3, 9);
     expect(pluggedInto(bush, axle)).toBe(true);
   });
+
+  it('puts a bush on an axle with a stop either side of the stop, never over it', () => {
+    const stopped = makeBrick({ id: 'stopped', partId: 'stopped-axle' });
+    const [long, short] = brickConnectors(stopped, lookup);
+    if (!long || !short) throw new Error('no axles');
+    // where along X a connection runs; the stop is the tenth of a stud between the two axles
+    const span = (c: { at: Vec3; length: number }) => [c.at.x - c.length / 2, c.at.x + c.length / 2] as const;
+    const [stopFrom, stopTo] = [span(short)[1], span(long)[0]];
+    expect(stopTo - stopFrom).toBeCloseTo(0.1, 9);
+    const side = { x: 0, y: 0, z: 1 };
+    const at = (x: number): Vec3 => ({ x, y: long.at.y, z: long.at.z + 0.3 });
+    const holeOf = (bush: Brick | null) => {
+      const [hole] = bush ? brickConnectors(bush, lookup) : [];
+      if (!hole) throw new Error('no bush');
+      return span(hole);
+    };
+    // asked for by the stop, on the long axle's side of it, a bush goes on the long axle against the stop
+    const first = plug(stopped, 'bush', at(stopTo + 0.2), side, STILL, 'first');
+    expect(holeOf(first)[0]).toBeCloseTo(stopTo, 9);
+    expect(holeOf(first)[1]).toBeCloseTo(stopTo + 1, 9);
+    // asked for on the short axle's side, on the short one, its stud-long hole a twentieth of a stud past either end
+    const [thirdFrom, thirdTo] = holeOf(plug(stopped, 'bush', at(stopFrom - 0.4), side, STILL, 'third'));
+    expect(thirdFrom).toBeCloseTo(span(short)[0] - 0.05, 9);
+    expect(thirdTo).toBeCloseTo(stopFrom + 0.05, 9);
+    // and wherever it is asked for along the axle, with that first bush on it or not, a bush goes on one axle or the other, no
+    // further past its ends than that, and never across the stop
+    for (const others of [[], [first as Brick]]) {
+      for (let x = span(short)[0] - 0.4; x < span(long)[1] + 0.4; x += 0.05) {
+        const asked = ask(stopped, 'bush', at(x), side, STILL, 'new', others);
+        if (!asked?.free) continue;
+        const [from, to] = holeOf(asked.brick);
+        const onOne = [long, short].some((axle) => from >= span(axle)[0] - 0.05 - 1e-9 && to <= span(axle)[1] + 0.05 + 1e-9);
+        expect(`${x.toFixed(2)}: ${onOne}`).toBe(`${x.toFixed(2)}: true`);
+      }
+    }
+  });
 });
 
 describe('plugging a click hinge together', () => {

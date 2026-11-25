@@ -146,11 +146,11 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
   const BAR_SURFACE = 0.12;
   /**
    * How much of a turn the surfaces a file is drawn with go round a joint's
-   * line, a bar's radius from it, at `s` along it from its middle: those
-   * facing in towards the line (the inside of a clip) and those facing out
-   * from it (a rod), each from 0 to 1.
+   * line, `radius` from it (a bar's, unless given), at `s` along it from its
+   * middle: those facing in towards the line (the inside of a clip or a
+   * hole) and those facing out from it (a rod), each from 0 to 1.
    */
-  const wallAt = (file: string, joint: FlatConnector, s: number): { readonly inwards: number; readonly outwards: number } => {
+  const wallAt = (file: string, joint: FlatConnector, s: number, radius = 4): { readonly inwards: number; readonly outwards: number } => {
     const [x, y, z] = joint.axis;
     const side = Math.abs(y) < 0.9 ? ([z, 0, -x] as const) : ([0, -z, y] as const);
     const size = Math.hypot(...side);
@@ -162,7 +162,7 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
         const off = [p[0] - joint.at[0], p[1] - joint.at[1], p[2] - joint.at[2]] as const;
         return { along: off[0] * x + off[1] * y + off[2] * z, pu: off[0] * u[0] + off[1] * u[1] + off[2] * u[2], pv: off[0] * v[0] + off[1] * v[1] + off[2] * v[2] };
       });
-      if (corners.some(({ pu, pv }) => Math.abs(Math.hypot(pu, pv) - 4) > BAR_SURFACE)) continue;
+      if (corners.some(({ pu, pv }) => Math.abs(Math.hypot(pu, pv) - radius) > BAR_SURFACE)) continue;
       if (Math.min(...corners.map(({ along }) => along)) > s || Math.max(...corners.map(({ along }) => along)) < s) continue;
       const [p, q] = [[b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const, [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const];
       const normal = [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]] as const;
@@ -498,6 +498,48 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     };
     for (const file of ['2540.dat', '48336.dat', '92747.dat', '42114c01.dat', '4180c01.dat', '2488.dat', '85959.dat', '2530.dat', '630.dat', '15396c01.dat', '6260c01.dat', '19476-f2.dat', '4438.dat']) {
       for (const bar of connectionsOf(file).filter((c) => c.kind === 'bar')) expect(`${file} ${bar.at}: ${bare(file, bar)}`).toBe(`${file} ${bar.at}: ${'bare '.repeat(5).trim()}`);
+    }
+  });
+
+  it('keeps an axle only where nothing of its part holds it', () => {
+    const axlesOf = (file: string) => connectionsOf(file).filter((c) => c.kind === 'axle').map((c) => Math.round(c.length * 10) / 10);
+    // none where an assembly's own parts are on its axles: a battery box car's wheels, and a Bigfig's arms on the axle pins at its
+    // shoulders, which hold them in axle holes LDraw doesn't draw as such
+    expect(axlesOf('3443bc01.dat')).toEqual([]);
+    expect(axlesOf('10128p01c01.dat')).toEqual([]);
+    // either side of a stop on an axle; a motor's shaft out of its bearing, a linear actuator's out of its body, a pneumatic
+    // cylinder's rod out of its cap, a shock absorber's out of its cylinder, and a wind-up motor's either side of the wall it runs
+    // through
+    expect(axlesOf('32209.dat')).toEqual([87.5, 18]);
+    expect(axlesOf('59426.dat')).toEqual([89.5, 17.5]);
+    expect(axlesOf('6216d.dat')).toEqual([19]);
+    expect(axlesOf('92693c01-f1.dat')).toEqual([19.5]);
+    expect(axlesOf('127c01-f1.dat')).toEqual([91]);
+    expect(axlesOf('73129.dat')).toEqual([37]);
+    expect(axlesOf('42073c01.dat')).toEqual([19.5, 6]);
+    // a hook's axle between the ribs on it, and a Kolhii stick's shaft either side of the rings on it, too close together for
+    // anything to go on between them
+    expect(axlesOf('42074.dat')).toEqual([4.7, 4.4, 5, 19.5]);
+    expect(axlesOf('44811.dat')).toEqual([19.5, 19.5, 51, 63, 16.5]);
+    // whole: an axle, and an axle pin's, with nothing round them; a motor's hollow shaft on its steel axle; a limb's axle, which a
+    // pin hole crosses; a boat's shaft, which its part goes only part of the way round
+    expect(axlesOf('3705.dat')).toEqual([79]);
+    expect(axlesOf('43093.dat')).toEqual([19.5]);
+    expect(axlesOf('74569.dat')).toEqual([18]);
+    expect(axlesOf('50922.dat')).toEqual([14.3]);
+    expect(axlesOf('48083c01.dat')).toEqual([8.5, 36, 8.5]);
+    // measured another way: where an assembly's axle is left out, a hole's wall a Technic hole's radius from its line faces in
+    // towards it, all the way round (a wheel's) or at the ends of the cross's arms (an arm's axle hole) ...
+    const axleOf = (file: string): FlatConnector => joinsOf(file).find((c) => c.kind === 'axle') ?? expect.unreachable();
+    expect(wallAt('3443bc01.dat', axleOf('3443bc01.dat'), 0, 6).inwards).toBe(1);
+    expect(wallAt('10128p01c01.dat', axleOf('10128p01c01.dat'), 0, 6).inwards).toBeGreaterThan(0);
+    // ... and none faces in towards an axle kept, from end to end
+    const clear = (file: string, axle: FlatConnector): string => {
+      const half = axle.length / 2;
+      return [-half + 0.3, -0.8 * half, 0, 0.8 * half, half - 0.3].map((s) => wallAt(file, axle, s, 6).inwards.toFixed(2)).join(' ');
+    };
+    for (const file of ['32209.dat', '59426.dat', '6216d.dat', '92693c01-f1.dat', '127c01-f1.dat', '73129.dat', '42073c01.dat', '42074.dat', '44811.dat', '3705.dat', '43093.dat', '74569.dat', '50922.dat', '48083c01.dat']) {
+      for (const axle of connectionsOf(file).filter((c) => c.kind === 'axle')) expect(`${file} ${axle.at}: ${clear(file, axle)}`).toBe(`${file} ${axle.at}: ${'0.00 '.repeat(5).trim()}`);
     }
   });
 

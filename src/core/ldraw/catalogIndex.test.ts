@@ -103,6 +103,12 @@ describe('library index', () => {
     // a Friends figure holding a screwdriver, as version 18 lists it: only its empty hand's clip
     const holding: LDrawIndexEntry = { ...BRICK, id: '92198c01', name: 'Figure Friends Girl/Woman Template', connectors: [[17, -1.3, 2.4, 0.3, 0, 0, 1, 0.55]] };
     expect(toPartDef(parseLDrawIndex({ version: 18, generated: '', parts: [holding] }).parts[0] as LDrawIndexEntry).connectors?.map((c) => c.kind)).toEqual(['clip']);
+    // an axle with a stop, as version 19 lists it: an axle either side of the stop
+    const stopped: LDrawIndexEntry = { ...BRICK, id: '32209', name: 'Technic Axle 5.5 with Stop Type 1', connectors: [[2, 0.5, 0.4, 0, -1, 0, 0, 4.375], [2, -2.2375, 0.4, 0, -1, 0, 0, 0.9]] };
+    expect(toPartDef(parseLDrawIndex({ version: 19, generated: '', parts: [stopped] }).parts[0] as LDrawIndexEntry).connectors?.map((c) => [c.kind, c.length])).toEqual([
+      ['axle', 4.375],
+      ['axle', 0.9],
+    ]);
     expect(toPartDef(BRICK)).not.toHaveProperty('connectors');
     // no such kind, no axis, no length
     for (const connector of [

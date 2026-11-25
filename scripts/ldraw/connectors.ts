@@ -470,7 +470,7 @@ const RODS_AND_HOLDERS: readonly ConnectorKind[] = ['pin', 'pinhole', 'axle', 'a
 const TAKEN_SLACK = 1;
 
 /** Whether two connections of one part are plugged into each other: kinds that mate, on one line, overlapping along it. */
-function plugged(a: FlatConnector, b: FlatConnector): boolean {
+export function plugged(a: FlatConnector, b: FlatConnector): boolean {
   if (!mates(a.kind, b.kind) || !coaxial(a, b)) return false;
   const [b0, b1] = span(b, a);
   return Math.min(a.length / 2, b1) - Math.max(-a.length / 2, b0) > ON_LINE;
