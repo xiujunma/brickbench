@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import { PLATE_HEIGHT, type Vec3 } from '../grid';
-import { brickConnectors, engaged } from '../model/connections';
+import { brickConnectors, engaged, type WorldConnector } from '../model/connections';
 import { brickCellBox, brickFloor, isLoose } from '../model/geometry';
 import { isOutOfBounds } from '../model/spatial';
 import { connectorLookup as lookup } from '../model/connectorTestParts';
 import { makeBrick } from '../model/testUtils';
 import { multiplyTurns, turnOf, type Turn } from '../orientation';
 import type { Brick } from '../model/types';
-import { attachToConnector, type ConnectTurn } from './connect';
+import { attachToConnector, nextDepth, type ConnectTurn } from './connect';
 import { ask, box, hit, plug, STILL, UP } from './connectTesting';
 import { payloadFromPart } from './payload';
 
@@ -53,12 +53,254 @@ describe('plugging a pin into a hole', () => {
     expect(under && box(under).y).toEqual([-1, 1]);
   });
 
-  it('pushes an axle through a hole, flush with its far face, the rest towards the cursor', () => {
+  it('pushes an axle a stud into a hole: through one a stud long, flush with its far face, the rest towards the cursor', () => {
     const brick = makeBrick({ id: 'brick', partId: 'technic-brick' });
     const axle = plug(brick, 'axle', { x: 1.05, y: 0.75, z: 1 }, { x: 0, y: 0, z: 1 });
     if (!axle) throw new Error('no axle');
     expect(box(axle).z).toEqual([0, 4]);
     expect(pluggedInto(axle, brick)).toBe(true);
+  });
+});
+
+describe('how far an axle goes into a hole', () => {
+  // the joiner's hole runs along Z from 0 to 2, half a stud up and in
+  const joiner = makeBrick({ id: 'joiner', partId: 'axle-joiner' });
+  const FRONT = { x: 0, y: 0, z: 1 };
+  const BACK = { x: 0, y: 0, z: -1 };
+  const front = { x: 0.55, y: 0.55, z: 2 };
+  const back = { x: 0.55, y: 0.55, z: 0 };
+  /** Pushed by D to the `deeper`-th place it can go to. */
+  const pushed = (deeper: number): ConnectTurn => ({ ...STILL, deeper });
+  /** Where along Z the axle of `brick` that is in the joiner runs. */
+  const inJoiner = (brick: Brick | null): number[] => {
+    const axle = brick ? connectionIn(brick, joiner) : undefined;
+    if (!axle) throw new Error('not in the joiner');
+    const r = (v: number) => Math.round(v * 1000) / 1000 + 0;
+    return [r(axle.at.z - axle.length / 2), r(axle.at.z + axle.length / 2)];
+  };
+  /** How far in the part goes of how far it could, as attachToConnector tells it. */
+  const depthsOf = (target: Brick, partId: string, point: Vec3, normal: Vec3, turned: ConnectTurn, others: readonly Brick[] = []) => {
+    const part = lookup(partId);
+    if (!part) throw new Error(partId);
+    return attachToConnector(hit(point, normal, target.id), target, payloadFromPart(part, 4, 0), turned, lookup, [target, ...others])?.depths;
+  };
+
+  it('pushes it a stud into a hole two studs long, and D half a stud further each time, as far as the far face', () => {
+    expect(inJoiner(plug(joiner, 'axle', front, FRONT))).toEqual([1, 5]);
+    expect(depthsOf(joiner, 'axle', front, FRONT, STILL)).toEqual({ at: 0, of: 3 });
+    expect(inJoiner(plug(joiner, 'axle', front, FRONT, pushed(1)))).toEqual([0.5, 4.5]);
+    expect(inJoiner(plug(joiner, 'axle', front, FRONT, pushed(2)))).toEqual([0, 4]);
+    expect(depthsOf(joiner, 'axle', front, FRONT, pushed(2))).toEqual({ at: 2, of: 3 });
+    // pushed further than it goes, it goes as far as it goes
+    expect(inJoiner(plug(joiner, 'axle', front, FRONT, pushed(7)))).toEqual([0, 4]);
+    expect(depthsOf(joiner, 'axle', front, FRONT, pushed(7))).toEqual({ at: 2, of: 3 });
+    // from the other end, the other way, and turned or turned over it goes in as far
+    expect(inJoiner(plug(joiner, 'axle', back, BACK, pushed(1)))).toEqual([-2.5, 1.5]);
+    expect(inJoiner(plug(joiner, 'axle', front, FRONT, { spin: 1, flipped: true, deeper: 1 }))).toEqual([0.5, 4.5]);
+  });
+
+  it('meets an axle from the other end in the middle of the joiner, and has no room for a third', () => {
+    const first = plug(joiner, 'axle', front, FRONT, STILL, 'first') as Brick;
+    const second = plugAmong([first], joiner, 'axle', back, BACK, 'second');
+    expect(inJoiner(second)).toEqual([-3, 1]);
+    // where the first is, D has nowhere further to push the second
+    expect(depthsOf(joiner, 'axle', back, BACK, pushed(1), [first])).toEqual({ at: 0, of: 1 });
+    expect(answer([first, second as Brick], joiner, 'axle', front, FRONT)).toBe('none');
+    expect(answer([first, second as Brick], joiner, 'axle', back, BACK)).toBe('none');
+    // pushed half a stud further, the first leaves too little of the hole for another to hold by
+    const deep = plug(joiner, 'axle', front, FRONT, pushed(1), 'deep') as Brick;
+    expect(answer([deep], joiner, 'axle', back, BACK)).toBe('none');
+  });
+
+  it('goes no further in than its own axle, so its part stays out of the hole', () => {
+    // the short axle beyond a stop goes in up to the stop, however far D pushes it, and the stop and the axle beyond it never go in
+    expect(depthsOf(joiner, 'stopped-axle', front, FRONT, STILL)).toEqual({ at: 0, of: 1 });
+    const stopped = plug(joiner, 'stopped-axle', front, FRONT, pushed(3), 'stopped') as Brick;
+    expect(inJoiner(stopped)).toEqual([1.1, 2]);
+    expect(brickConnectors(stopped, lookup).filter((axle) => engaged(axle, brickConnectors(joiner, lookup)[0] as WorldConnector))).toHaveLength(1);
+    // turned over, it has come through the joiner from its back: as far as it goes, the stop against the back face, the axle beyond it out of the back;
+    // and D has nowhere further to push it
+    const through = ask(joiner, 'stopped-axle', front, FRONT, { spin: 0, flipped: true }, 'through', []);
+    expect(through?.free).toBe(true);
+    expect(inJoiner(through?.brick ?? null)).toEqual([0, 0.9]);
+    expect(inJoiner(plug(joiner, 'stopped-axle', front, FRONT, { spin: 0, flipped: true, deeper: 2 }))).toEqual([0, 0.9]);
+    expect(depthsOf(joiner, 'stopped-axle', front, FRONT, { spin: 0, flipped: true, deeper: 2 })).toEqual({ at: 0, of: 1 });
+    // so does its long axle, by which C puts it in: a stud in by its free end, pushed by D as far as the back face; turned over, through, no further
+    const long = (turned: ConnectTurn): number[] => {
+      const [axle] = brickConnectors(plug(joiner, 'stopped-axle', front, FRONT, { ...turned, via: 0 }) as Brick, lookup);
+      if (!axle) throw new Error('no axle');
+      return [axle.at.z - axle.length / 2, axle.at.z + axle.length / 2].map((v) => Math.round(v * 1e4) / 1e4 + 0);
+    };
+    expect(long(STILL)).toEqual([1, 5.375]);
+    expect(long(pushed(2))).toEqual([0, 4.375]);
+    expect(long({ spin: 0, flipped: true })).toEqual([0, 4.375]);
+    expect(long({ spin: 0, flipped: true, deeper: 2 })).toEqual([0, 4.375]);
+    expect(depthsOf(joiner, 'stopped-axle', front, FRONT, { spin: 0, flipped: true, via: 0, deeper: 2 })).toEqual({ at: 0, of: 1 });
+    // a long pin's stub of axle goes in as far as its collar
+    expect(inJoiner(plug(joiner, 'long-pin', front, FRONT, pushed(2)))).toEqual([1.025, 2]);
+  });
+
+  it('puts an axle shorter than a hole in by its free end, its stop at the mouth, or through from the far side, its stop at the far face', () => {
+    // the brick's hole runs along Z from 0 to 1; the stopped axle's short axle is 0.9 long, the stop beyond it a tenth
+    const brick = makeBrick({ id: 'brick', partId: 'technic-brick' });
+    const [hole] = brickConnectors(brick, lookup);
+    if (!hole) throw new Error('no hole');
+    for (const spin of [0, 1, 2, 3]) {
+      for (const flipped of [false, true]) {
+        const asked = ask(brick, 'stopped-axle', { x: 1.05, y: 0.75, z: 1 }, FRONT, { spin, flipped }, 'new', []);
+        if (!asked) throw new Error('no fit');
+        // where along Z the short axle and the stop are; in either way it is turned the stop is out of the hole, at its mouth or its far face
+        const [long, short] = brickConnectors(asked.brick, lookup);
+        if (!long || !short) throw new Error('no axles');
+        const ends = (c: WorldConnector) => [c.at.z - c.length / 2, c.at.z + c.length / 2].map((v) => Math.round(v * 1e6) / 1e6 + 0);
+        const stop = short.at.z < long.at.z ? [ends(short)[1], ends(long)[0]] : [ends(long)[1], ends(short)[0]];
+        const pose = `spin ${spin}${flipped ? ', turned over' : ''}`;
+        expect(`${pose}: ${asked.free}`).toBe(`${pose}: true`);
+        expect(`${pose}: ${JSON.stringify(ends(short))} stop ${JSON.stringify(stop)}`).toMatch(/: \[0\.1,1\] stop \[1,1\.1\]$|: \[0,0\.9\] stop \[-0\.1,0\]$/);
+      }
+    }
+  });
+
+  it('never has two pieces of one part’s axle in one hole, wherever in the world it is', () => {
+    // an axle either side of a pin hole, in a joiner: turned however, and pushed however far, never both
+    for (const x of [0, 3, 7, 11, 13]) {
+      for (const z of [0, 5, 9]) {
+        const shifted = makeBrick({ id: 'joiner', partId: 'axle-joiner', x, z });
+        const [hole] = brickConnectors(shifted, lookup);
+        if (!hole) throw new Error('no hole');
+        for (const turned of [STILL, { spin: 1, flipped: false }, { spin: 0, flipped: true }, { spin: 2, flipped: true }, { ...STILL, deeper: 1 }]) {
+          const asked = ask(shifted, 'pin-hole-axle', { x: x + 0.55, y: 0.55, z: z + 2 }, FRONT, turned, 'new', []);
+          const inIt = asked ? brickConnectors(asked.brick, lookup).filter((c) => c.kind === 'axle' && engaged(c, hole)).length : 0;
+          expect(`${x},${z} ${JSON.stringify(turned)}: ${asked?.free ? inIt : 'no room'}`).toMatch(/: (1|no room)$/);
+        }
+      }
+    }
+    // a shaft with rings on it: by its middle axle, held at both ends, through the joiner as far as it goes, its ring and the axle beyond would
+    // be in the joiner too, plugged in twice over; so it goes in by an end one, a stud in, by itself or as C asks
+    const ringed = ask(joiner, 'ringed-axle', front, FRONT, STILL, 'ringed', []);
+    expect(ringed?.free).toBe(true);
+    expect(ringed && brickConnectors(ringed.brick, lookup).filter((c) => engaged(c, brickConnectors(joiner, lookup)[0] as WorldConnector)).map((c) => c.length)).toEqual([0.95]);
+    for (const via of [0, 1, 2]) {
+      for (const turned of [STILL, { spin: 0, flipped: true }]) {
+        const asked = ask(joiner, 'ringed-axle', front, FRONT, { ...turned, via }, 'new', []);
+        const inIt = asked ? brickConnectors(asked.brick, lookup).filter((c) => engaged(c, brickConnectors(joiner, lookup)[0] as WorldConnector)) : [];
+        expect(`${via} ${turned.flipped}: ${asked?.free ? inIt.map((c) => c.length).join(' ') : 'no room'}`).toMatch(/: (0\.95|no room)$/);
+      }
+    }
+  });
+
+  it('turns a part over with T only as far as leaves one of its axles in a hole', () => {
+    // each stub of axle in the blade has its part beyond both ends, so it comes through the joiner from the back, the other stub beyond it
+    const bladed = ask(joiner, 'bladed-axles', front, FRONT, STILL, 'bladed', []);
+    expect(bladed?.free).toBe(true);
+    expect(inJoiner(bladed?.brick ?? null)).toEqual([0, 0.975]);
+    // turned over where it stands, the other stub reaches a fortieth of a stud into the joiner's mouth: no room
+    expect(ask(joiner, 'bladed-axles', front, FRONT, { spin: 0, flipped: true }, 'bladed', [])?.free).toBe(false);
+  });
+
+  it('takes places a whisker apart for one: a stub of axle in the far end leaves a stud and a fortieth', () => {
+    const stub = plug(joiner, 'long-pin', back, BACK, STILL, 'stub') as Brick;
+    expect(inJoiner(stub)).toEqual([0, 0.975]);
+    expect(depthsOf(joiner, 'axle', front, FRONT, pushed(1), [stub])).toEqual({ at: 0, of: 1 });
+    expect(inJoiner(plugAmong([stub], joiner, 'axle', front, FRONT))).toEqual([1, 5]);
+  });
+
+  it('pushes it into a hole a stud long or less only as far as its far face', () => {
+    const brick = makeBrick({ id: 'brick', partId: 'technic-brick' });
+    const at = { x: 1.05, y: 0.75, z: 1 };
+    expect(depthsOf(brick, 'axle', at, FRONT, STILL)).toEqual({ at: 0, of: 1 });
+    expect(box(plug(brick, 'axle', at, FRONT, pushed(1)) as Brick).z).toEqual([0, 4]);
+    // into a liftarm half a stud thick, half a stud
+    const liftarm = makeBrick({ id: 'liftarm', partId: 'thin-beam' });
+    const axle = plug(liftarm, 'axle', { x: 0.55, y: 0.45, z: 0.45 }, UP, pushed(1)) as Brick;
+    const [own] = brickConnectors(axle, lookup);
+    expect(own && [Math.min(own.at.y - 2, own.at.y + 2), Math.max(own.at.y - 2, own.at.y + 2)]).toEqual([0, 4]);
+  });
+
+  it('stops at a far face that lies between half studs', () => {
+    // the engine's hole runs along Z from its back face, at 0, to 1.7, a stud up
+    const engine = makeBrick({ id: 'engine', partId: 'jet-engine' });
+    const at = { x: 1.05, y: 1, z: 0 };
+    expect(depthsOf(engine, 'axle', at, BACK, STILL)).toEqual({ at: 0, of: 3 });
+    // the axle's middle, two studs out from its end in the hole: a stud in, a stud and a half, and as far as it goes
+    const middle = (deeper: number): number => connectionIn(plug(engine, 'axle', at, BACK, pushed(deeper)) as Brick, engine)?.at.z ?? NaN;
+    expect(middle(0)).toBeCloseTo(-1, 9);
+    expect(middle(1)).toBeCloseTo(-0.5, 9);
+    expect(middle(2)).toBeCloseTo(-0.3, 9);
+  });
+
+  it('pushes nothing but an axle into a hole: a pin goes in to its collar, a bar down an open stud as far as it goes', () => {
+    const over = { x: 0.55, y: 1.2, z: 1.45 };
+    expect(depthsOf(beam, 'pin', over, UP, pushed(1))).toBeUndefined();
+    expect(box(plug(beam, 'pin', over, UP, pushed(1)) as Brick)).toEqual(box(plug(beam, 'pin', over, UP) as Brick));
+    const round = makeBrick({ id: 'round', partId: 'round-brick' });
+    expect(depthsOf(round, 'bar', { x: 0.55, y: 1.4, z: 0.5 }, UP, pushed(1))).toBeUndefined();
+    // a beam onto a pin, a bush onto an axle: the cursor says where
+    const pin = plug(beam, 'pin', over, UP, STILL, 'pin') as Brick;
+    expect(depthsOf(pin, 'beam', { x: 0.9, y: 1.6, z: 1.5 }, { x: 1, y: 0, z: 0 }, pushed(1))).toBeUndefined();
+    const axle = plug(joiner, 'axle', front, FRONT, STILL, 'axle') as Brick;
+    expect(depthsOf(axle, 'bush', { x: 0.85, y: 0.55, z: 4 }, { x: 1, y: 0, z: 0 }, pushed(1))).toBeUndefined();
+  });
+
+  describe('a part with a hole on the end of an axle', () => {
+    const brick = makeBrick({ id: 'brick', partId: 'technic-brick' });
+    // the axle runs along Z from 0, in the brick's hole, to 4
+    const axle = plug(brick, 'axle', { x: 1.05, y: 0.75, z: 1 }, FRONT, STILL, 'axle') as Brick;
+    const at = (z: number): Vec3 => ({ x: 1.3, y: 0.7, z });
+    const SIDE = { x: 1, y: 0, z: 0 };
+    /** Where along the axle, along Z or X, the hole of `partId` built at the cursor runs. */
+    const holeOn = (target: Brick, partId: string, cursor: Vec3, normal: Vec3, others: readonly Brick[] = [brick]): number[] => {
+      const built = plugAmong(others, target, partId, cursor, normal);
+      const [hole] = built ? brickConnectors(built, lookup) : [];
+      if (!hole) throw new Error(`no ${partId}`);
+      const middle = Math.abs(hole.axis.z) > 0.5 ? hole.at.z : hole.at.x;
+      const r = (v: number) => Math.round(v * 10000) / 10000 + 0;
+      return [r(middle - hole.length / 2), r(middle + hole.length / 2)];
+    };
+
+    it('hangs an axle joiner off its free end as far as leaves a stud of the joiner on, so another axle goes into the rest', () => {
+      // asked for at the axle's end, half on; half a stud in from there, half a stud off; a stud in, all on
+      expect(holeOn(axle, 'axle-joiner', at(3.9), SIDE)).toEqual([3, 5]);
+      expect(holeOn(axle, 'axle-joiner', at(3.4), SIDE)).toEqual([2.5, 4.5]);
+      expect(holeOn(axle, 'axle-joiner', at(3), SIDE)).toEqual([2, 4]);
+      // a second axle goes a stud into the rest, against the first
+      const joiner = plugAmong([brick], axle, 'axle-joiner', at(3.9), SIDE, 'joiner') as Brick;
+      const second = plugAmong([axle], joiner, 'axle', { x: 1.05, y: 0.75, z: 5 }, FRONT, 'second') as Brick;
+      const [own] = brickConnectors(second, lookup);
+      expect(own && [own.at.z - own.length / 2, own.at.z + own.length / 2]).toEqual([4, 8]);
+      // and at the axle's other end, where the brick holds it, the joiner goes no further than all on
+      expect(holeOn(axle, 'axle-joiner', at(1.1), SIDE)).toEqual([1, 3]);
+    });
+
+    it('hangs off neither end what it can go all on: a wheel with a hub two studs long, a bush', () => {
+      expect(holeOn(axle, 'hub-wheel', at(3.9), SIDE)).toEqual([2, 4]);
+      expect(holeOn(axle, 'bush', at(3.9), SIDE)).toEqual([3, 4]);
+      // an axle loose of anything hangs a joiner off either end
+      const loose = makeBrick({ id: 'loose', partId: 'axle' });
+      const over = (x: number): Vec3 => ({ x, y: 0.8, z: 0.5 });
+      expect(holeOn(loose, 'axle-joiner', over(0.1), UP, [])).toEqual([-1, 1]);
+      expect(holeOn(loose, 'axle-joiner', over(3.9), UP, [])).toEqual([3, 5]);
+    });
+
+    it('puts a part longer than a stretch of axle against what holds it, off its free end, and over a stretch held at both ends', () => {
+      // the short axle beyond the stop runs along X from -0.1875, its free end, to 0.7125, by the stop: a wheel's hub two studs long and a
+      // joiner go against the stop, off the free end by the 1.1 studs they are longer
+      const stopped = makeBrick({ id: 'stopped', partId: 'stopped-axle' });
+      const shortAt = { x: 0.3, y: 0.8, z: 0.5 };
+      expect(holeOn(stopped, 'hub-wheel', shortAt, UP, [])).toEqual([-1.2875, 0.7125]);
+      expect(holeOn(stopped, 'axle-joiner', shortAt, UP, [])).toEqual([-1.2875, 0.7125]);
+      // a stub of axle inside its housing, along X from 1 to 2: a joiner goes over its middle, as far past either end
+      const housing = makeBrick({ id: 'housing', partId: 'housed-axle' });
+      expect(holeOn(housing, 'axle-joiner', { x: 1.5, y: 0.8, z: 0.5 }, UP, [])).toEqual([0.5, 2.5]);
+    });
+  });
+
+  it('steps D round the places it can go to, and back', () => {
+    expect(nextDepth({ at: 0, of: 3 }, false)).toBe(1);
+    expect(nextDepth({ at: 2, of: 3 }, false)).toBe(0);
+    expect(nextDepth({ at: 0, of: 3 }, true)).toBe(2);
+    expect(nextDepth({ at: 1, of: 3 }, true)).toBe(0);
+    expect(nextDepth({ at: 0, of: 1 }, false)).toBeNull();
   });
 });
 
@@ -108,19 +350,21 @@ describe('plugging a part onto a pin or an axle', () => {
     const first = plug(stopped, 'bush', at(stopTo + 0.2), side, STILL, 'first');
     expect(holeOf(first)[0]).toBeCloseTo(stopTo, 9);
     expect(holeOf(first)[1]).toBeCloseTo(stopTo + 1, 9);
-    // asked for on the short axle's side, on the short one, its stud-long hole a twentieth of a stud past either end
+    // asked for on the short axle's side, on the short one: against the stop, its stud-long hole off the axle's free end by the tenth of a stud the
+    // axle is shorter
     const [thirdFrom, thirdTo] = holeOf(plug(stopped, 'bush', at(stopFrom - 0.4), side, STILL, 'third'));
-    expect(thirdFrom).toBeCloseTo(span(short)[0] - 0.05, 9);
-    expect(thirdTo).toBeCloseTo(stopFrom + 0.05, 9);
-    // and wherever it is asked for along the axle, with that first bush on it or not, a bush goes on one axle or the other, no
-    // further past its ends than that, and never across the stop
+    expect(thirdFrom).toBeCloseTo(span(short)[0] - 0.1, 9);
+    expect(thirdTo).toBeCloseTo(stopFrom, 9);
+    // and wherever it is asked for along the axle, with that first bush on it or not, a bush goes on one axle or the other, never across the stop:
+    // all on the long one, or on the short one, off its free end by no more than that
     for (const others of [[], [first as Brick]]) {
       for (let x = span(short)[0] - 0.4; x < span(long)[1] + 0.4; x += 0.05) {
         const asked = ask(stopped, 'bush', at(x), side, STILL, 'new', others);
         if (!asked?.free) continue;
         const [from, to] = holeOf(asked.brick);
-        const onOne = [long, short].some((axle) => from >= span(axle)[0] - 0.05 - 1e-9 && to <= span(axle)[1] + 0.05 + 1e-9);
-        expect(`${x.toFixed(2)}: ${onOne}`).toBe(`${x.toFixed(2)}: true`);
+        const onLong = from >= span(long)[0] - 1e-9 && to <= span(long)[1] + 1e-9;
+        const onShort = from >= span(short)[0] - 0.1 - 1e-9 && to <= span(short)[1] + 1e-9;
+        expect(`${x.toFixed(2)}: ${onLong || onShort}`).toBe(`${x.toFixed(2)}: true`);
       }
     }
   });
@@ -562,10 +806,13 @@ describe('connections another part already takes', () => {
     expect(connectionIn(right, joiner)?.at.x).toBeCloseTo(1.5, 9);
     const left = plugAmong([right], joiner, 'pin', { x: 0, y: 0.55, z: 0.5 }, BACK, 'left');
     expect(left && connectionIn(left, joiner)?.at.x).toBeCloseTo(0.5, 9);
-    // an axle goes through an empty hole to its far face; here, as far as the pin: half way
-    expect(box(plug(joiner, 'axle', { x: 0, y: 0.55, z: 0.5 }, BACK) as Brick).x).toEqual([-2, 2]);
-    const axle = plugAmong([right], joiner, 'axle', { x: 0, y: 0.55, z: 0.5 }, BACK, 'axle') as Brick;
+    // an axle goes a stud into the empty hole, half way, and D pushes it on to its far face; here, as far as the pin, half way, and no further
+    const mouth = { x: 0, y: 0.55, z: 0.5 };
+    expect(box(plug(joiner, 'axle', mouth, BACK) as Brick).x).toEqual([-3, 1]);
+    expect(box(plug(joiner, 'axle', mouth, BACK, { ...STILL, deeper: 2 }) as Brick).x).toEqual([-2, 2]);
+    const axle = plugAmong([right], joiner, 'axle', mouth, BACK, 'axle') as Brick;
     expect(box(axle).x).toEqual([-3, 1]);
+    expect(box(plug(joiner, 'axle', mouth, BACK, { ...STILL, deeper: 2 }, 'deep', [right]) as Brick).x).toEqual([-3, 1]);
     // and then the hole is full
     expect(answer([right, axle], joiner, 'axle', { x: 0, y: 0.55, z: 0.5 }, BACK)).toBe('none');
     expect(answer([right, axle], joiner, 'pin', { x: 0, y: 0.55, z: 0.5 }, BACK)).toBe('none');
@@ -751,16 +998,23 @@ describe('connections another part already takes', () => {
   });
 
   it('finds room for a part turned over with T clear of what was in its way', () => {
-    // a pin in the joiner's right end; the long pin's stub of axle goes through from there to the joiner's far face
+    // a pin in the joiner's right end, which takes the hole from 1 to 2
     const joiner = makeBrick({ id: 'joiner', partId: 'pin-joiner' });
     const right = plug(joiner, 'pin', { x: 2, y: 0.55, z: 0.5 }, OUT, STILL, 'right') as Brick;
     const mouth = { x: 0, y: 0.55, z: 0.5 };
-    // from the left, its stub stops at the pin and its long end stands out to the left: room
-    expect(answer([right], joiner, 'long-pin', mouth, BACK)).toBe('room');
-    // asked for at the right, where the pin is, its long end would lie through the pin; turned over, it stands out of the far end
+    // from the left, the long pin's stub of axle goes in as far as it is long, short of the pin, its long end standing out to the left: room
+    const stub = ask(joiner, 'long-pin', mouth, BACK, STILL, 'new', [right]);
+    expect(stub?.free).toBe(true);
+    expect(stub && connectionIn(stub.brick, joiner)?.at.x).toBeCloseTo(0.4875, 9);
+    // turned over there, it has come through the joiner from the right, its long end through the pin: none
+    expect(ask(joiner, 'long-pin', mouth, BACK, { spin: 0, flipped: true }, 'new', [right])?.free).toBe(false);
+    // asked for at the right, where the pin is, its stub would go into the pin; turned over, it has come through from the left, its long end
+    // standing out of the far end
     const at = { x: 2, y: 0.55, z: 0.5 };
     expect(ask(joiner, 'long-pin', at, OUT, STILL, 'new', [right])?.free).toBe(false);
-    expect(ask(joiner, 'long-pin', at, OUT, { spin: 0, flipped: true }, 'new', [right])?.free).toBe(true);
+    const over = ask(joiner, 'long-pin', at, OUT, { spin: 0, flipped: true }, 'new', [right]);
+    expect(over?.free).toBe(true);
+    expect(over && connectionIn(over.brick, joiner)?.at.x).toBeCloseTo(0.4875, 9);
   });
 
   it('answers the same wherever in the world a hole only a tenth of a stud deep is', () => {

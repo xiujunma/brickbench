@@ -94,6 +94,18 @@ describe('connections read from LDraw primitives', () => {
     expect(connectorsOf('1 16 0 0 0 -1 0 0 0 40 0 0 0 1 axlehol8.dat').map((c) => c.kind)).toEqual(['axle']);
   });
 
+  it('join an axle drawn in pieces a notch or a rib apart into one, and keep pieces further apart two', () => {
+    // as LDraw draws the 2L axle, 32062: notches 3 LDU long between its middle and its ends
+    const notched = ['1 16 0 -20 0 1 0 0 0 8.5 0 0 0 1 axlehol8.dat', '1 16 0 -8 0 1 0 0 0 16 0 0 0 1 axlehol8.dat', '1 16 0 11 0 1 0 0 0 8.5 0 0 0 1 axlehol8.dat'];
+    expect(connectorsOf(notched.join('\n')).map(round)).toEqual([{ kind: 'axle', at: [0, -0.25, 0], axis: [0, 1, 0], length: 39.5 }]);
+    // a flexible axle's ribs, 3.6 apart
+    expect(connectorsOf(['1 16 0 0 0 1 0 0 0 10 0 0 0 1 axlehol8.dat', '1 16 0 13.6 0 1 0 0 0 10 0 0 0 1 axlehol8.dat'].join('\n')).map(round)).toEqual([
+      { kind: 'axle', at: [0, 11.8, 0], axis: [0, 1, 0], length: 23.6 },
+    ]);
+    // pieces 4 apart, as a hook's axle is either side of a rib on it, are two axles
+    expect(connectorsOf(['1 16 0 0 0 1 0 0 0 10 0 0 0 1 axlehol8.dat', '1 16 0 14 0 1 0 0 0 10 0 0 0 1 axlehol8.dat'].join('\n')).map((c) => c.length)).toEqual([10, 10]);
+  });
+
   it('take a pin hole along an axle hole as its mouth', () => {
     const connectors = connectorsOf(['0 BFC INVERTNEXT', '1 16 0 0 0 1 0 0 0 20 0 0 0 1 axlehol8.dat', '1 16 0 0 0 1 0 0 0 1 0 0 0 1 peghole.dat'].join('\n'));
     expect(connectors.map((c) => c.kind)).toEqual(['axlehole']);

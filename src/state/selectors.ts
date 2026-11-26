@@ -48,14 +48,15 @@ export function distinctPieces(model: Model): number {
 
 /**
  * How the part being built is held where it plugs in (see ConnectTurn):
- * turned by R and T, and by the connection of its own C chose. A pasted
- * copy goes on as it fits best: R and T turn the copy, not how it plugs
- * in, and the connection chosen, like the turn, is the active part's.
+ * turned by R and T, by the connection of its own C chose, and as far into
+ * a hole as D pushed it. A pasted copy goes on as it fits best: R and T
+ * turn the copy, not how it plugs in, and the connection chosen, like the
+ * turn and the depth, is the active part's.
  */
-export function buildTurn(state: Pick<EditorState, 'buildRotation' | 'buildVia' | 'pastePayload'>): ConnectTurn {
-  const { buildRotation, buildVia, pastePayload } = state;
+export function buildTurn(state: Pick<EditorState, 'buildRotation' | 'buildVia' | 'buildDepth' | 'pastePayload'>): ConnectTurn {
+  const { buildRotation, buildVia, buildDepth, pastePayload } = state;
   if (pastePayload) return { spin: 0, flipped: false };
-  return { spin: spinOf(buildRotation), flipped: facingOf(buildRotation) !== '+y', ...(buildVia === null ? {} : { via: buildVia }) };
+  return { spin: spinOf(buildRotation), flipped: facingOf(buildRotation) !== '+y', ...(buildVia === null ? {} : { via: buildVia }), ...(buildDepth > 0 ? { deeper: buildDepth } : {}) };
 }
 
 export function currentModel(state: Pick<EditorState, 'history'>): Model {

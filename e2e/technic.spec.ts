@@ -106,6 +106,120 @@ test.describe('Technic, hinges and minifigures', () => {
     [top?.x, top?.y, top?.z].forEach((v, k) => expect(v ?? NaN).toBeCloseTo(byMiddle[k] ?? NaN, 3));
   });
 
+  test('pushes an axle a stud into an axle joiner and D further, and meets it with another in a joiner on its end', async ({ page }) => {
+    // starts the editor, searches the library four times and looks for four places along an axle
+    test.setTimeout(300_000);
+    await freshEditor(page);
+    await page.getByRole('button', { name: 'Library', exact: true }).click();
+    await expect(page.locator('#library-category')).toBeVisible();
+    const hint = page.locator('.status-hint');
+    const coords = page.locator('.status-coords');
+    /** Where the build preview is, as the status bar shows it: where its box starts. */
+    const shown = async (): Promise<number[]> => ((await coords.textContent()) ?? '').match(/-?\d+(\.\d+)?/g)?.map(Number) ?? [];
+    /** With the cursor at `spot`, the status bar's hint and where the preview's box starts, read at once. */
+    const readAt = async (spot: { x: number; y: number }): Promise<{ hinted: string; at: number[] }> => {
+      await page.mouse.move(spot.x, spot.y);
+      const [hinted, text] = await page.evaluate(() => [document.querySelector('.status-hint')?.textContent ?? '', document.querySelector('.status-coords')?.textContent ?? '']);
+      return { hinted: hinted ?? '', at: (text ?? '').match(/-?\d+(\.\d+)?/g)?.map(Number) ?? [] };
+    };
+    /** The first of `spots` where the build preview has room and is where `wanted` says. */
+    const firstWhere = async (spots: readonly { x: number; y: number }[], wanted: (at: number[], hinted: string) => boolean): Promise<{ x: number; y: number } | null> => {
+      for (const spot of spots) {
+        const { hinted, at } = await readAt(spot);
+        if (!hinted.includes('No room') && wanted(at, hinted)) return spot;
+      }
+      return null;
+    };
+
+    // an axle joiner on the baseplate, its hole running front to back
+    await chooseLibraryPart(page, '6538a');
+    const centre = await viewportCentre(page);
+    await page.mouse.click(centre.x, centre.y);
+    await expect(counts(page)).toHaveText('1 brick');
+
+    // at its front, an axle goes a stud in, to the joiner's middle
+    await chooseLibraryPart(page, '3705');
+    const mouth = await firstWhere(spotsAround(centre, 120), (_, hinted) => hinted.includes('further in (1 of 3)'));
+    expect(mouth).not.toBeNull();
+    if (!mouth) return;
+    const stud = await shown();
+    // D pushes it half a stud further, towards the back
+    await page.keyboard.press('d');
+    await expect(hint).toContainText('further in (2 of 3)');
+    await expect.poll(shown).not.toEqual(stud);
+    const moved = (await shown()).map((v, k) => v - (stud[k] ?? 0));
+    expect(moved[0]).toBeCloseTo(0, 2);
+    expect(moved[1]).toBeCloseTo(0, 2);
+    expect(moved[2]).toBeCloseTo(-0.5, 2);
+    /** How far the preview is from where it is a stud in, along the joiner, towards the front. */
+    const out = async (): Promise<number> => ((await shown())[2] ?? NaN) - (stud[2] ?? NaN);
+    // and again, to the joiner's back; then round to a stud in again, and ⇧D back the other way
+    await page.keyboard.press('d');
+    await expect(hint).toContainText('further in (3 of 3)');
+    await expect.poll(out).toBeCloseTo(-1, 2);
+    await page.keyboard.press('d');
+    await expect(hint).toContainText('further in (1 of 3)');
+    await expect.poll(out).toBeCloseTo(0, 2);
+    await page.keyboard.press('Shift+D');
+    await expect(hint).toContainText('further in (3 of 3)');
+    await expect.poll(out).toBeCloseTo(-1, 2);
+    await page.keyboard.press('Shift+D');
+    await page.keyboard.press('Shift+D');
+    await expect(hint).toContainText('further in (1 of 3)');
+    await expect.poll(out).toBeCloseTo(0, 2);
+
+    // built there, a stud in, loose
+    await page.mouse.click(mouth.x, mouth.y);
+    await expect(counts(page)).toHaveText('2 bricks');
+    const first = (await savedBricks(page, 2))[1];
+    expect(first?.m).toBeDefined();
+    [first?.x, first?.y, first?.z].forEach((v, k) => expect(v ?? NaN).toBeCloseTo(stud[k] ?? NaN, 3));
+
+    // another joiner goes half onto the axle's front end, three studs out of the first joiner, and hangs off it: LDraw draws the axle a twentieth
+    // of a stud short of its four, so its end is 3.975 on from where its box starts, and the joiner's box starts a stud before that. The axle
+    // runs on, on the screen, the way from the first joiner's middle to its mouth: out along that first, then all round
+    await chooseLibraryPart(page, '6538a');
+    /** How far on from the first axle's box, along it, the preview's box starts. */
+    const along = (at: number[]): number => (at[2] ?? NaN) - (stud[2] ?? NaN);
+    const hangsOff = (at: number[]): boolean => Math.abs(along(at) - 2.975) < 0.002;
+    // where the axle runs on the screen: spots where the joiner goes onto it, at one of the half studs along it, till two lie a stud apart
+    const onAxle = (at: number[]): boolean => along(at) > 0.9 && along(at) < 3 && Math.abs(((along(at) - 0.975) * 2) % 1) < 0.004;
+    const seen: { readonly spot: { x: number; y: number }; readonly at: number }[] = [];
+    for (const spot of spotsAround(mouth, 120, 8)) {
+      const { hinted, at } = await readAt(spot);
+      if (hinted.includes('No room') || !onAxle(at)) continue;
+      seen.push({ spot, at: along(at) });
+      if (Math.max(...seen.map((s) => s.at)) - Math.min(...seen.map((s) => s.at)) >= 1) break;
+    }
+    const [near, far] = [seen.reduce((a, b) => (b.at < a.at ? b : a)), seen.reduce((a, b) => (b.at > a.at ? b : a))];
+    expect(far.at - near.at).toBeGreaterThanOrEqual(1);
+    /** Where on the screen the axle is `studs` on from the first axle's box along it, as those two spots tell. */
+    const onScreen = (studs: number): { x: number; y: number } => ({
+      x: far.spot.x + ((far.spot.x - near.spot.x) / (far.at - near.at)) * (studs - far.at),
+      y: far.spot.y + ((far.spot.y - near.spot.y) / (far.at - near.at)) * (studs - far.at),
+    });
+    const end = (await firstWhere(spotsAround(onScreen(2.975), 40, 3), hangsOff)) ?? (await firstWhere(spotsAround(mouth, 120), hangsOff));
+    expect(end).not.toBeNull();
+    if (!end) return;
+    await page.mouse.click(end.x, end.y);
+    await expect(counts(page)).toHaveText('3 bricks');
+    expect((await savedBricks(page, 3))[2]?.m).toBeDefined();
+
+    // and a second axle goes a stud into the rest of that joiner, against the first: its box starts 3.95 on from the first's
+    await chooseLibraryPart(page, '3705');
+    const meets = (at: number[]): boolean => Math.abs((at[2] ?? NaN) - (stud[2] ?? NaN) - 3.95) < 0.002;
+    // at the second joiner's mouth, a stud past the first axle's end
+    const second = (await firstWhere(spotsAround(onScreen(3.975), 40, 3), meets)) ?? (await firstWhere(spotsAround(end, 120), meets));
+    expect(second).not.toBeNull();
+    if (!second) return;
+    await page.mouse.click(second.x, second.y);
+    await expect(counts(page)).toHaveText('4 bricks');
+    const last = (await savedBricks(page, 4))[3];
+    expect(last?.partId).toBe('ldraw:3705');
+    expect(last?.m).toBeDefined();
+    expect((last?.z ?? NaN) - (first?.z ?? NaN)).toBeCloseTo(3.95, 3);
+  });
+
   test('puts a minifigure together: hips and legs, a torso on them, a head on top that turns', async ({ page }) => {
     // starts the editor and searches the library three times
     test.slow();

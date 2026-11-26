@@ -109,6 +109,9 @@ describe('library index', () => {
       ['axle', 4.375],
       ['axle', 0.9],
     ]);
+    // a 2L axle, as version 20 lists it: one axle across its notches
+    const notched: LDrawIndexEntry = { ...BRICK, id: '32062', name: 'Technic Axle 2 Notched', connectors: [[2, 0, 0.3, 0, -1, 0, 0, 1.95]] };
+    expect(toPartDef(parseLDrawIndex({ version: 20, generated: '', parts: [notched] }).parts[0] as LDrawIndexEntry).connectors?.map((c) => [c.kind, c.length])).toEqual([['axle', 1.95]]);
     expect(toPartDef(BRICK)).not.toHaveProperty('connectors');
     // no such kind, no axis, no length
     for (const connector of [

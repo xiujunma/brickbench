@@ -10,7 +10,7 @@ import { materialize, payloadFromPart, reuseIds, type Payload } from '../core/pl
 import { pickBricks, type Hit } from '../core/placement/ray';
 import { GROUND_GRIDS, gridsOf, offsetPhase } from '../core/placement/grids';
 import { attachToStuds } from '../core/placement/attach';
-import { attachToConnector, nextWay, type ConnectTurn, type PlugWays } from '../core/placement/connect';
+import { attachToConnector, nextDepth, nextWay, type ConnectTurn, type PlugDepths, type PlugWays } from '../core/placement/connect';
 import { solvePlacement, type PlacementResult } from '../core/placement/solver';
 import { BrickBatches } from '../engine/brickBatches';
 import { exportGlb } from '../engine/exporters';
@@ -62,8 +62,8 @@ interface StepLayers {
   readonly shown: readonly Brick[];
 }
 
-/** Where a payload would land; and where it plugs into a connection, the ways it could plug in there (see attachToConnector). */
-type Solved = PlacementResult & { readonly ways?: PlugWays };
+/** Where a payload would land; and where it plugs into a connection, the ways it could plug in there and how far in it goes (see attachToConnector). */
+type Solved = PlacementResult & { readonly ways?: PlugWays; readonly depths?: PlugDepths };
 
 /**
  * Connects the store to the 3D scene: keeps the instanced model, selection,
@@ -176,6 +176,7 @@ export class EditorController {
       state.activeColorId !== previous.activeColorId ||
       state.buildRotation !== previous.buildRotation ||
       state.buildVia !== previous.buildVia ||
+      state.buildDepth !== previous.buildDepth ||
       state.pastePayload !== previous.pastePayload;
     if (modelChanged || buildChanged) this.refreshPreview();
   }
@@ -294,7 +295,7 @@ export class EditorController {
     const plugged = under ? attachToConnector(hit, under, payload, turned, this.lookup, without(model.bricks.values(), moving)) : null;
     if (plugged) {
       const bricks = materialize(plugged.payload, plugged.offset, ids ? reuseIds(ids) : ghostIds());
-      return { offset: plugged.offset, payload: plugged.payload, valid: plugged.free && bricksFit(model, bricks, this.lookup, moving), ways: plugged.ways };
+      return { offset: plugged.offset, payload: plugged.payload, valid: plugged.free && bricksFit(model, bricks, this.lookup, moving), ways: plugged.ways, depths: plugged.depths };
     }
     // on studs facing out of the face under the cursor, sideways or down, the payload turns to meet them
     const attached = under ? attachToStuds(hit, under, payload, this.lookup) : null;
@@ -346,6 +347,7 @@ export class EditorController {
         this.ghosts.clear();
         state.setPlacementValid(null);
         state.setPlugChoice(null);
+        state.setDepthChoice(null);
         state.setCursor(null);
       } else {
         const ghostBricks = materialize(result.payload ?? payload, result.offset, ghostIds());
@@ -354,12 +356,15 @@ export class EditorController {
         state.setPlacementValid(result.valid);
         // C chooses for the part being built, not for a pasted copy
         state.setPlugChoice(result.ways && !state.pastePayload ? { at: result.ways.at, of: result.ways.plugs.length } : null);
+        // and D how far an axle goes into a hole
+        state.setDepthChoice(result.depths && !state.pastePayload ? { at: result.depths.at, of: result.depths.of } : null);
         state.setCursor(result.offset);
       }
     } else {
       this.ghosts.clear();
       state.setPlacementValid(null);
       state.setPlugChoice(null);
+      state.setDepthChoice(null);
       const hit = this.pick(pointer.x, pointer.y, { ground: false });
       const brick = hit?.brickId ? this.state.history.present.bricks.get(hit.brickId) : undefined;
       this.showHover(brick ?? null);
@@ -387,6 +392,7 @@ export class EditorController {
     state.setHover(null);
     state.setPlacementValid(null);
     state.setPlugChoice(null);
+    state.setDepthChoice(null);
     state.setCursor(null);
     this.viewport.requestRender();
   }
@@ -540,6 +546,28 @@ export class EditorController {
       return;
     }
     state.setBuildVia(next);
+  }
+
+  /**
+   * Pushes the axle to build half a stud further into the hole under the
+   * cursor (D), or pulls it half a stud back out (`back`), round from as
+   * far as it goes to a stud in; says why not where it goes in only so far.
+   */
+  stepDepth(back: boolean): void {
+    const state = this.state;
+    const pointer = this.lastPointer;
+    const payload = this.buildPayload();
+    const depths = pointer && payload ? this.solveAt(pointer.x, pointer.y, payload, null)?.depths : undefined;
+    if (!depths) {
+      state.toast('Point an axle at a hole it goes into, then press D.');
+      return;
+    }
+    const next = nextDepth(depths, back);
+    if (next === null) {
+      state.toast('It goes in no further there.');
+      return;
+    }
+    state.setBuildDepth(next);
   }
 
   dispose(): void {

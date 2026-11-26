@@ -47,12 +47,14 @@ export function initialData(): EditorData {
     activeColorId: DEFAULT_COLOR_ID,
     buildRotation: 0,
     buildVia: null,
+    buildDepth: 0,
     clipboard: null,
     pastePayload: null,
     cursor: null,
     hoverBrickId: null,
     placementValid: null,
     plugChoice: null,
+    depthChoice: null,
     toasts: [],
     dialog: null,
     lastSavedAt: null,
@@ -140,8 +142,8 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
 
       setActivePart: (partId) => {
         if (!lookup(partId)) return;
-        // a connection chosen is one of the last part's
-        set({ activePartId: partId, buildVia: null, tool: 'build', pastePayload: null, stepEditor: null });
+        // a connection chosen is one of the last part's, and how far it went into a hole was too
+        set({ activePartId: partId, buildVia: null, buildDepth: 0, tool: 'build', pastePayload: null, stepEditor: null });
       },
 
       setActiveColor: (colorId) => {
@@ -163,6 +165,7 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
         set((s) => (s.pastePayload ? s : { buildRotation: compose(quarterTurn(axis, dir), s.buildRotation) })),
 
       setBuildVia: (via) => set((s) => (s.buildVia === via ? s : { buildVia: via })),
+      setBuildDepth: (depth) => set((s) => (s.buildDepth === depth ? s : { buildDepth: depth })),
 
       placePayload: (offset, turned) => {
         const payload = turned ?? buildPayload();
@@ -215,6 +218,7 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
           activeColorId: brick.colorId,
           buildRotation: brick.r,
           buildVia: null,
+          buildDepth: 0,
           tool: 'build',
           pastePayload: null,
         });
@@ -329,6 +333,7 @@ export function createEditorStore(deps: StoreDeps, initial: Partial<EditorData> 
       setHover: (brickId) => set((s) => (s.hoverBrickId === brickId ? s : { hoverBrickId: brickId })),
       setPlacementValid: (valid) => set((s) => (s.placementValid === valid ? s : { placementValid: valid })),
       setPlugChoice: (choice) => set((s) => (s.plugChoice?.at === choice?.at && s.plugChoice?.of === choice?.of ? s : { plugChoice: choice })),
+      setDepthChoice: (choice) => set((s) => (s.depthChoice?.at === choice?.at && s.depthChoice?.of === choice?.of ? s : { depthChoice: choice })),
 
       toast,
       dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),

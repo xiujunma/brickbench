@@ -522,12 +522,15 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(axlesOf('42074.dat')).toEqual([4.7, 4.4, 5, 19.5]);
     expect(axlesOf('44811.dat')).toEqual([19.5, 19.5, 51, 63, 16.5]);
     // whole: an axle, and an axle pin's, with nothing round them; a motor's hollow shaft on its steel axle; a limb's axle, which a
-    // pin hole crosses; a boat's shaft, which its part goes only part of the way round
+    // pin hole crosses; a boat's shaft, which its part goes only part of the way round, and which LDraw draws in pieces a notch apart,
+    // as it does the 2L axle; and a flexible axle, drawn in pieces a rib apart
     expect(axlesOf('3705.dat')).toEqual([79]);
     expect(axlesOf('43093.dat')).toEqual([19.5]);
     expect(axlesOf('74569.dat')).toEqual([18]);
     expect(axlesOf('50922.dat')).toEqual([14.3]);
-    expect(axlesOf('48083c01.dat')).toEqual([8.5, 36, 8.5]);
+    expect(axlesOf('48083c01.dat')).toEqual([59]);
+    expect(axlesOf('32062.dat')).toEqual([39]);
+    expect(axlesOf('32580.dat')).toEqual([92.8]);
     // measured another way: where an assembly's axle is left out, a hole's wall a Technic hole's radius from its line faces in
     // towards it, all the way round (a wheel's) or at the ends of the cross's arms (an arm's axle hole) ...
     const axleOf = (file: string): FlatConnector => joinsOf(file).find((c) => c.kind === 'axle') ?? expect.unreachable();
@@ -538,7 +541,7 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
       const half = axle.length / 2;
       return [-half + 0.3, -0.8 * half, 0, 0.8 * half, half - 0.3].map((s) => wallAt(file, axle, s, 6).inwards.toFixed(2)).join(' ');
     };
-    for (const file of ['32209.dat', '59426.dat', '6216d.dat', '92693c01-f1.dat', '127c01-f1.dat', '73129.dat', '42073c01.dat', '42074.dat', '44811.dat', '3705.dat', '43093.dat', '74569.dat', '50922.dat', '48083c01.dat']) {
+    for (const file of ['32209.dat', '59426.dat', '6216d.dat', '92693c01-f1.dat', '127c01-f1.dat', '73129.dat', '42073c01.dat', '42074.dat', '44811.dat', '3705.dat', '43093.dat', '74569.dat', '50922.dat', '48083c01.dat', '32062.dat', '32580.dat']) {
       for (const axle of connectionsOf(file).filter((c) => c.kind === 'axle')) expect(`${file} ${axle.at}: ${clear(file, axle)}`).toBe(`${file} ${axle.at}: ${'0.00 '.repeat(5).trim()}`);
     }
   });

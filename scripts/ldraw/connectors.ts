@@ -334,10 +334,13 @@ function settled(connector: FlatConnector): FlatConnector {
 
 /**
  * How far apart pieces on one line may be and still be one connection, in
- * LDU: a Technic brick's peg-hole ends are 16 apart. The kinds not here are
- * whole as they come: a pin's two ends, a clip, a joint set by hand.
+ * LDU: a Technic brick's peg-hole ends are 16 apart; an axle's pieces a
+ * notch apart (3, on the 2L axle 32062) or a flexible axle's ribs (3.6),
+ * and where its part holds an axle between its pieces, a stop or a ring,
+ * the axle is cut again (bare.ts). The kinds not here are whole as they
+ * come: a pin's two ends, a clip, a joint set by hand.
  */
-const JOIN_GAP: Readonly<Partial<Record<ConnectorKind, number>>> = { pinhole: 16, axle: 2, axlehole: 16, finger: 0, fork: 8, bar: 1 };
+const JOIN_GAP: Readonly<Partial<Record<ConnectorKind, number>>> = { pinhole: 16, axle: 3.6, axlehole: 16, finger: 0, fork: 8, bar: 1 };
 
 /** Technic pins, holes and axles are one size: a piece drawn more than this much wider or thinner than its primitive is something else. */
 const TECHNIC_SIZE = 0.15;

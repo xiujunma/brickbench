@@ -23,6 +23,7 @@ function Hint() {
   const isPasting = useEditor((s) => s.pastePayload !== null);
   const isBlocked = useEditor((s) => s.placementValid === false);
   const choice = useEditor((s) => s.plugChoice);
+  const depth = useEditor((s) => s.depthChoice);
   const colorName = useEditor((s) => getColor(s.activeColorId)?.name ?? '');
 
   // where the part being built could plug in more than one way, C steps through them; not for a pasted copy
@@ -33,11 +34,27 @@ function Hint() {
         · <kbd>C</kbd> by another connection ({choice.at + 1} of {choice.of})
       </>
     ) : null;
-  if (isBlocked) return <span className="status-hint is-blocked">No room here: the part would overlap another brick.{another}</span>;
-  if (tool === 'build' && !isPasting && another) {
+  // where it is an axle that could go further into a hole, or less far, D steps through the places it could go to
+  const further =
+    depth && depth.of > 1 && !isPasting ? (
+      <>
+        {' '}
+        · <kbd>D</kbd> further in ({depth.at + 1} of {depth.of})
+      </>
+    ) : null;
+  if (isBlocked) {
+    return (
+      <span className="status-hint is-blocked">
+        No room here: the part would overlap another brick.{another}
+        {further}
+      </span>
+    );
+  }
+  if (tool === 'build' && !isPasting && (another || further)) {
     return (
       <span className="status-hint">
-        Click to plug in · <kbd>R</kbd> rotate{another} · <kbd>Esc</kbd> stop building
+        Click to plug in · <kbd>R</kbd> rotate{another}
+        {further} · <kbd>Esc</kbd> stop building
       </span>
     );
   }

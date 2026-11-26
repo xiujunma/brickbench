@@ -95,6 +95,11 @@ function plain(controller: EditorController, event: KeyboardEvent, key: string):
       if (state.tool !== 'build' || state.pastePayload) return false;
       controller.stepConnection(event.shiftKey);
       return true;
+    case 'd':
+      // push the axle to build further into a hole, or back out; a pasted copy goes in as far as it does by itself
+      if (state.tool !== 'build' || state.pastePayload) return false;
+      controller.stepDepth(event.shiftKey);
+      return true;
     case 'delete':
     case 'backspace':
       state.deleteSelection();

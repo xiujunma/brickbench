@@ -76,6 +76,28 @@ describe('building', () => {
     expect(state().buildVia).toBeNull();
   });
 
+  it('pushes the part being built as far into a hole as D says, until another part is', () => {
+    const { store, state } = withBricks(makeBrick({ id: 'a', partId: 'plate-1x6' }));
+    expect(state().buildDepth).toBe(0);
+    state().setBuildDepth(2);
+    expect(state().buildDepth).toBe(2);
+    // R, T and C keep it
+    state().rotateBuild(1);
+    state().tipBuild('x', 1);
+    state().setBuildVia(1);
+    expect(state().buildDepth).toBe(2);
+    let calls = 0;
+    store.subscribe(() => (calls += 1));
+    state().setBuildDepth(2);
+    expect(calls).toBe(0);
+    // another part, or one picked up, goes in a stud again
+    state().setActivePart('brick-2x2');
+    expect(state().buildDepth).toBe(0);
+    state().setBuildDepth(1);
+    state().eyedrop('a');
+    expect(state().buildDepth).toBe(0);
+  });
+
   it('ignores unknown parts and colours', () => {
     const { state } = setup();
     state().setActivePart('nope');
@@ -350,6 +372,7 @@ describe('documents and ui state', () => {
     state().setCursor(null);
     state().setPlacementValid(null);
     state().setPlugChoice(null);
+    state().setDepthChoice(null);
     expect(calls).toBe(0);
   });
 
@@ -368,6 +391,22 @@ describe('documents and ui state', () => {
     state().setPlugChoice(null);
     expect(calls).toBe(3);
     expect(state().plugChoice).toBeNull();
+  });
+
+  it('keeps which of the places an axle could go to in a hole the build preview shows, and how many there are', () => {
+    const { store, state } = setup();
+    state().setDepthChoice({ at: 0, of: 3 });
+    expect(state().depthChoice).toEqual({ at: 0, of: 3 });
+    let calls = 0;
+    store.subscribe(() => (calls += 1));
+    state().setDepthChoice({ at: 0, of: 3 });
+    expect(calls).toBe(0);
+    state().setDepthChoice({ at: 1, of: 3 });
+    state().setDepthChoice({ at: 1, of: 2 });
+    expect(state().depthChoice).toEqual({ at: 1, of: 2 });
+    state().setDepthChoice(null);
+    expect(calls).toBe(3);
+    expect(state().depthChoice).toBeNull();
   });
 });
 

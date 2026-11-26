@@ -68,6 +68,54 @@ export const STOPPED_AXLE = part('stopped-axle', 5, 1, 2, [
 /** A Technic bush: an axle hole a stud long, from front to back. */
 export const BUSH = part('bush', 1, 1, 2, [{ kind: 'axlehole', at: { x: 0, y: 0.45, z: 0 }, axis: Z, length: 1 }]);
 
+/** An axle joiner, as LDraw 6538a: one axle hole two studs long, from front to back, and little more round it. */
+export const AXLE_JOINER = {
+  ...part('axle-joiner', 1, 2, 3, [{ kind: 'axlehole', at: { x: 0, y: 0.5, z: 0 }, axis: NEG_Z, length: 2 }]),
+  extent: { min: { x: -0.5, y: 0, z: -1 }, max: { x: 0.5, y: 1, z: 1 } },
+};
+
+/** A wheel with a hub two studs long, as LDraw 3739: an axle hole along X through its middle, the wheel far round it. */
+export const HUB_WHEEL = {
+  ...part('hub-wheel', 3, 5, 14, [{ kind: 'axlehole', at: { x: 0, y: 2.6875, z: 0 }, axis: NEG_X, length: 2 }]),
+  extent: { min: { x: -1.5, y: 0, z: -2.69 }, max: { x: 1.5, y: 5.38, z: 2.69 } },
+};
+
+/** A jet engine on a plate with an axle hole 1.7 studs deep, as LDraw 4868a has, here from its back face in. */
+export const JET_ENGINE = part('jet-engine', 2, 5, 6, [{ kind: 'axlehole', at: { x: 0, y: 1, z: -1.65 }, axis: Z, length: 1.7 }]);
+
+/** An axle 3 with a pin hole across its middle, as LDraw 27940: an axle either side of the pin hole, each a stud long less a fortieth. */
+export const PIN_HOLE_AXLE = {
+  ...part('pin-hole-axle', 3, 1, 3, [
+    { kind: 'pinhole', at: { x: 0, y: 0.5, z: 0 }, axis: NEG_Y, length: 1 },
+    { kind: 'axle', at: { x: -0.9875, y: 0.5, z: 0 }, axis: X, length: 0.975 },
+    { kind: 'axle', at: { x: 0.9875, y: 0.5, z: 0 }, axis: NEG_X, length: 0.975 },
+  ]),
+  extent: { min: { x: -1.48, y: 0, z: -0.45 }, max: { x: 1.48, y: 1, z: 0.45 } },
+};
+
+/** An axle 3 with a ring round it either side of its middle, a tenth of a stud wide, as a stick's shaft has: three axles, the middle one held at both ends. */
+export const RINGED_AXLE = part('ringed-axle', 3, 1, 2, [
+  { kind: 'axle', at: { x: -1.025, y: 0.4, z: 0 }, axis: X, length: 0.95 },
+  { kind: 'axle', at: { x: 0, y: 0.4, z: 0 }, axis: X, length: 0.9 },
+  { kind: 'axle', at: { x: 1.025, y: 0.4, z: 0 }, axis: X, length: 0.95 },
+]);
+
+/**
+ * Two stubs of axle on one line a stud apart, in a blade that reaches a
+ * stud past either end of them, as a propeller's (LDraw 89509): each stub
+ * has its part beyond both its ends, so it goes into a hole only through it.
+ */
+export const BLADED_AXLES = {
+  ...part('bladed-axles', 5, 1, 3, [
+    { kind: 'axle', at: { x: -0.9875, y: 0.5, z: 0 }, axis: X, length: 0.975 },
+    { kind: 'axle', at: { x: 0.9875, y: 0.5, z: 0 }, axis: NEG_X, length: 0.975 },
+  ]),
+  extent: { min: { x: -2.5, y: 0, z: -0.45 }, max: { x: 2.5, y: 1, z: 0.45 } },
+};
+
+/** A housing with a stub of axle a stud long inside it, as a wind-up motor's: the housing reaches a stud past either end of the stub. */
+export const HOUSED_AXLE = part('housed-axle', 3, 1, 2, [{ kind: 'axle', at: { x: 0, y: 0.4, z: 0 }, axis: X, length: 1 }]);
+
 /** A round pin joiner, as LDraw 75535: one hole two studs long, which takes a pin's end at each of its own. */
 export const PIN_JOINER = part('pin-joiner', 2, 1, 3, [{ kind: 'pinhole', at: { x: 0, y: 0.5, z: 0 }, axis: NEG_X, length: 2 }]);
 
@@ -410,6 +458,13 @@ const TECHNIC = new Map(
     AXLE,
     STOPPED_AXLE,
     BUSH,
+    AXLE_JOINER,
+    HUB_WHEEL,
+    JET_ENGINE,
+    HOUSED_AXLE,
+    PIN_HOLE_AXLE,
+    RINGED_AXLE,
+    BLADED_AXLES,
     PIN_JOINER,
     SLOT_JOINER,
     LONG_PIN,
