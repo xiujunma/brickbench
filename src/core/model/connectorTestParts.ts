@@ -324,12 +324,16 @@ export const TURN_BASE_4 = {
 };
 export const TURN_TOP_4 = part('turn-top-4', 4, 4, 2, [{ kind: 'turntop4', at: { x: 0, y: 0.4, z: 0 }, axis: { x: 0, y: -1, z: 0 }, length: 0.6 }]);
 
-/** A flat 4 × 4 turntable base and the round plate that snaps into it, as LDraw 61485 and 60474: the plate's snap is under its underside. */
+/**
+ * A flat 4 × 4 turntable base and a round plate that snaps onto it, as
+ * LDraw 61485 and 60474: the ring on the base's top goes up into the
+ * plate's underside, round the snap in its middle.
+ */
 export const TURN_FLAT = {
-  ...part('turn-flat', 4, 4, 2, [{ kind: 'turnflat', at: { x: 0, y: 0.3, z: 0 }, axis: NEG_Y, length: 0.2 }]),
+  ...part('turn-flat', 4, 4, 2, [{ kind: 'turnflat', at: { x: 0, y: 0.5, z: 0 }, axis: NEG_Y, length: 0.2 }]),
   extent: { min: { x: -2, y: 0, z: -2 }, max: { x: 2, y: 0.6, z: 2 } },
 };
-export const TURN_SNAP = part('turn-snap', 4, 4, 1, [{ kind: 'turnsnap', at: { x: 0, y: -0.1, z: 0 }, axis: NEG_Y, length: 0.2 }]);
+export const TURN_SNAP = part('turn-snap', 4, 4, 1, [{ kind: 'turnsnap', at: { x: 0, y: 0.1, z: 0 }, axis: NEG_Y, length: 0.2 }]);
 
 /**
  * A 1 × 4 hinge plate's base and top, as LDraw 2429 and 2430: each a 1 × 2

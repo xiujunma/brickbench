@@ -422,6 +422,38 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect(fingersOf('4504.dat').map((j) => j.kind).sort()).toEqual(['fingers2', 'fingers3']);
   });
 
+  it('finds the snap under each round plate, round brick and gear plate that turns on a flat turntable base, and the ring on each base it goes into', () => {
+    const round = (v: number): number => Math.round(v * 100) / 100 + 0;
+    const heights = (file: string): number[] => trianglesOf(file).flatMap((t) => [t.a[1], t.b[1], t.c[1]]);
+    // the snap's primitive is round about its own axis
+    expect(pivotOf('stud18a.dat', [0, 1, 0])).toBe('0,0,0');
+    // the snap: a tube in the middle of the part's underside, its last 4 LDU, 7 LDU round its line outside and 6 inside
+    const snapping = ['60474', '11213', '74611', '89523', '35442', '35443', '35446', '68325', '87081', '18897', '65138', '72024'];
+    for (const id of snapping) {
+      const file = `${id}.dat`;
+      const snaps = connectionsOf(file).filter((j) => j.kind === 'turnsnap');
+      const bottom = Math.max(...heights(file));
+      expect(`${id} ${snaps.map((j) => `${j.at.map(round)} ${j.axis.map(round)} ${round(j.length)}`).join(' | ')}`).toBe(`${id} 0,${round(bottom - 2)},0 0,1,0 4`);
+      const [snap] = snaps;
+      if (!snap) throw new Error(id);
+      expect(`${id} ${facingAt(file, snap, -1, 7) > 0} ${facingAt(file, snap, -1, 6) < 0}`).toBe(`${id} true true`);
+    }
+    // the ring: 4 LDU tall on the top of each base, its lip 7.5 LDU round its line, round the snap's tube, facing in; the 2 × 2 socket
+    // that clips into a hole is wider outside it
+    const rings = { '61485': 10, '27448': 10, '65146': 11.5 };
+    for (const [id, outside] of Object.entries(rings)) {
+      const file = `${id}.dat`;
+      const found = connectionsOf(file).filter((j) => j.kind === 'turnflat');
+      const top = Math.min(...heights(file));
+      expect(`${id} ${found.map((j) => `${j.at.map(round)} ${j.axis.map(round)} ${round(j.length)}`).join(' | ')}`).toBe(`${id} 0,${round(top + 2)},0 0,1,0 4`);
+      const [ring] = found;
+      if (!ring) throw new Error(id);
+      expect(`${id} ${facingAt(file, ring, -1, 7.5) < 0} ${facingAt(file, ring, 0, outside) > 0}`).toBe(`${id} true true`);
+    }
+    // a container lid's two sockets, in its sides, are free for a snap
+    expect(freeOf('65128c01p01.dat')).toBe('turnflat turnflat');
+  });
+
   it('joins minifigures where LDraw’s own assembled minifigures put their parts', () => {
     // a torso with arms and hands: both shoulders hold an arm, both wrists a hand
     const torsoWithArms = joinsOf('76382.dat');

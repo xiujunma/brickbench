@@ -525,4 +525,38 @@ test.describe('Technic, hinges and minifigures', () => {
     expect(turned?.m?.[4]).toBeCloseTo(1, 6);
     expect(turned?.y).toBeCloseTo(0.75, 6);
   });
+
+  test('snaps a gear plate onto a 2 × 2 flat turntable base and turns it there', async ({ page }) => {
+    // starts the editor and searches the library twice
+    test.slow();
+    await freshEditor(page);
+    await page.getByRole('button', { name: 'Library', exact: true }).click();
+    await expect(page.locator('#library-category')).toBeVisible();
+
+    // a flat 2 × 2 turntable base, on the baseplate
+    await chooseLibraryPart(page, '27448');
+    const centre = await viewportCentre(page);
+    await page.mouse.click(centre.x, centre.y);
+    await expect(counts(page)).toHaveText('1 brick');
+
+    // a 2 × 2 gear plate goes on by the snap in the middle of its underside, the ring on the base's top up in it: its underside on the
+    // base's top, a plate up, its teeth reaching a stud out all round
+    await chooseLibraryPart(page, '35442');
+    const onBase = await plugNear(page, centre, /Y\s*1(?![\d.])/, 1);
+    expect(onBase).not.toBeNull();
+    const [base, gear] = await savedBricks(page, 2);
+    expect(gear?.partId).toBe('ldraw:35442');
+    expect([gear?.x, gear?.y, gear?.z]).toEqual([(base?.x ?? NaN) - 1, 1, (base?.z ?? NaN) - 1]);
+
+    // in Select, R turns it 15° about the upright through the ring, where it stays
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('v');
+    await page.mouse.click(onBase?.x ?? 0, onBase?.y ?? 0);
+    await expect(counts(page)).toContainText('1 selected');
+    await page.keyboard.press('r');
+    await expect.poll(async () => (await savedBricks(page, 2))[1]?.m?.[0]).toBeCloseTo(Math.cos(Math.PI / 12), 6);
+    const turned = (await savedBricks(page, 2))[1];
+    expect(turned?.m?.[4]).toBeCloseTo(1, 6);
+    expect(turned?.y).toBeCloseTo(1, 6);
+  });
 });

@@ -112,6 +112,9 @@ describe('library index', () => {
     // a 2L axle, as version 20 lists it: one axle across its notches
     const notched: LDrawIndexEntry = { ...BRICK, id: '32062', name: 'Technic Axle 2 Notched', connectors: [[2, 0, 0.3, 0, -1, 0, 0, 1.95]] };
     expect(toPartDef(parseLDrawIndex({ version: 20, generated: '', parts: [notched] }).parts[0] as LDrawIndexEntry).connectors?.map((c) => [c.kind, c.length])).toEqual([['axle', 1.95]]);
+    // a 2 × 2 gear plate, as version 21 lists it: the snap in the middle of its underside, which turns on a flat turntable base
+    const gear: LDrawIndexEntry = { ...BRICK, id: '35442', name: 'Plate Gear 6 Tooth 2 x 2', connectors: [[30, 0, 0.1, 0, 0, -1, 0, 0.2]] };
+    expect(toPartDef(parseLDrawIndex({ version: 21, generated: '', parts: [gear] }).parts[0] as LDrawIndexEntry).connectors?.map((c) => [c.kind, c.at.y, c.length])).toEqual([['turnsnap', 0.1, 0.2]]);
     expect(toPartDef(BRICK)).not.toHaveProperty('connectors');
     // no such kind, no axis, no length
     for (const connector of [

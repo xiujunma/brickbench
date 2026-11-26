@@ -3,13 +3,14 @@
  * draw them: pins (connect*, confric*), round pin holes (peghole*, beamhol*,
  * connhol*), axles and axle holes (axle*, axl*), and click hinges'
  * single fingers and forks of two (clh*), the older hinge plates' two and
- * three fingers (h1, h2), and the clips (clip*) and handle bars (phandle*,
- * handle*) LDraw draws as primitives; bars drawn as plain cylinders are
- * found by their size (barPiece), and clips drawn with plain arcs by their
- * shape (clipArc). Each primitive in a part is a piece of a connection;
- * pieces along one line join up, so the peg-hole ends on the two faces of
- * a Technic brick make one hole through it. Connections LDraw draws with
- * other plain shapes are set on their parts' files instead
+ * three fingers (h1, h2), the clips (clip*) and handle bars (phandle*,
+ * handle*), and the snap a round plate turns on a flat turntable base by
+ * (stud18a), which LDraw draws as primitives; bars drawn as plain
+ * cylinders are found by their size (barPiece), and clips drawn with plain
+ * arcs by their shape (clipArc). Each primitive in a part is a piece of a
+ * connection; pieces along one line join up, so the peg-hole ends on the
+ * two faces of a Technic brick make one hole through it. Connections LDraw
+ * draws with other plain shapes are set on their parts' files instead
  * (minifigJoints.ts, hingeJoints.ts, clipJoints.ts).
  */
 import { CONNECTOR_KINDS } from '../../src/core/ldraw/format.ts';
@@ -153,6 +154,14 @@ const RODS: Readonly<Record<string, ConnectorPrimitive>> = {
 const OPEN_STUD: ConnectorPrimitive = { kind: 'barhole', axis: [0, -1, 0], through: ORIGIN, either: false };
 /** The plain open stud and those shaped for round and octagonal parts, with their base edges or without, with the logo or without. */
 const OPEN_STUDS = /^stud(2|6|17)a?(-logo\d*)?$/;
+/**
+ * The snap in the middle of the underside of a round plate, a round brick
+ * or a gear plate that turns on a flat turntable base: an open stud's tube
+ * with snaps round its rim, which goes up into the ring on the base's top
+ * (hingeJoints.ts). Its axis runs out of the tube, from its base (y 0) to
+ * its rim (y -4), as an open stud's does.
+ */
+const SNAP: ConnectorPrimitive = { kind: 'turnsnap', axis: [0, -1, 0], through: ORIGIN, either: false };
 
 /** The clip and handle primitives and the line each holds a bar on, for the verify test. */
 export const ROD_PRIMITIVES: Readonly<Record<string, ConnectorPrimitive>> = RODS;
@@ -215,6 +224,7 @@ export function connectorPrimitive(name: string): ConnectorPrimitive | undefined
   if (/^(axle|axleend\d*|axles|axlesphe|axlebeam|axlecaph?\d*)$/.test(base)) return AXLE;
   if (/^(axlehol[2-9e]|axleho1[02]|axl\dhol[e\d]|axl\dho\d+|axl\dend)$/.test(base)) return AXLE_HOLE;
   if (OPEN_STUDS.test(base)) return OPEN_STUD;
+  if (base === 'stud18a') return SNAP;
   return HINGES[base] ?? RODS[base];
 }
 

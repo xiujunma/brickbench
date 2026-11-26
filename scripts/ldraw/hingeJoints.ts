@@ -71,9 +71,13 @@ export const HINGE_JOINTS: Readonly<Record<string, readonly FlatConnector[]>> = 
   // the grooved base the locking 4 × 4 top turns on is only in the library as part of the complete turntable, where LDraw sets it 16 LDU under
   // the top: this is that top's joint from the base's side, so the complete one's is taken
   '30516.dat': [joint('turnbase4', [0, -6, 0], DOWN, 12)],
-  // a flat 4 × 4 turntable base, and the round 4 × 4 plate whose snap stud, under its 8 LDU, turns in it: LDraw sets the base 8 LDU lower
-  '61485.dat': [joint('turnflat', [0, 2, 0], DOWN, 4)],
-  '60474.dat': [joint('turnsnap', [0, 10, 0], DOWN, 4)],
+  // the flat turntable bases, 4 × 4 and 2 × 2, and the 2 × 2 turntable socket that four clips under it hold in a hole (a container lid's):
+  // on the top of each a ring 4 LDU tall stands round the hole that the snap under a round plate, a round brick or a gear plate goes up
+  // into, and turns in. LDraw draws the snap with a primitive (connectors.ts); its complete flat turntable sets the base 8 LDU under the
+  // round 4 × 4 plate, the ring in the plate's underside
+  '61485.dat': [joint('turnflat', [0, -2, 0], DOWN, 4)],
+  '27448.dat': [joint('turnflat', [0, -2, 0], DOWN, 4)],
+  '65146.dat': [joint('turnflat', [0, -2, 0], DOWN, 4)],
   // car roofs, plain and with a sunroof (both sunroofs drawn from one file), a hinged tile and a hinged double slope: flat parts, their
   // fingers along one edge
   '4213.dat': [fingers([0, 4, 36])],
