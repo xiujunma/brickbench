@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { expect, test, type Page } from './fixtures';
-import { autosaved, counts, freshEditor, reloadEditor, viewportCentre } from './helpers';
+import { autosaved, chooseLibraryPart, counts, freshEditor, reloadEditor, savedBricks, spotsAround, viewportCentre } from './helpers';
 
 /** Opens a model file through File › Open…. */
 async function openModelFile(page: Page, path: string): Promise<void> {
@@ -182,6 +182,52 @@ test.describe('LDraw parts library', () => {
       await freshEditor(page);
       await openModelFile(page, path);
       await expect(counts(page)).toHaveText('8 bricks');
+    });
+
+    test('opens an LDraw model built on a baseplate of its own standing on it, every part on the grid', async ({ page }, testInfo) => {
+      const path = testInfo.outputPath('town.ldr');
+      // as LDraw models have it: a 16 × 16 baseplate's top at y 0, a brick on it, its underside there too, and another on that
+      const model = ['0 Town', '0 Name: town.ldr', '1 71 0 0 0 1 0 0 0 1 0 0 0 1 3867.dat', '1 4 10 -24 20 1 0 0 0 1 0 0 0 1 3001.dat', '1 1 10 -48 20 1 0 0 0 1 0 0 0 1 3001.dat'];
+      await writeFile(path, model.join('\r\n'));
+      await freshEditor(page);
+      await openModelFile(page, path);
+      await expect(page.getByText('Opened “Town”: all 3 parts came in.')).toBeVisible();
+      // none loose: the baseplate's plate of cells on the ground, the bricks on whole plates over it
+      const bricks = await savedBricks(page, 3, 'Town');
+      expect(bricks.map((b) => `${b.partId} ${b.y}${b.m ? ' loose' : ''}`).sort()).toEqual(['brick-2x4 1', 'brick-2x4 4', 'ldraw:3867 0']);
+      // and the scene's own baseplate is left out from under it
+      const size = await page.evaluate((key) => (JSON.parse(window.localStorage.getItem(key) ?? '{}') as { settings?: { baseplateSize?: number } }).settings?.baseplateSize, 'brickbench:autosave:v1');
+      expect(size).toBe(0);
+    });
+
+    test('builds on top of a 1 × 4 × 6 door frame six bricks up, not a plate higher', async ({ page }) => {
+      // searches the view for the frame's top
+      test.slow();
+      await freshEditor(page);
+      await page.getByRole('button', { name: 'Library', exact: true }).click();
+      await expect(page.locator('#library-category')).toBeVisible();
+      await chooseLibraryPart(page, '60596');
+      const centre = await viewportCentre(page);
+      await page.mouse.click(centre.x, centre.y);
+      await expect(counts(page)).toHaveText('1 brick');
+      // a brick on its top: the frame stands 18 plates tall, the stubs its door turns in counted as studs
+      await chooseLibraryPart(page, '3005');
+      const coords = page.locator('.status-coords');
+      let onTop: { x: number; y: number } | null = null;
+      // the frame's top shows about 165 pixels over the middle of the view
+      for (const spot of spotsAround({ x: centre.x, y: centre.y - 165 }, 160, 8)) {
+        await page.mouse.move(spot.x, spot.y);
+        if (/Y\s*18(?![\d.])/.test((await coords.textContent()) ?? '')) {
+          onTop = spot;
+          break;
+        }
+      }
+      expect(onTop).not.toBeNull();
+      await page.mouse.click(onTop?.x ?? 0, onTop?.y ?? 0);
+      const [frame, brick] = await savedBricks(page, 2);
+      expect(frame?.partId).toBe('ldraw:60596');
+      expect(brick?.y).toBe(18);
+      expect(brick?.m).toBeUndefined();
     });
 
     test('builds with parts drawn in several colours, such as a wheel with its tyre', async ({ page }, testInfo) => {

@@ -115,6 +115,12 @@ describe('library index', () => {
     // a 2 × 2 gear plate, as version 21 lists it: the snap in the middle of its underside, which turns on a flat turntable base
     const gear: LDrawIndexEntry = { ...BRICK, id: '35442', name: 'Plate Gear 6 Tooth 2 x 2', connectors: [[30, 0, 0.1, 0, 0, -1, 0, 0.2]] };
     expect(toPartDef(parseLDrawIndex({ version: 21, generated: '', parts: [gear] }).parts[0] as LDrawIndexEntry).connectors?.map((c) => [c.kind, c.at.y, c.length])).toEqual([['turnsnap', 0.1, 0.2]]);
+    // a door frame and a baseplate, as version 22 lists them: the frame six bricks tall, the baseplate's top at the top of its cell
+    const frame: LDrawIndexEntry = { ...BRICK, id: '60596', name: 'Door 1 x 4 x 6 Frame', w: 4, d: 1, h: 18, origin: [0, 7.2, 0] };
+    const baseplate: LDrawIndexEntry = { ...BRICK, id: '3811', name: 'Baseplate 32 x 32', category: 'Baseplate', w: 32, d: 32, h: 1, origin: [0, 0.4, 0] };
+    const [readFrame, readBaseplate] = parseLDrawIndex({ version: 22, generated: '', parts: [frame, baseplate] }).parts.map((entry) => toPartDef(entry));
+    expect([readFrame?.h, readFrame?.ldraw?.origin]).toEqual([18, [0, 7.2, 0]]);
+    expect([readBaseplate?.h, readBaseplate?.ldraw?.origin, readBaseplate?.keywords[0]]).toEqual([1, [0, 0.4, 0], 'baseplate']);
     expect(toPartDef(BRICK)).not.toHaveProperty('connectors');
     // no such kind, no axis, no length
     for (const connector of [

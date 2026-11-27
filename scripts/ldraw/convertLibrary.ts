@@ -143,7 +143,7 @@ function convertOne(root: string, file: string, flattener: Flattener, colours: C
   }
   let result: Conversion;
   try {
-    result = convertPart(file, flattener, colours);
+    result = convertPart(file, flattener, colours, header.category);
   } catch (error) {
     return { ok: false, reason: 'missing file', example: `${file}: ${error instanceof Error ? error.message : String(error)}` };
   }

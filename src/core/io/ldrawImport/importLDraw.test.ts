@@ -40,7 +40,8 @@ const BASEPLATE: PartDef = {
   studs: [],
   solids: [{ x0: 0, y0: 0, z0: 0, x1: 32, y1: 1, z1: 32 }],
   shape: { kind: 'mesh' },
-  ldraw: { file: '3811.dat', origin: [0, 0.2, 0] },
+  // the library stands a baseplate, 4 LDU thick, with its top at the top of its cell
+  ldraw: { file: '3811.dat', origin: [0, 0.4, 0] },
   keywords: ['baseplate'],
 };
 const R1 = '0 0 -1 0 1 0 1 0 0';
@@ -267,13 +268,18 @@ describe('importLDraw', () => {
     });
   });
 
-  it('leaves the baseplate out of the scene when the model brings its own', () => {
+  it('stands a model on the baseplate it brings, every part on the grid, and leaves the scene’s own baseplate out', () => {
     const baseplate = BASEPLATE;
     const lookup: PartLookup = (id) => (id === baseplate.id ? baseplate : getPart(id));
     const numbers = { ...NUMBERS, known: new Set([...NUMBERS.known, '3811']) };
-    const { doc } = imported([line(2, 0, -4, 0, '3811.dat'), line(4, 0, -32, 0, '3001.dat')], 'town.ldr', context(lookup, numbers));
+    // as LDraw models have it: the baseplate's top at y 0, a brick on it, its underside there too, and another on that
+    const { doc, report } = imported([line(2, 0, 0, 0, '3811.dat'), line(4, 10, -24, 20, '3001.dat'), line(1, 10, -48, 20, '3001.dat')], 'town.ldr', context(lookup, numbers));
     expect(doc.settings.baseplateSize).toBe(0);
-    expect(allBricks(doc.model)).toHaveLength(2);
+    expect(report.placed).toBe(3);
+    const bricks = allBricks(doc.model);
+    // none loose: the baseplate's plate of cells on the ground, the bricks on whole plates over it
+    expect(bricks.filter((b) => b.m)).toEqual([]);
+    expect(bricks.map((b) => `${b.partId} ${b.y}`).sort()).toEqual(['brick-2x4 1', 'brick-2x4 4', 'ldraw:3811 0']);
   });
 
   it('opens a model where nothing fits as an empty one, with the report saying why', () => {

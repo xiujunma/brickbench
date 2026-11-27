@@ -180,12 +180,15 @@ export interface LDrawIndexEntry {
  * version 19 each axle only where nothing of its part holds it, version
  * 20 an axle drawn in pieces a notch or a rib apart as one, version 21
  * the snap of every round plate, round brick and gear plate that turns on
- * a flat turntable base, and the 2 × 2 bases (all read as before).
+ * a flat turntable base, and the 2 × 2 bases, version 22 door frames and
+ * windows a plate lower, the stubs their hinges turn in left out of their
+ * height as studs are, and baseplates with their tops at the top of their
+ * cells (all read as before).
  */
-export const LDRAW_INDEX_VERSION = 21;
+export const LDRAW_INDEX_VERSION = 22;
 
 /** Index formats the app reads: in a version 1 library every part fills its whole box. */
-export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21] as const;
+export const READABLE_INDEX_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22] as const;
 
 /** Most side studs an index entry lists: a brick with studs all round its sides has a few dozen. */
 export const MAX_SIDE_STUDS = 128;

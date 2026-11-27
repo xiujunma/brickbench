@@ -154,6 +154,56 @@ describe('converting a part', () => {
   });
 });
 
+/** The sides and top of an upright n-sided prism, LDraw's -y up: from y1 up to y0, `r` from (x, z). */
+function ldrawPrism(x: number, z: number, r: number, y0: number, y1: number, n = 8): string[] {
+  const at = (i: number, y: number): string => `${x + r * Math.cos((2 * Math.PI * i) / n)} ${y} ${z + r * Math.sin((2 * Math.PI * i) / n)}`;
+  const sides = Array.from({ length: n }, (_, i) => `4 16 ${at(i, y1)} ${at(i, y0)} ${at(i + 1, y0)} ${at(i + 1, y1)}`);
+  const top = Array.from({ length: n }, (_, i) => `3 16 ${x} ${y0} ${z} ${at(i + 1, y0)} ${at(i, y0)}`);
+  return [...sides, ...top];
+}
+
+describe('measuring a part’s height', () => {
+  /** A 1 × 2 brick, its top at y 0 and its underside 24 LDU down, a stud primitive on its -x half; and what stands on its +x half. */
+  const brickWith = (...top: string[]): string => ['0 Test Brick 1 x 2', '0 BFC CERTIFY CCW', ...ldrawBox([-20, 0, -10], [20, 24, 10]), '1 16 -10 0 0 1 0 0 0 1 0 0 0 1 stud.dat', ...top].join('\n');
+  const heightOf = (text: string): number => {
+    const result = convertPart('part.dat', new Flattener(memorySource({ 'part.dat': text, 'stud.dat': STUD })));
+    if (!result.ok) throw new Error(result.reason);
+    return result.fit.h;
+  };
+
+  it('leaves out a stud LDraw draws without a stud primitive, as on a door frame’s top, where its hinge turns', () => {
+    // a plain cylinder a stud wide and a stud tall, where a stud would stand: the brick is still three plates
+    expect(heightOf(brickWith(...ldrawPrism(10, 0, 6, -4, 0)))).toBe(3);
+    // and on its own, three plates and the rise of its stud
+    expect(heightOf(brickWith())).toBe(3);
+  });
+
+  it('keeps anything else that stands on a part’s top: a taller post, a narrow pin, a stud-sized nub off the grid', () => {
+    // a post two studs tall: 32 LDU, four plates
+    expect(heightOf(brickWith(...ldrawPrism(10, 0, 6, -8, 0)))).toBe(4);
+    // a pin a stud tall but far narrower than a stud
+    expect(heightOf(brickWith(...ldrawPrism(10, 0, 2, -4, 0)))).toBe(4);
+    // a stud-sized nub between the stud grid's points, and one only 3 LDU off a point of it
+    expect(heightOf(brickWith(...ldrawPrism(0, 0, 6, -4, 0)))).toBe(4);
+    expect(heightOf(brickWith(...ldrawPrism(13, 0, 6, -4, 0)))).toBe(4);
+  });
+
+  it('stands a baseplate, thinner than a plate, at the top of its cell, so what is built on it sits on it', () => {
+    // a 2 × 2 baseplate 4 LDU thick, studs on its top at y 0
+    const baseplate = ['0 Baseplate 2 x 2', '0 BFC CERTIFY CCW', ...ldrawBox([-20, 0, -20], [20, 4, 20]), ...[-10, 10].flatMap((x) => [-10, 10].map((z) => `1 16 ${x} 0 ${z} 1 0 0 0 1 0 0 0 1 stud.dat`))].join('\n');
+    const source = new Flattener(memorySource({ 'base.dat': baseplate, 'stud.dat': STUD }));
+    const as = (category: string) => {
+      const result = convertPart('base.dat', source, new Map(), category);
+      if (!result.ok) throw new Error(result.reason);
+      return result.fit;
+    };
+    // its top, LDraw's y 0, at the top of its one plate of cells
+    expect(as('Baseplate')).toMatchObject({ w: 2, d: 2, h: 1, offset: [0, 0.4, 0] });
+    // anything else that thin stands on y = 0 as every part does
+    expect(as('Plate')).toMatchObject({ h: 1, offset: [0, 0.2, 0] });
+  });
+});
+
 describe('reading a library folder', () => {
   const root = mkdtempSync(join(tmpdir(), 'ldraw-'));
   mkdirSync(join(root, 'parts', 's'), { recursive: true });

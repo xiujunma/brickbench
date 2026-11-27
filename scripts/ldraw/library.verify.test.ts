@@ -19,6 +19,7 @@ import { convertPart } from './convert.ts';
 import { Flattener, type FlatTriangle } from './flatten.ts';
 import { directorySource, memorySource, type LibrarySource } from './library.ts';
 import { parseLDraw, type Transform } from './parse.ts';
+import { readHeader } from './select.ts';
 
 const LDRAW_DIR = process.env['LDRAW_DIR'];
 
@@ -208,6 +209,40 @@ describe.skipIf(!LDRAW_DIR)('converting the real LDraw library', () => {
     expect([result.fit.w, result.fit.d, result.fit.h]).toEqual([w, d, h]);
     result.fit.offset.forEach((value, k) => expect(value).toBeCloseTo(origin[k] ?? 0, 3));
     expect(result.fit.snug).toBe(true);
+  });
+
+  it('measures door frames, windows and gates by their tops, not the stubs their hinges turn in, and stands baseplates at the top of their cells', () => {
+    const fitOf = (file: string) => {
+      const header = readHeader(library.read(file)?.text ?? '');
+      const result = convertPart(file, flattener, new Map(), header.category);
+      if (!result.ok) throw new Error(`${file} was skipped: ${result.reason}`);
+      return result.fit;
+    };
+    // the stubs at a frame's top ends are stud-sized cylinders LDraw draws without a stud primitive: six bricks, three, two
+    for (const [file, plates] of [
+      ['60596.dat', 18],
+      ['60599.dat', 18],
+      ['57894.dat', 18],
+      ['3853.dat', 9],
+      ['60594.dat', 9],
+      ['3186.dat', 5],
+    ] as const) {
+      expect(`${file} ${fitOf(file).h}`).toBe(`${file} ${plates}`);
+    }
+    // what stands on a part's top and is no stud stays its height: a minifigure's oil lamp, a 1 × 1 round plate, a plate with a handle
+    for (const [file, plates] of [
+      ['98383.dat', 3],
+      ['6141.dat', 1],
+      ['2540.dat', 2],
+      ['3001.dat', 3],
+    ] as const) {
+      expect(`${file} ${fitOf(file).h}`).toBe(`${file} ${plates}`);
+    }
+    // a baseplate's top, LDraw's y 0, at the top of its one plate of cells: 4 LDU thick, it fills that cell's upper half
+    for (const file of ['3811.dat', '3867.dat', '4186.dat']) {
+      const fit = fitOf(file);
+      expect(`${file} ${fit.h} ${fit.offset[1]}`).toBe(`${file} 1 0.4`);
+    }
   });
 
   it('finds the studs on parts’ sides, and none on plain bricks', () => {

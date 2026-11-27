@@ -17,7 +17,7 @@ export interface PartFit {
   readonly w: number;
   readonly d: number;
   readonly h: number;
-  /** Added to every point so the footprint is centred on x = z = 0 and the body stands on y = 0. */
+  /** Added to every point so the footprint is centred on x = z = 0 and the body stands on y = 0 (a thin baseplate's top at the top of its cell). */
   readonly offset: V3;
   /** The body lands on whole studs and plates, so it sits flush with neighbours. */
   readonly snug: boolean;
@@ -77,9 +77,11 @@ const clean = (n: number): number => (Math.abs(n) < 1e-9 ? 0 : n);
  * Fits a part's body (top studs excluded), measured in editor units with
  * y up, onto the grid: its footprint in whole studs, its height in whole
  * plates, and the offset that centres the footprint and stands the body on
- * y = 0 with its top studs over cell centres.
+ * y = 0 with its top studs over cell centres. A `baseplate`, thinner than a
+ * plate, sits at the top of its cell instead, so what is built on its studs
+ * sits on its top, and a model built on one comes in on whole plates.
  */
-export function fitPart(bodyMin: V3, bodyMax: V3, topStuds: readonly V3[]): PartFit {
+export function fitPart(bodyMin: V3, bodyMax: V3, topStuds: readonly V3[], { baseplate = false }: { readonly baseplate?: boolean } = {}): PartFit {
   const stud = topStuds[0];
   const x = fitAxis(bodyMin[0], bodyMax[0], stud?.[0]);
   const z = fitAxis(bodyMin[2], bodyMax[2], stud?.[2]);
@@ -89,5 +91,6 @@ export function fitPart(bodyMin: V3, bodyMax: V3, topStuds: readonly V3[]): Part
   const depth = bodyMax[2] - bodyMin[2];
   const snug = Math.abs(width - x.size) < SNUG && Math.abs(depth - z.size) < SNUG && Math.abs(plates - h) < SNUG / PLATE;
   const studOffset: [number, number] = [x.halfOffset ? 0.5 : 0, z.halfOffset ? 0.5 : 0];
-  return { w: x.size, d: z.size, h, offset: [clean(x.offset), clean(-bodyMin[1]), clean(z.offset)], snug, studOffset };
+  const y = baseplate && plates < 1 ? h * PLATE - bodyMax[1] : -bodyMin[1];
+  return { w: x.size, d: z.size, h, offset: [clean(x.offset), clean(y), clean(z.offset)], snug, studOffset };
 }
