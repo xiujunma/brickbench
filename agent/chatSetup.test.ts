@@ -21,7 +21,22 @@ const setup = (env: Record<string, string>): ChatSetup => ({
   workDir: root,
   noClaude: 'Install Claude Code, then try again.',
   restart: 'try again',
+  // none of this computer's agents over ACP: tests that want some name them
+  acpAgents: [],
 });
+
+/** BrickBench's MCP server, as agents over ACP would start it. */
+const SERVER = { name: 'brickbench', command: '/app/BrickBench', args: ['/app/agent/mcp.cjs', '/tmp/chat-connection.json'], env: [{ name: 'ELECTRON_RUN_AS_NODE', value: '1' }] };
+
+/** An agent over ACP on the PATH, under a name no real agent has, and one that is not there. */
+const acpBin = join(root, 'acp-bin');
+mkdirSync(acpBin, { recursive: true });
+writeFileSync(join(acpBin, 'brickbench-test-acp'), '#!/bin/sh\nexit 0\n');
+chmodSync(join(acpBin, 'brickbench-test-acp'), 0o755);
+const SPECS = [
+  { id: 'here', name: 'Here', program: 'brickbench-test-acp', args: ['--acp'], install: 'npm i -g here', signIn: 'Sign in to Here' },
+  { id: 'gone', name: 'Gone', program: 'brickbench-test-gone', args: [], install: 'npm i -g gone', signIn: 'Sign in to Gone' },
+];
 
 describe('setting up the chat', () => {
   it('runs Claude Code when it is installed, as its own version, with the chat’s token in a file only the user can read', async () => {
@@ -88,5 +103,47 @@ describe('setting up the chat', () => {
     const chat = await createChat(setup({ BRICKBENCH_AGENT_PROVIDER: 'xai' }));
     expect(chat.runner.status()).toMatchObject({ available: false, detail: 'Set XAI_API_KEY to your xAI API key, then try again.' });
     expect(createChat(setup({ BRICKBENCH_AGENT_PROVIDER: 'claude', BRICKBENCH_CLAUDE: fakeClaude, BRICKBENCH_AGENT_BUDGET_USD: 'lots' }))).rejects.toThrow('BRICKBENCH_AGENT_BUDGET_USD');
+  });
+
+  it('offers Claude Code, a model behind an API, and the agents over ACP that are here, with how to install the rest', async () => {
+    if (process.platform === 'win32') return;
+    const env = { BRICKBENCH_CLAUDE: fakeClaude, BRICKBENCH_AGENT_PROVIDER: 'ollama', BRICKBENCH_AGENT_MODEL: 'qwen3.5:9b', PATH: acpBin };
+    const chat = await createChat({ ...setup(env), acpAgents: SPECS, acp: { mcpServer: SERVER } });
+    expect(chat.chooser.choices()).toEqual({
+      chosen: 'api',
+      options: [
+        { id: 'claude', name: 'Claude Code', ready: true },
+        { id: 'api', name: 'Ollama · qwen3.5:9b', ready: true },
+        { id: 'here', name: 'Here', ready: true },
+        { id: 'gone', name: 'Gone', ready: false, detail: 'Not installed. Install it with: npm i -g gone' },
+      ],
+    });
+    expect(await chat.chooser.choose('here')).toBe(true);
+    expect(chat.runner.status()).toMatchObject({ available: true, name: 'Here' });
+    expect(await chat.chooser.choose('gone')).toBe(false);
+  });
+
+  it('cannot run agents over ACP without the server BrickBench gives them, and says why', async () => {
+    if (process.platform === 'win32') return;
+    const chat = await createChat({ ...setup({ BRICKBENCH_CLAUDE: fakeClaude, PATH: acpBin }), acpAgents: SPECS, acp: { unavailable: 'No server for them here.' } });
+    expect(chat.chooser.choices().options.find((option) => option.id === 'here')).toEqual({ id: 'here', name: 'Here', ready: false, detail: 'No server for them here.' });
+  });
+
+  it('starts with the agent chosen last time, unless the environment names one', async () => {
+    if (process.platform === 'win32') return;
+    const folder = join(root, 'remembered');
+    mkdirSync(folder, { recursive: true });
+    const env = { BRICKBENCH_CLAUDE: fakeClaude, PATH: acpBin };
+    const first = await createChat({ ...setup(env), acpAgents: SPECS, acp: { mcpServer: SERVER }, folder });
+    expect(first.chooser.choices().chosen).toBe('claude');
+    expect(await first.chooser.choose('here')).toBe(true);
+    expect(JSON.parse(readFileSync(join(folder, 'chat.json'), 'utf8'))).toEqual({ agent: 'here' });
+    const again = await createChat({ ...setup(env), acpAgents: SPECS, acp: { mcpServer: SERVER }, folder });
+    expect(again.chooser.choices().chosen).toBe('here');
+    const named = await createChat({ ...setup({ ...env, BRICKBENCH_AGENT_PROVIDER: 'claude' }), acpAgents: SPECS, acp: { mcpServer: SERVER }, folder });
+    expect(named.chooser.choices().chosen).toBe('claude');
+    // a choice that is not one is as if never made
+    writeFileSync(join(folder, 'chat.json'), '{"agent":42}');
+    expect((await createChat({ ...setup(env), acpAgents: SPECS, acp: { mcpServer: SERVER }, folder })).chooser.choices().chosen).toBe('claude');
   });
 });

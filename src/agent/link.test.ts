@@ -70,10 +70,25 @@ describe('the link to the agent bridge', () => {
     expect(state().status).toBe('connecting');
     socket().emit('open');
     socket().deliver(hello);
-    expect(state()).toEqual({ status: 'connected', agent: { available: true, name: 'Claude Code 2.1' }, terminal: { command: COMMAND, open: false } });
+    expect(state()).toEqual({ status: 'connected', agent: { available: true, name: 'Claude Code 2.1' }, terminal: { command: COMMAND, open: false }, agents: null });
     expect(socket().sent).toEqual([{ kind: 'active' }]);
     link.markActive();
     expect(socket().sent).toHaveLength(2);
+  });
+
+  it('learns which agents the chat can run, and asks the bridge to choose another', () => {
+    const { link, socket, state } = setup();
+    expect(link.chooseAgent('codex')).toBe(false);
+    link.connect();
+    socket().emit('open');
+    const agents = { chosen: 'claude', options: [{ id: 'claude', name: 'Claude Code', ready: true }, { id: 'codex', name: 'Codex', ready: true }] };
+    socket().deliver({ ...hello, agents });
+    expect(state().agents).toEqual(agents);
+    expect(link.chooseAgent('codex')).toBe(true);
+    expect(socket().sent.at(-1)).toEqual({ kind: 'choose', agent: 'codex' });
+    // the bridge says hello again, with the agent that answers now
+    socket().deliver({ ...hello, agent: { available: true, name: 'Codex' }, agents: { ...agents, chosen: 'codex' } });
+    expect(state()).toMatchObject({ agent: { name: 'Codex' }, agents: { chosen: 'codex' } });
   });
 
   it('asks the bridge to let agents in a terminal in, and shows they are once it says so', () => {
@@ -150,7 +165,7 @@ describe('the link to the agent bridge', () => {
     socket().deliver(hello);
     socket().emit('close');
     // it was connected: try again, and show it
-    expect(state()).toEqual({ status: 'connecting', agent: null, terminal: null });
+    expect(state()).toEqual({ status: 'connecting', agent: null, terminal: null, agents: null });
     timers[0]?.();
     socket().emit('open');
     link.disconnect();

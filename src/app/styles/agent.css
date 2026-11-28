@@ -163,6 +163,41 @@
   cursor: pointer;
 }
 
+/* Which agent answers, above the conversation. */
+.agent-picker {
+  margin: 0 16px 10px;
+}
+
+.agent-picker-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.agent-picker-choice .select {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-picker .agent-terminal {
+  margin: 8px 0 0;
+}
+
+.agent-more {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-more strong {
+  color: var(--ink);
+}
+
 /* The conversation: requests as bubbles, replies as prose, actions as a build log. */
 .chat-log {
   display: flex;

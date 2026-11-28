@@ -15,6 +15,10 @@ const AGENT_ENV = {
   BRICKBENCH_AGENT_PORT: String(AGENT_PORT),
   BRICKBENCH_CLAUDE: join(process.cwd(), 'agent', 'fixtures', 'fakeClaude.ts'),
   FAKE_CLAUDE_MODE: 'build',
+  // and a coding agent over ACP to choose in the panel: a stand-in that builds a red tower through BrickBench's own server
+  BRICKBENCH_ACP_COMMAND: JSON.stringify([process.execPath, join(process.cwd(), 'agent', 'fixtures', 'fakeAcpAgent.ts')]),
+  BRICKBENCH_ACP_NAME: 'Test agent',
+  FAKE_ACP_MODE: 'build',
 };
 
 let running: RunningApp;
@@ -141,7 +145,36 @@ test('lets agents in a terminal build in the app once the user lets them in, thr
   // one call, one step to undo
   await page.getByRole('button', { name: 'Undo' }).click();
   await expect(page.getByTestId('status-counts')).toHaveText('0 bricks');
-  await page.keyboard.press('Escape');
+  await panel.getByRole('button', { name: 'Close the agent' }).click();
+  await expect(panel).toHaveCount(0);
+});
+
+test('chats with a coding agent over ACP, chosen in the panel, which builds through BrickBench’s own server', async () => {
+  await page.getByRole('button', { name: 'Agent', exact: true }).click();
+  const panel = page.getByRole('complementary', { name: 'Agent' });
+  const picker = panel.getByRole('combobox', { name: 'Agent' });
+  await expect(picker).toHaveValue('claude');
+  await picker.selectOption('custom');
+  await expect(panel.getByRole('status').first()).toHaveText('Test agent');
+  const prompt = panel.getByRole('textbox', { name: 'Ask the agent to build something' });
+  await prompt.fill('Build a red tower');
+  await prompt.press('Enter');
+  const log = panel.getByRole('log', { name: 'Conversation with the agent' });
+  await expect(log).toContainText('Placing 2 bricks');
+  // it asked leave for a shell command too, and BrickBench said no
+  await expect(log).toContainText('Not allowed: rm -rf ~.');
+  await expect(log).toContainText('Placing 1 brick');
+  await expect(log).toContainText('Built a red tower of 3 bricks. Leave: allow-once, reject.');
+  await expect(page.getByTestId('status-counts')).toHaveText('3 bricks');
+  // the whole request is one step to undo
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByTestId('status-counts')).toHaveText('0 bricks');
+
+  // and back to Claude Code
+  await picker.selectOption('claude');
+  await expect(panel.getByRole('status').first()).toHaveText(/Claude Code 0\.0\.0/);
+  await panel.getByRole('button', { name: 'Close the agent' }).click();
+  await expect(panel).toHaveCount(0);
 });
 
 test('opens a model file handed over by the desktop, as Finder does', async () => {

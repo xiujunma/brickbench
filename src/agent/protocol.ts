@@ -165,6 +165,15 @@ export const bridgeMessageSchema = z.discriminatedUnion('kind', [
         open: z.boolean(),
       })
       .optional(),
+    /** The agents the chat can run, and which is chosen: Claude Code, a model behind an API, coding agents over ACP. */
+    agents: z
+      .object({
+        chosen: z.string().max(40),
+        options: z
+          .array(z.object({ id: z.string().min(1).max(40), name: z.string().max(80), ready: z.boolean(), detail: z.string().max(400).optional() }))
+          .max(24),
+      })
+      .optional(),
   }),
   z.object({ kind: z.literal('call'), id: z.string().min(1).max(64), tool: z.string().max(64), input: z.unknown() }),
   z.object({ kind: z.literal('agent'), event: agentEventSchema }),
@@ -189,6 +198,8 @@ export const appMessageSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('active') }),
   /** Let agents in a terminal in, or out. */
   z.object({ kind: z.literal('terminal'), open: z.boolean() }),
+  /** Have this agent answer the chat from now on; the bridge says hello again once it does. */
+  z.object({ kind: z.literal('choose'), agent: z.string().min(1).max(40) }),
 ]);
 export type AppMessage = z.infer<typeof appMessageSchema>;
 

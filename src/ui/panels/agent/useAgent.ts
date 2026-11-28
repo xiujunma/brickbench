@@ -5,7 +5,7 @@ import type { AgentLinkState } from '../../../agent/link';
 import { agentChat, agentLink } from '../../../app/agent';
 
 /** A web page's link: it has none, so it stays off. */
-const NO_LINK = createStore<AgentLinkState>(() => ({ status: 'off', agent: null, terminal: null }));
+const NO_LINK = createStore<AgentLinkState>(() => ({ status: 'off', agent: null, terminal: null, agents: null }));
 
 export function useAgentLink<T>(selector: (state: AgentLinkState) => T): T {
   return useStore(agentLink?.store ?? NO_LINK, selector);

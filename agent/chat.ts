@@ -16,6 +16,8 @@ export interface ChatRunner {
   start(prompt: string, fresh: boolean, onEvent: (event: AgentEvent) => void): void;
   /** Stops the work in progress, if any; its "done" event still follows. */
   stop(): void;
+  /** Lets go of everything it keeps running between requests, such as an agent's program: the bridge is stopping. */
+  close?(): void;
 }
 
 /** For when no agent can run here: the chat explains why instead of failing quietly. */

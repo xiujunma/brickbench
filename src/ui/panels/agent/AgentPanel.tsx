@@ -71,6 +71,53 @@ function Welcome({ disabled }: { readonly disabled: boolean }) {
   );
 }
 
+/**
+ * Which agent answers the chat: those that can run here to choose from, and
+ * the others with how to install them. Another agent starts a new
+ * conversation, as agents share none.
+ */
+function AgentPicker({ link }: { readonly link: AgentLink }) {
+  const agents = useAgentLink((s) => s.agents);
+  const running = useAgentChat((s) => s.running);
+  if (!agents || agents.options.length < 2) return null;
+  const offered = agents.options.filter((option) => option.ready || option.id === agents.chosen);
+  const missing = agents.options.filter((option) => !option.ready && option.id !== agents.chosen);
+  return (
+    <div className="agent-picker">
+      <label className="agent-picker-choice">
+        <span>Agent</span>
+        <select
+          className="select select-sm"
+          value={agents.chosen}
+          disabled={running}
+          onChange={(event) => {
+            agentChat.newConversation();
+            link.chooseAgent(event.target.value);
+          }}
+        >
+          {offered.map((option) => (
+            <option key={option.id} value={option.id} disabled={!option.ready}>
+              {option.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {missing.length > 0 && (
+        <details className="agent-terminal">
+          <summary>More agents</summary>
+          <ul className="agent-more">
+            {missing.map((option) => (
+              <li key={option.id}>
+                <strong>{option.name}</strong> {option.detail}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
 /** Agents in a terminal: the switch that lets them in, and once it is on, how to add BrickBench to them. */
 function TerminalAgents({ link }: { readonly link: AgentLink }) {
   const terminal = useAgentLink((s) => s.terminal);
@@ -170,6 +217,7 @@ function AgentChat({ link, onClose }: Props & { readonly link: AgentLink }) {
   return (
     <PanelShell onClose={onClose} actions={newChat}>
       <StatusLine link={link} />
+      {status === 'connected' && <AgentPicker link={link} />}
       {status === 'connected' && <TerminalAgents link={link} />}
       {status === 'unreachable' && <BridgeHelp />}
       {status === 'connected' && agent && !agent.available && (

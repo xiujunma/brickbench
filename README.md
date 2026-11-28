@@ -189,7 +189,7 @@ To run it from this repository, `bun run desktop` builds the web app and opens i
 
 ## Building with an AI agent
 
-An AI agent can build in BrickBench's [desktop app](#desktop-app): Claude Code, GPT, Grok or a model on your own computer from the **Agent** panel, or Claude Code (or any other agent that speaks [MCP](https://modelcontextprotocol.io)) from a terminal. It places, paints, moves and removes bricks while you watch, looks at pictures of the model to check its work, and whatever it does for one request is one step you can undo.
+An AI agent can build in BrickBench's [desktop app](#desktop-app): from the **Agent** panel, Claude Code, a coding agent that speaks the [Agent Client Protocol](https://agentclientprotocol.com) (Codex, Gemini CLI, OpenCode, Grok Build, Mistral Vibe), or GPT, Grok or a model on your own computer; or, from a terminal, Claude Code or any other agent that speaks [MCP](https://modelcontextprotocol.io). It places, paints, moves and removes bricks while you watch, looks at pictures of the model to check its work, and whatever it does for one request is one step you can undo.
 
 The agent works only in the desktop app. Web pages, the hosted site's or one served from this repository, never connect to agents on your computer, so your login and API keys stay out of reach of every web page; their Agent panel points to the desktop app instead.
 
@@ -198,7 +198,19 @@ The agent works only in the desktop app. Web pages, the hosted site's or one ser
 1. Open the desktop app (from this repository, `bun run desktop`).
 2. Click **Agent** in the top bar. Ask for something: "build a small red house with a door and two windows", "make the roof dark grey", "put a fence around it".
 
-Unless you choose another model (below), the chat runs [Claude Code](https://code.claude.com) on your computer with your own login, so Claude Code has to be installed. It gets the BrickBench tools and nothing else: no shell, no files, and none of your Claude Code hooks, plugins or settings files. That use of your login is meant for you on your own computer; if other people will use the chat, set `ANTHROPIC_API_KEY` for the app so it runs on an API key instead.
+Unless you choose another agent (below), the chat runs [Claude Code](https://code.claude.com) on your computer with your own login, so Claude Code has to be installed. It gets the BrickBench tools and nothing else: no shell, no files, and none of your Claude Code hooks, plugins or settings files. That use of your login is meant for you on your own computer; if other people will use the chat, set `ANTHROPIC_API_KEY` for the app so it runs on an API key instead.
+
+**Coding agents over ACP.** The **Agent** list at the top of the panel offers the coding agents on your computer that speak the Agent Client Protocol, as SolidCraft's chat does; BrickBench looks for them where it looks for Claude Code (your PATH, and where npm, nvm, Volta, Bun, Homebrew and `~/.local/bin` put programs), and lists the others under **More agents** with how to install them. Choosing one starts a new conversation, and the app remembers it.
+
+| Agent | Program BrickBench starts | Install |
+|---|---|---|
+| Codex | `codex-acp` | `npm install -g @agentclientprotocol/codex-acp` |
+| Gemini CLI | `gemini --acp` | `npm install -g @google/gemini-cli` |
+| OpenCode | `opencode acp` | `npm install -g @opencode/cli` |
+| Grok Build | `grok agent stdio` | `npm install -g @xai-official/grok` |
+| Mistral Vibe | `vibe-acp` | `uv tool install --python 3.14 mistral-vibe` |
+
+The agent runs on your computer under your own account with it (sign in to it as it says, before or when the chat asks you to), in an empty folder of its own. BrickBench starts it when you first ask for something and opens a session whose only tools are BrickBench's: its MCP server, which the agent starts as the app's executable run as plain Node, with a token in a file only you can read. BrickBench offers the agent no files and no terminal, lets it use BrickBench's tools, and refuses anything else it asks to do, such as running a shell command, saying so in the chat; an agent that runs its own tools without asking runs them as it would in a terminal. The instructions it gets go into its system prompt where it takes one, otherwise in front of your first request. Another agent that speaks ACP can be offered too: open the app with `BRICKBENCH_ACP_COMMAND` set to its program and arguments as a JSON array, such as `["/opt/agent/bin/agent","--acp"]`, and `BRICKBENCH_ACP_NAME` to its name. On Windows, BrickBench finds only agents installed as programs (`.exe`), not npm's `.cmd` launchers.
 
 **Other models: GPT, Grok, OpenRouter, or a model on your computer.** Open the app from a terminal with `BRICKBENCH_AGENT_PROVIDER` set, and the chat runs that model instead. It gets the same tools and instructions as Claude Code, calls them by function calling, and sees the pictures `look` draws (a model that cannot see pictures carries on without them, and the chat says so). One request is still one step to undo.
 
@@ -247,13 +259,15 @@ then ask Claude Code to build something in BrickBench. The app's own executable 
 | Variable | What it sets |
 |---|---|
 | `BRICKBENCH_AGENT_PORT` | The bridge's port, 7425 by default; when another program has it, the app takes a free one (agents in a terminal find it through the connection file) |
-| `BRICKBENCH_AGENT_PROVIDER` | Who runs the chat's model: `claude` (Claude Code, the default), `openai`, `xai`, `openrouter`, `ollama`, `lmstudio` or `custom` |
+| `BRICKBENCH_AGENT_PROVIDER` | Who runs the chat's model: `claude` (Claude Code, the default), `openai`, `xai`, `openrouter`, `ollama`, `lmstudio` or `custom`. Set, it is the agent the app starts with, whatever was chosen in the panel last time; the others stay in the panel's list |
 | `BRICKBENCH_AGENT_MODEL` | The model the chat uses: for Claude Code, such as `sonnet` or `opus` (its default otherwise); for the others, as the provider names it |
 | `BRICKBENCH_AGENT_BUDGET_USD` | For Claude Code, the most one chat request may spend: $5 unless you set it, or `none` for no cap |
 | `BRICKBENCH_CLAUDE` | Where the `claude` command is, if it is not on your PATH |
 | `BRICKBENCH_AGENT_API_KEY_VAR` | The name of the environment variable that holds the API key, if not the provider's usual one (as in the table above) |
 | `BRICKBENCH_AGENT_BASE_URL` | The API's address, ending in `/v1`: needed for `custom`, or to reach Ollama or LM Studio on another computer |
 | `BRICKBENCH_AGENT_API` | `responses` or `chat`, to override how the bridge talks to the API: OpenAI and xAI use the Responses API, the rest Chat Completions |
+| `BRICKBENCH_ACP_COMMAND` | Another coding agent that speaks ACP, for the panel's list: its program and arguments as a JSON array, such as `["/opt/agent/bin/agent","--acp"]` |
+| `BRICKBENCH_ACP_NAME` | That agent's name in the list, "Custom agent" unless you set it |
 
 The bridge listens on this computer only (127.0.0.1), answers only requests addressed to this computer (which stops DNS rebinding), refuses every request that comes from a web page, and takes tool calls only with a token: the chat's own agent gets one from the app, in a file only you can read rather than on its command line, and agents in a terminal get theirs from the file above while you let them in. Each token lasts as long as the bridge.
 
@@ -384,7 +398,8 @@ src/
   samples/    the sample cottage
 scripts/ldraw/  the LDraw library converter (run straight from TypeScript by Bun)
 agent/        the agent bridge the desktop app runs: an MCP server for agents, the link to the
-              app's window, and the chat's agent: Claude Code run headless, or a model behind an API (api/)
+              app's window, and the chat's agents: Claude Code run headless, a coding agent over the
+              Agent Client Protocol (acp/), or a model behind an API (api/)
 electron/     the desktop app's main process and preload script, the agent bridge it runs, and
               the MCP server for agents in a terminal (mcp.ts, which the app's executable runs as Node)
 server/       the accounts and gallery API, as Cloudflare runs it, and on SQLite here (local.ts)

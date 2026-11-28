@@ -11,11 +11,12 @@ import { join } from 'node:path';
 import { createAccess, type Access } from '../agent/access';
 import { createAppLink } from '../agent/appLink';
 import { createBridgeHandlers, type BridgeHandlers, type TabSocket } from '../agent/bridge';
-import { createChat } from '../agent/chatSetup';
+import type { StdioMcpServer } from '../agent/acp/schema';
+import { createChat, type AcpSetup } from '../agent/chatSetup';
 import { serveWithNode, type NodeServer } from '../agent/nodeServer';
 import { portOf, type Environment } from '../agent/settings';
 import { isConnectionId, MAX_AGENT_MESSAGE, type AgentLinkEvent } from '../src/desktop/protocol';
-import { claudeAddCommand } from './terminalCommand';
+import { claudeAddCommand, RUN_AS_NODE } from './terminalCommand';
 
 export const NO_CLAUDE =
   'Claude Code is not installed on this computer, so the chat cannot run. Install it from https://code.claude.com, then click Disconnect and Connect here. Other MCP agents can still connect.';
@@ -47,7 +48,7 @@ export const MCP_SCRIPT = 'mcp.cjs';
  * connection file, and says how to add it to Claude Code, or why it cannot:
  * then the panel offers agents in a terminal nothing.
  */
-async function terminalServer(setup: BridgeSetup): Promise<{ readonly command: string } | { readonly failure: string }> {
+async function terminalServer(setup: BridgeSetup): Promise<{ readonly command: string; readonly script: string } | { readonly failure: string }> {
   const script = join(setup.folder, MCP_SCRIPT);
   try {
     const source = await readFile(setup.serverScript);
@@ -56,7 +57,18 @@ async function terminalServer(setup: BridgeSetup): Promise<{ readonly command: s
   } catch (error: unknown) {
     return { failure: `Agents in a terminal cannot connect: the server for them could not be put in place (${error instanceof Error ? error.message : String(error)}).` };
   }
-  return { command: claudeAddCommand({ executable: setup.executable, script }, process.platform) };
+  return { command: claudeAddCommand({ executable: setup.executable, script }, process.platform), script };
+}
+
+/**
+ * BrickBench's MCP server as the chat's own agents over ACP start it: the
+ * same server, with a connection file of its own holding the chat's token,
+ * only the user can read, in the bridge's working folder.
+ */
+async function chatServer(workDir: string, url: string, token: string, executable: string, script: string): Promise<StdioMcpServer> {
+  const connection = join(workDir, 'chat-connection.json');
+  await writeFile(connection, JSON.stringify({ url, token }), { mode: 0o600 });
+  return { name: 'brickbench', command: executable, args: [script, connection], env: [{ name: RUN_AS_NODE, value: '1' }] };
 }
 
 /** Starts the bridge: its server first, on this computer only, so the chat's agent can be told where it is and with which token. */
@@ -73,6 +85,10 @@ export async function startDesktopBridge(env: Environment, setup: BridgeSetup): 
     // with no server for them, and no switch in the panel, agents in a terminal stay out, however the box was left
     if ('failure' in terminal) await access.close();
     const link = createAppLink();
+    const acp: AcpSetup =
+      'script' in terminal
+        ? { mcpServer: await chatServer(workDir, server.url, access.chatToken, setup.executable, terminal.script) }
+        : { unavailable: 'Agents over ACP cannot run here: the server BrickBench gives them could not be put in place.' };
     const chat = await createChat({
       lookup: { env, platform: process.platform, home: homedir(), cwd: process.cwd() },
       link,
@@ -81,9 +97,11 @@ export async function startDesktopBridge(env: Environment, setup: BridgeSetup): 
       noClaude: NO_CLAUDE,
       // its settings come from the app's environment, read again only when it opens
       restart: 'quit BrickBench and open it again',
+      acp,
+      folder: setup.folder,
     });
     const { runner } = chat;
-    handlers = createBridgeHandlers(runner, { access, link, ...('command' in terminal ? { terminalCommand: terminal.command } : {}) });
+    handlers = createBridgeHandlers(runner, { access, link, chooser: chat.chooser, ...('command' in terminal ? { terminalCommand: terminal.command } : {}) });
     const open = server;
     const opened = access;
     return {
@@ -92,6 +110,8 @@ export async function startDesktopBridge(env: Environment, setup: BridgeSetup): 
       notes: 'failure' in terminal ? [...chat.notes, terminal.failure] : chat.notes,
       stop: async () => {
         runner.stop();
+        // an agent's program, kept running between requests, ends with the bridge
+        runner.close?.();
         await opened.close().catch(() => undefined);
         await open.close();
         await cleanUp();

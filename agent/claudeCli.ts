@@ -97,6 +97,18 @@ export async function findClaude(lookup: ClaudeLookup): Promise<string | null> {
   return firstProgram(claudeCandidates(lookup, await nvmFolders(lookup.home)), lookup.platform);
 }
 
+/**
+ * Another program's command, as an absolute path, by name on the PATH, then
+ * in the folders installers put programs in, as for Claude Code (on Windows
+ * only programs, .exe, count); null when it is nowhere to be found.
+ */
+export async function findProgram(name: string, lookup: ClaudeLookup): Promise<string | null> {
+  if (/[\\/]/.test(name)) return firstProgram([resolve(lookup.cwd, name)], lookup.platform);
+  const file = lookup.platform === 'win32' && !name.toLowerCase().endsWith('.exe') ? `${name}.exe` : name;
+  const folders = [...pathFolders(lookup), ...installFolders(lookup), ...(await nvmFolders(lookup.home))];
+  return firstProgram([...new Set(folders.map((folder) => join(folder, file)))], lookup.platform);
+}
+
 /** On Windows, npm's claude.cmd, which BrickBench cannot start, when there is no claude.exe; null anywhere else. */
 export async function findClaudeShim(lookup: ClaudeLookup): Promise<string | null> {
   if (lookup.platform !== 'win32') return null;

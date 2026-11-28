@@ -9,7 +9,8 @@ import { waitFor } from '../src/testing/helpers';
 import { CONNECTION_FILE, createAccess, newToken, readConnection, type Access } from './access';
 import { createAppLink, type AppLink } from './appLink';
 import { createBridgeHandlers, type BridgeAccess, type BridgeHandlers, type TabSocket } from './bridge';
-import type { ChatRunner } from './chat';
+import { unavailableRunner, type ChatRunner } from './chat';
+import { createChooser } from './chooser';
 import { serveWithNode, type NodeServer } from './nodeServer';
 
 const COMMAND = 'claude mcp add brickbench -e ELECTRON_RUN_AS_NODE=1 -- /app/BrickBench /agent/mcp.cjs';
@@ -177,6 +178,38 @@ describe('the agent bridge', () => {
     const window = openWindow(createBridgeHandlers(runner, { access: failing, terminalCommand: COMMAND }));
     window.send({ kind: 'terminal', open: true });
     await waitFor(() => expect(window.received.at(-1)).toEqual({ kind: 'terminal', open: false }));
+  });
+
+  it('offers the agents the chat can run, and has another answer when the window chooses it, never mid-request', async () => {
+    const claude = scriptedRunner();
+    const codex = scriptedRunner();
+    const chooser = await createChooser({
+      entries: [
+        { option: { id: 'claude', name: 'Claude Code', ready: true }, make: () => claude.runner },
+        { option: { id: 'codex', name: 'Codex', ready: true }, make: () => ({ ...codex.runner, status: () => ({ available: true, name: 'Codex' }) }) },
+        { option: { id: 'vibe', name: 'Mistral Vibe', ready: false, detail: `Not installed. ${'x'.repeat(600)}` }, make: () => unavailableRunner('no') },
+      ],
+      first: 'claude',
+    });
+    const window = openWindow(createBridgeHandlers(chooser.runner, { access: NOBODY, chooser }));
+    const first = window.received[0];
+    expect(first).toMatchObject({ kind: 'hello', agent: { name: 'Scripted agent' }, agents: { chosen: 'claude' } });
+    // a long detail is cut to what the app takes
+    expect(first?.kind === 'hello' ? first.agents?.options[2]?.detail?.length : 0).toBe(400);
+
+    // mid-request, the choice stays as it was, and the window hears so
+    window.send({ kind: 'chat', prompt: 'Build', fresh: true });
+    window.send({ kind: 'choose', agent: 'codex' });
+    await waitFor(() => expect(window.received.filter((m) => m.kind === 'hello')).toHaveLength(2));
+    expect(window.received.at(-1)).toMatchObject({ kind: 'hello', agents: { chosen: 'claude' } });
+    claude.finish('Done.');
+
+    window.send({ kind: 'choose', agent: 'codex' });
+    await waitFor(() => expect(window.received.filter((m) => m.kind === 'hello')).toHaveLength(3));
+    expect(window.received.at(-1)).toMatchObject({ kind: 'hello', agent: { name: 'Codex' }, agents: { chosen: 'codex' } });
+    window.send({ kind: 'chat', prompt: 'Build', fresh: true });
+    expect(codex.requests).toEqual([{ prompt: 'Build', fresh: true }]);
+    window.close();
   });
 
   it('runs the chat in the asking window, one request at a time, and stops when asked', async () => {

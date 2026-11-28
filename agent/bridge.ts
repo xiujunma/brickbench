@@ -9,10 +9,11 @@
  */
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
-import { appMessageSchema, clampEvent, parseMessage, TOOL_NAMES, type AgentEvent, type ToolName } from '../src/agent/protocol';
+import { appMessageSchema, clampEvent, parseMessage, TOOL_NAMES, type AgentEvent, type BridgeMessage, type ToolName } from '../src/agent/protocol';
 import type { Access } from './access';
 import { createAppLink, type AppLink } from './appLink';
 import type { AgentStatus, ChatRunner } from './chat';
+import type { AgentChoices, Chooser } from './chooser';
 import { createBrickBenchMcp, SERVER_VERSION } from './mcpServer';
 import { isLocalHost } from './origins';
 
@@ -57,6 +58,8 @@ export interface HandlerOptions {
    * window shows with the switch that lets them in; without it there is no switch.
    */
   readonly terminalCommand?: string;
+  /** The agents the chat can run, which the window offers to choose among; without it there is no choice. */
+  readonly chooser?: Pick<Chooser, 'choices' | 'choose'>;
 }
 
 const forbidden = (why: string): Response => new Response(why, { status: 403 });
@@ -70,7 +73,21 @@ const NOT_A_CALL = 'A tool call is a JSON object: {"tool": name, "input": argume
 /** The longest agent name and detail the app takes; a longer one would leave it never hearing hello. */
 const MAX_AGENT_NAME = 80;
 const MAX_AGENT_DETAIL = 400;
+const MAX_AGENT_OPTIONS = 24;
 const cut = (text: string, limit: number): string => (text.length > limit ? `${text.slice(0, limit - 1)}…` : text);
+
+/** The agents to choose among, cut to the lengths and number the app accepts. */
+export function offered(choices: AgentChoices): { chosen: string; options: { id: string; name: string; ready: boolean; detail?: string }[] } {
+  return {
+    chosen: choices.chosen,
+    options: choices.options.slice(0, MAX_AGENT_OPTIONS).map((option) => ({
+      id: option.id,
+      name: cut(option.name, MAX_AGENT_NAME),
+      ready: option.ready,
+      ...(option.detail === undefined ? {} : { detail: cut(option.detail, MAX_AGENT_DETAIL) }),
+    })),
+  };
+}
 
 /** The runner's status, cut to the lengths the app accepts. */
 export function agentInfo(status: AgentStatus): AgentStatus {
@@ -106,8 +123,17 @@ async function answerCall(link: AppLink, request: Request): Promise<Response> {
 }
 
 export function createBridgeHandlers(runner: ChatRunner, options: HandlerOptions): BridgeHandlers {
-  const { access, link = createAppLink(), terminalCommand } = options;
+  const { access, link = createAppLink(), terminalCommand, chooser } = options;
   let chatting: TabSocket | null = null;
+
+  /** What the window hears when it connects, and again when the agent changes: who answers, and its choices. */
+  const hello = (): BridgeMessage => ({
+    kind: 'hello',
+    version: SERVER_VERSION,
+    agent: agentInfo(runner.status()),
+    ...(terminalCommand === undefined ? {} : { terminal: { command: terminalCommand, open: access.terminalOpen } }),
+    ...(chooser === undefined ? {} : { agents: offered(chooser.choices()) }),
+  });
 
   const tell = (socket: TabSocket, event: AgentEvent): void => {
     try {
@@ -150,6 +176,17 @@ export function createBridgeHandlers(runner: ChatRunner, options: HandlerOptions
     }
   };
 
+  /** Has another agent answer the chat, as the window asks, unless one is at work; then says hello again either way. */
+  const chooseAgent = async (socket: TabSocket, id: string): Promise<void> => {
+    if (chooser === undefined) return;
+    await chooser.choose(id).catch(() => false);
+    try {
+      link.send(socket, hello());
+    } catch {
+      // the window has gone
+    }
+  };
+
   const onMessage = (socket: TabSocket, text: string): void => {
     const message = parseMessage(appMessageSchema, text);
     if (!message) return;
@@ -157,6 +194,7 @@ export function createBridgeHandlers(runner: ChatRunner, options: HandlerOptions
     else if (message.kind === 'stop') {
       if (chatting === socket) runner.stop();
     } else if (message.kind === 'terminal') void setTerminal(socket, message.open);
+    else if (message.kind === 'choose') void chooseAgent(socket, message.agent);
     else link.receive(socket, message);
   };
 
@@ -177,8 +215,7 @@ export function createBridgeHandlers(runner: ChatRunner, options: HandlerOptions
     tabs: {
       open(socket) {
         link.attach(socket);
-        const terminal = terminalCommand === undefined ? {} : { terminal: { command: terminalCommand, open: access.terminalOpen } };
-        link.send(socket, { kind: 'hello', version: SERVER_VERSION, agent: agentInfo(runner.status()), ...terminal });
+        link.send(socket, hello());
       },
       message(socket, raw) {
         onMessage(socket, raw);

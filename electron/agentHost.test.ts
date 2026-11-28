@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CONNECTION_FILE, readConnection } from '../agent/access';
@@ -8,6 +8,16 @@ import type { BridgeHandlers, TabSocket } from '../agent/bridge';
 import { MAX_AGENT_MESSAGE, type AgentLinkEvent } from '../src/desktop/protocol';
 import { waitFor } from '../src/testing/helpers';
 import { createAgentHost, MCP_SCRIPT, NO_CLAUDE, startDesktopBridge, type AgentWindow, type BridgeSetup, type DesktopBridge } from './agentHost';
+
+/** Whether a process is still there. */
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** The bundled server for agents in a terminal, as far as the bridge cares: a file to copy. */
 const SERVER = '// mcp.cjs\n';
@@ -249,6 +259,50 @@ describe('the agent bridge in the desktop app', () => {
       await bridge.stop();
       await rm(setup.root, { recursive: true, force: true });
     }
+  });
+
+  it('runs a coding agent over ACP chosen by the window, gives it a connection file only the user can read, and ends it when the bridge stops', async () => {
+    const setup = await bridgeSetup();
+    const pidFile = join(setup.root, 'agent.pid');
+    const sessionFile = join(setup.root, 'session.json');
+    const env = {
+      BRICKBENCH_AGENT_PORT: '7493',
+      BRICKBENCH_CLAUDE: '/nowhere/claude',
+      BRICKBENCH_ACP_COMMAND: JSON.stringify([process.execPath, join(import.meta.dir, '..', 'agent', 'fixtures', 'fakeAcpAgent.ts')]),
+      FAKE_ACP_MODE: 'hang',
+      FAKE_ACP_PID_FILE: pidFile,
+      FAKE_ACP_SESSION_FILE: sessionFile,
+      PATH: process.env['PATH'] ?? '',
+    };
+    const bridge = await startDesktopBridge(env, setup);
+    let pid = 0;
+    try {
+      const said: string[] = [];
+      const socket: TabSocket = { data: { tab: 1 }, send: (text) => void said.push(text) };
+      bridge.handlers.tabs.open(socket);
+      bridge.handlers.tabs.message(socket, JSON.stringify({ kind: 'choose', agent: 'custom' }));
+      await waitFor(() => expect(said).toHaveLength(2));
+      expect(JSON.parse(said[1] ?? '{}')).toMatchObject({ kind: 'hello', agents: { chosen: 'custom' } });
+      bridge.handlers.tabs.message(socket, JSON.stringify({ kind: 'chat', prompt: 'Wait', fresh: true }));
+      await waitFor(() => expect(existsSync(sessionFile)).toBe(true), 5000);
+      const params = JSON.parse(await readFile(sessionFile, 'utf8')) as { mcpServers: { name: string; command: string; args: string[]; env: unknown[] }[] };
+      const connection = params.mcpServers[0]?.args[1] ?? '';
+      expect(params.mcpServers[0]).toEqual({
+        name: 'brickbench',
+        command: '/app/BrickBench',
+        args: [join(setup.folder, MCP_SCRIPT), connection],
+        env: [{ name: 'ELECTRON_RUN_AS_NODE', value: '1' }],
+      });
+      expect(JSON.parse(await readFile(connection, 'utf8'))).toMatchObject({ url: bridge.url });
+      if (process.platform !== 'win32') expect((await stat(connection)).mode & 0o777).toBe(0o600);
+      pid = Number(await readFile(pidFile, 'utf8'));
+      expect(isAlive(pid)).toBe(true);
+    } finally {
+      await bridge.stop();
+    }
+    // the agent's program, kept running between requests, ended with the bridge
+    await waitFor(() => expect(isAlive(pid)).toBe(false), 5000);
+    await rm(setup.root, { recursive: true, force: true });
   });
 
   it('gives up cleanly on a setting that is malformed, leaving its port free and no agent in a terminal let in', async () => {

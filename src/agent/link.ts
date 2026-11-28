@@ -29,12 +29,28 @@ export interface TerminalAccess {
   readonly open: boolean;
 }
 
+/** One agent the chat can run: Claude Code, a model behind an API, or a coding agent over ACP. */
+export interface AgentOption {
+  readonly id: string;
+  readonly name: string;
+  /** Whether it can run here; one that cannot says how to install it, or why not. */
+  readonly ready: boolean;
+  readonly detail?: string | undefined;
+}
+
+export interface AgentChoices {
+  readonly chosen: string;
+  readonly options: readonly AgentOption[];
+}
+
 export interface AgentLinkState {
   readonly status: LinkStatus;
   /** The agent behind the bridge's chat, once the bridge has said. */
   readonly agent: AgentInfo | null;
   /** Agents in a terminal, once the bridge has said; null where it offers them nothing. */
   readonly terminal: TerminalAccess | null;
+  /** The agents the chat can run, once the bridge has said; null where it offers no choice. */
+  readonly agents: AgentChoices | null;
 }
 
 export interface AgentLinkDeps {
@@ -57,6 +73,8 @@ export interface AgentLink {
   markActive(): void;
   /** Asks the bridge to let agents in a terminal in, or out; the state changes once it has. Says whether it was asked. */
   setTerminal(open: boolean): boolean;
+  /** Asks the bridge to have another agent answer the chat; it says hello again once it has. Says whether it was asked. */
+  chooseAgent(id: string): boolean;
 }
 
 const FIRST_RETRY_MS = 2000;
@@ -73,7 +91,7 @@ function resultMessage(id: string, outcome: ToolOutcome): AppMessage {
 }
 
 export function createAgentLink(deps: AgentLinkDeps): AgentLink {
-  const store = createStore<AgentLinkState>(() => ({ status: 'off', agent: null, terminal: null }));
+  const store = createStore<AgentLinkState>(() => ({ status: 'off', agent: null, terminal: null, agents: null }));
   const schedule = deps.schedule ?? defaultSchedule;
   let socket: SocketLike | null = null;
   let open = false;
@@ -98,7 +116,7 @@ export function createAgentLink(deps: AgentLinkDeps): AgentLink {
     if (typeof data !== 'string') return;
     const message = parseMessage(bridgeMessageSchema, data);
     if (!message) return;
-    if (message.kind === 'hello') store.setState({ status: 'connected', agent: message.agent, terminal: message.terminal ?? null });
+    if (message.kind === 'hello') store.setState({ status: 'connected', agent: message.agent, terminal: message.terminal ?? null, agents: message.agents ?? null });
     else if (message.kind === 'call') answer(message.id, message.tool, message.input);
     else if (message.kind === 'terminal') {
       const { terminal } = store.getState();
@@ -126,7 +144,7 @@ export function createAgentLink(deps: AgentLinkDeps): AgentLink {
       const wasOpen = open;
       socket = null;
       open = false;
-      store.setState({ status: wasOpen ? 'connecting' : 'unreachable', agent: null, terminal: null });
+      store.setState({ status: wasOpen ? 'connecting' : 'unreachable', agent: null, terminal: null, agents: null });
       cancelRetry = schedule(attempt, retryMs);
       retryMs = Math.min(retryMs * 2, MAX_RETRY_MS);
     });
@@ -148,10 +166,11 @@ export function createAgentLink(deps: AgentLinkDeps): AgentLink {
       socket = null;
       open = false;
       current?.close();
-      store.setState({ status: 'off', agent: null, terminal: null });
+      store.setState({ status: 'off', agent: null, terminal: null, agents: null });
     },
     send,
     markActive: () => void send({ kind: 'active' }),
     setTerminal: (open) => send({ kind: 'terminal', open }),
+    chooseAgent: (id) => send({ kind: 'choose', agent: id }),
   };
 }
