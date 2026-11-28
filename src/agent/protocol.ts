@@ -13,6 +13,9 @@ export const MAX_BATCH = 2000;
 export const DEFAULT_LIST_LIMIT = 400;
 export const MAX_LIST_LIMIT = 2000;
 export const MAX_PROMPT_LENGTH = 8000;
+/** The most a request's context (selected bricks, the user's view) and the user's own instructions may hold. */
+export const MAX_CONTEXT_LENGTH = 40_000;
+export const MAX_INSTRUCTIONS_LENGTH = 4000;
 /** Most owned parts list_owned_parts lists by default and at all. */
 export const DEFAULT_OWNED_LIST = 200;
 export const MAX_OWNED_LIST = 2000;
@@ -75,7 +78,7 @@ export const TOOL_INPUTS = {
   clear_model: { confirm: z.literal(true) },
   set_model_name: { name: z.string().trim().min(1).max(120) },
   look: {
-    view: z.enum(['iso', 'front', 'back', 'left', 'right', 'top']).default('iso'),
+    view: z.enum(['iso', 'front', 'back', 'left', 'right', 'top', 'user']).default('iso'),
     highlight: z.array(z.string().min(1).max(40)).max(MAX_BATCH).default([]),
   },
   undo: { steps: int.min(1).max(20).default(1) },
@@ -192,7 +195,15 @@ export const appMessageSchema = z.discriminatedUnion('kind', [
     error: z.string().max(4000).optional(),
     image: imageSchema.optional(),
   }),
-  z.object({ kind: z.literal('chat'), prompt: z.string().trim().min(1).max(MAX_PROMPT_LENGTH), fresh: z.boolean() }),
+  z.object({
+    kind: z.literal('chat'),
+    prompt: z.string().trim().min(1).max(MAX_PROMPT_LENGTH),
+    fresh: z.boolean(),
+    /** What goes with the words: the bricks the user has selected, their view. */
+    context: z.string().max(MAX_CONTEXT_LENGTH).optional(),
+    /** The user's own instructions for the chat. */
+    instructions: z.string().max(MAX_INSTRUCTIONS_LENGTH).optional(),
+  }),
   z.object({ kind: z.literal('stop') }),
   /** This tab is the one the user is looking at: calls go here. */
   z.object({ kind: z.literal('active') }),

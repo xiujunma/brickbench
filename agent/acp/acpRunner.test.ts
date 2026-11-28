@@ -6,7 +6,7 @@ import type { AgentEvent, AppMessage, BridgeMessage, ToolName } from '../../src/
 import { waitFor } from '../../src/testing/helpers';
 import { createAccess } from '../access';
 import { createBridgeHandlers, type BridgeHandlers, type TabSocket } from '../bridge';
-import type { ChatRunner } from '../chat';
+import type { ChatRunner, RequestExtra } from '../chat';
 import { unavailableRunner } from '../chat';
 import { serveWithNode, type NodeServer } from '../nodeServer';
 import { brickbenchTool, createAcpRunner, permissionFor } from './acpRunner';
@@ -75,13 +75,18 @@ function runner(mode: string, extra: Extra = {}): ChatRunner {
 }
 
 /** Runs one request to its end, with every event on the way. */
-function ask(chat: ChatRunner, prompt: string, fresh = false): Promise<AgentEvent[]> {
+function ask(chat: ChatRunner, prompt: string, fresh = false, extra?: RequestExtra): Promise<AgentEvent[]> {
   const events: AgentEvent[] = [];
   return new Promise((resolve) =>
-    chat.start(prompt, fresh, (event) => {
-      events.push(event);
-      if (event.type === 'done') resolve(events);
-    }),
+    chat.start(
+      prompt,
+      fresh,
+      (event) => {
+        events.push(event);
+        if (event.type === 'done') resolve(events);
+      },
+      extra,
+    ),
   );
 }
 
@@ -104,6 +109,22 @@ describe('a coding agent over the Agent Client Protocol', () => {
     for (const prompt of ['One', 'Two']) {
       expect((await ask(chat, prompt)).filter((e) => e.type === 'text')).toEqual([{ type: 'text', text: `You said: ${prompt}. I was told how BrickBench works. Session 1.` }]);
     }
+  });
+
+  it('gives the user’s own instructions with its own as a session starts, which keeps them', async () => {
+    const own = { instructions: 'Use pastel colours' };
+    const texts = async (chat: ChatRunner, prompt: string, fresh: boolean, extra?: RequestExtra) => (await ask(chat, prompt, fresh, extra)).filter((e) => e.type === 'text');
+    // on the session's first request, where the agent takes no system prompt
+    const plain = runner('echo');
+    expect(await texts(plain, 'One', true, own)).toEqual([{ type: 'text', text: 'You said: One. I was told how BrickBench works. I was asked: Use pastel colours. Session 1.' }]);
+    expect(await texts(plain, 'Two', false, own)).toEqual([{ type: 'text', text: 'You said: Two. Session 1.' }]);
+    // as the system prompt, where it takes one
+    const prompted = runner('echo', { env: { FAKE_ACP_SYSTEM_PROMPT: '1' } });
+    expect(await texts(prompted, 'One', true, own)).toEqual([{ type: 'text', text: 'You said: One. I was told how BrickBench works. I was asked: Use pastel colours. Session 1.' }]);
+    // new ones take hold with the next new chat
+    expect(await texts(prompted, 'Two', true, { instructions: 'Use bright colours' })).toEqual([
+      { type: 'text', text: 'You said: Two. I was told how BrickBench works. I was asked: Use bright colours. Session 2.' },
+    ]);
   });
 
   it('builds through BrickBench’s MCP server, allowed its tools and refused anything else', async () => {

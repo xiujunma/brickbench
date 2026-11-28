@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'bun:test';
 import type { AgentEvent } from '../src/agent/protocol';
-import type { ChatRunner } from './chat';
+import type { ChatRunner, RequestExtra } from './chat';
 import { createChooser, type AgentEntry } from './chooser';
 
 /** A runner that says who it is, works until finished, and keeps whether it was closed. */
 function scripted(name: string) {
   let emit: ((event: AgentEvent) => void) | null = null;
-  const state = { closed: 0 };
+  const state: { closed: number; extras: (RequestExtra | undefined)[] } = { closed: 0, extras: [] };
   const runner: ChatRunner = {
     status: () => ({ available: true, name }),
     get running() {
       return emit !== null;
     },
-    start: (_prompt, _fresh, onEvent) => {
+    start: (_prompt, _fresh, onEvent, extra) => {
+      state.extras.push(extra);
       emit = onEvent;
       onEvent({ type: 'started' });
     },
@@ -61,7 +62,8 @@ describe('choosing the chat’s agent', () => {
       remember: async (id) => void remembered.push(id),
     });
     const events: AgentEvent[] = [];
-    chooser.runner.start('Build', true, (event) => void events.push(event));
+    chooser.runner.start('Build', true, (event) => void events.push(event), { instructions: 'Use pastel colours' });
+    expect(claude.state.extras).toEqual([{ instructions: 'Use pastel colours' }]);
     expect(chooser.runner.running).toBe(true);
     expect(await chooser.choose('codex')).toBe(false);
     claude.finish();

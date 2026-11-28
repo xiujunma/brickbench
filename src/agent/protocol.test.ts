@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'bun:test';
-import { agentEventSchema, appMessageSchema, clampEvent, parseMessage, parseToolInput, bridgeMessageSchema, toolOutcomeSchema } from './protocol';
+import {
+  agentEventSchema,
+  appMessageSchema,
+  bridgeMessageSchema,
+  clampEvent,
+  MAX_CONTEXT_LENGTH,
+  MAX_INSTRUCTIONS_LENGTH,
+  parseMessage,
+  parseToolInput,
+  toolOutcomeSchema,
+} from './protocol';
 
 describe('agent events', () => {
   it('are cut to what the app accepts, so none is dropped', () => {
@@ -41,6 +51,26 @@ describe('messages and tool input', () => {
     expect(toolOutcomeSchema.safeParse({ ok: false, error: 'No.' }).success).toBe(true);
     expect(toolOutcomeSchema.safeParse({ ok: false }).success).toBe(false);
     expect(toolOutcomeSchema.safeParse({ ok: true, data: 1, image: { data: 'AAAA', mimeType: 'image/gif' } }).success).toBe(false);
+  });
+
+  it('takes what goes with a chat request, within what the bridge reads', () => {
+    const chat = (extra: object) => JSON.stringify({ kind: 'chat', prompt: 'Paint these', fresh: true, ...extra });
+    expect(parseMessage(appMessageSchema, chat({ context: 'The user has 2 bricks selected', instructions: 'Use pastel colours' }))).toEqual({
+      kind: 'chat',
+      prompt: 'Paint these',
+      fresh: true,
+      context: 'The user has 2 bricks selected',
+      instructions: 'Use pastel colours',
+    });
+    expect(parseMessage(appMessageSchema, chat({}))).toEqual({ kind: 'chat', prompt: 'Paint these', fresh: true });
+    expect(parseMessage(appMessageSchema, chat({ context: 'x'.repeat(MAX_CONTEXT_LENGTH) }))).not.toBeNull();
+    expect(parseMessage(appMessageSchema, chat({ context: 'x'.repeat(MAX_CONTEXT_LENGTH + 1) }))).toBeNull();
+    expect(parseMessage(appMessageSchema, chat({ instructions: 'x'.repeat(MAX_INSTRUCTIONS_LENGTH + 1) }))).toBeNull();
+  });
+
+  it('looks from where the user looks when asked to', () => {
+    expect(parseToolInput('look', { view: 'user' })).toMatchObject({ ok: true, value: { view: 'user' } });
+    expect(parseToolInput('look', { view: 'below' })).toMatchObject({ ok: false });
   });
 
   it('fills in defaults and explains bad input', () => {

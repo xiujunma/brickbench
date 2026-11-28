@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentEvent } from '../src/agent/protocol';
 import { waitFor } from '../src/testing/helpers';
-import type { ChatRunner } from './chat';
-import { claudeArgs, createClaudeRunner, type ClaudeRunnerOptions } from './claudeRunner';
+import type { ChatRunner, RequestExtra } from './chat';
+import { claudeArgs, createClaudeRunner, PROMPT_FILE, writePromptFile, type ClaudeRunnerOptions } from './claudeRunner';
+import { CHAT_PROMPT, withOwnInstructions } from './guide';
 
 const FAKE_CLAUDE = join(import.meta.dir, 'fixtures', 'fakeClaude.ts');
 
@@ -20,13 +21,18 @@ function fakeRunner(mode: string, extra: Partial<ClaudeRunnerOptions> = {}): Cha
 }
 
 /** Runs one request to the end. */
-function ask(runner: ChatRunner, prompt: string, fresh: boolean): Promise<AgentEvent[]> {
+function ask(runner: ChatRunner, prompt: string, fresh: boolean, extra?: RequestExtra): Promise<AgentEvent[]> {
   return new Promise((resolve) => {
     const events: AgentEvent[] = [];
-    runner.start(prompt, fresh, (event) => {
-      events.push(event);
-      if (event.type === 'done') resolve(events);
-    });
+    runner.start(
+      prompt,
+      fresh,
+      (event) => {
+        events.push(event);
+        if (event.type === 'done') resolve(events);
+      },
+      extra,
+    );
   });
 }
 
@@ -57,6 +63,29 @@ describe('running Claude Code for the chat', () => {
 
   it('hands over the prompt as text, even one that looks like a flag', async () => {
     expect(replyOf(await ask(fakeRunner('echo'), '--help', true))).toBe('You said: --help');
+  });
+
+  it('tells Claude Code the user’s own instructions after BrickBench’s, on each request, in a file only the user can read', async () => {
+    const workDir = mkdtempSync(join(tmpdir(), 'brickbench-agent-test-'));
+    const runner = fakeRunner('args', { workDir });
+    const fileOf = (args: string[]): string | undefined => args[args.indexOf('--append-system-prompt-file') + 1];
+    const first = JSON.parse(replyOf(await ask(runner, 'one', true, { instructions: 'Use pastel colours' }))) as string[];
+    const file = fileOf(first) ?? '';
+    expect(file).toBe(join(workDir, PROMPT_FILE));
+    expect(readFileSync(file, 'utf8')).toBe(withOwnInstructions(CHAT_PROMPT, 'Use pastel colours'));
+    expect(JSON.stringify(first)).not.toContain('pastel');
+    if (process.platform !== 'win32') expect(statSync(file).mode & 0o777).toBe(0o600);
+    // changed or gone the next time, even in the same conversation
+    const second = JSON.parse(replyOf(await ask(runner, 'two', false))) as string[];
+    expect(fileOf(second)).toBe(file);
+    expect(readFileSync(file, 'utf8')).toBe(CHAT_PROMPT);
+  });
+
+  it('says so when it cannot write what Claude Code is told', async () => {
+    const runner = fakeRunner('echo', { workDir: join(tmpdir(), 'brickbench-no-such-folder', 'deeper') });
+    expect((await ask(runner, 'Build', true)).at(-1)).toMatchObject({ type: 'done', ok: false, error: expect.stringContaining('Could not start Claude Code') });
+    expect(runner.running).toBe(false);
+    expect(writePromptFile(mkdtempSync(join(tmpdir(), 'brickbench-agent-test-')), undefined)).toEndWith(PROMPT_FILE);
   });
 
   it('continues the conversation until a fresh one is asked for', async () => {
@@ -114,7 +143,7 @@ describe('running Claude Code for the chat', () => {
 
 describe('the Claude Code command line', () => {
   it('allows the BrickBench tools and nothing else, with the user’s login', () => {
-    const args = claudeArgs({ command: ['claude'], mcpConfig: '/tmp/work/brickbench-mcp.json', workDir: '/tmp/work', model: 'opus', maxBudgetUsd: 2 }, 'sess-9');
+    const args = claudeArgs({ command: ['claude'], mcpConfig: '/tmp/work/brickbench-mcp.json', workDir: '/tmp/work', model: 'opus', maxBudgetUsd: 2 }, 'sess-9', '/tmp/work/brickbench-prompt.md');
     const after = (flag: string): string | undefined => args[args.indexOf(flag) + 1];
     expect(args).toContain('-p');
     expect(args).toContain('--restricted');
@@ -125,6 +154,9 @@ describe('the Claude Code command line', () => {
     expect(after('--mcp-config')).toBe('/tmp/work/brickbench-mcp.json');
     expect(after('--allowedTools')).toBe('mcp__brickbench');
     expect(after('--permission-prompts')).toBe('none');
+    // BrickBench's instructions and the user's own, in a file rather than the arguments
+    expect(after('--append-system-prompt-file')).toBe('/tmp/work/brickbench-prompt.md');
+    expect(args).not.toContain('--append-system-prompt');
     expect(after('--output-format')).toBe('stream-json');
     expect(after('--model')).toBe('opus');
     expect(after('--max-budget-usd')).toBe('2');

@@ -71,17 +71,36 @@ describe('talking to the agent', () => {
 
   it('asks the agent to stop, and ignores empty requests', () => {
     const { chat, sent, state } = setup();
-    chat.ask('   ');
+    expect(chat.ask('   ')).toBe(false);
     expect(sent).toEqual([]);
-    chat.ask('Build');
+    expect(chat.ask('Build')).toBe(true);
+    // one at a time
+    expect(chat.ask('And more')).toBe(false);
     chat.stop();
     expect(sent.at(-1)).toEqual({ kind: 'stop' });
     expect(state().running).toBe(true);
   });
 
+  it('sends what goes with a request, and notes it under the user’s words', () => {
+    const { chat, sent, state } = setup();
+    chat.ask('Paint these blue', { context: 'The user has 2 bricks selected', instructions: '  Use pastel colours ', note: 'With 2 selected bricks.' });
+    expect(sent).toEqual([{ kind: 'chat', prompt: 'Paint these blue', fresh: true, context: 'The user has 2 bricks selected', instructions: 'Use pastel colours' }]);
+    expect(state().entries.map((entry) => [entry.kind, entry.text])).toEqual([
+      ['user', 'Paint these blue'],
+      ['note', 'With 2 selected bricks.'],
+    ]);
+  });
+
+  it('leaves out what is empty', () => {
+    const { chat, sent, state } = setup();
+    chat.ask('Build', { context: null, instructions: '   ', note: null });
+    expect(sent).toEqual([{ kind: 'chat', prompt: 'Build', fresh: true }]);
+    expect(state().entries.map((entry) => entry.kind)).toEqual(['user']);
+  });
+
   it('says so when the bridge is not there yet', () => {
     const { chat, state } = setup(false);
-    chat.ask('Build a tower');
+    expect(chat.ask('Build a tower')).toBe(false);
     expect(state().running).toBe(false);
     expect(state().entries.at(-1)).toMatchObject({ kind: 'error', text: BRIDGE_NOT_RUNNING });
   });

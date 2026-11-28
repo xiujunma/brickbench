@@ -23,6 +23,7 @@ export function summarizeTool(tool: string, input: unknown): string {
     case 'set_model_name':
       return `Naming the model “${words(value['name'])}”`;
     case 'look':
+      if (value['view'] === 'user') return 'Looking at the model from your view';
       return typeof value['view'] === 'string' && value['view'] !== 'iso' ? `Looking at the model from the ${value['view']}` : 'Looking at the model';
     case 'undo':
       return typeof value['steps'] === 'number' && value['steps'] > 1 ? `Undoing ${value['steps']} steps` : 'Undoing the last step';

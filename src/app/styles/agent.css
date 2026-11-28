@@ -163,6 +163,17 @@
   cursor: pointer;
 }
 
+/* The agent and the chat's settings, above the conversation: they scroll before they squeeze it. */
+.agent-options {
+  flex: 0 1 auto;
+  max-height: 45%;
+  min-height: 0;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
 /* Which agent answers, above the conversation. */
 .agent-picker {
   margin: 0 16px 10px;
@@ -196,6 +207,46 @@
 
 .agent-more strong {
   color: var(--ink);
+}
+
+/* The chat's own settings: the user's instructions and a cap on changes. */
+.agent-field {
+  display: block;
+  margin: 8px 0 4px;
+  color: var(--ink);
+}
+
+.agent-instructions {
+  min-height: 72px;
+}
+
+.agent-cap-row {
+  margin: 0 0 6px 24px;
+}
+
+.agent-cap {
+  width: 64px;
+  height: 28px;
+  margin: 0 4px;
+  vertical-align: middle;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--dur-fast) ease;
+}
+
+.agent-cap:hover {
+  border-color: var(--line-strong);
+}
+
+.agent-cap:focus-visible {
+  border-color: var(--line-strong);
+  box-shadow: var(--focus-ring);
+  outline: none;
 }
 
 /* The conversation: requests as bubbles, replies as prose, actions as a build log. */
@@ -365,6 +416,19 @@
 .chat-input:disabled {
   background: var(--surface-sunken);
   color: var(--ink-3);
+}
+
+/* What goes with a message, under it. */
+.chat-attach {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  font-size: var(--text-xs);
+}
+
+.chat-attach .agent-check {
+  margin: 0;
+  color: var(--ink-2);
 }
 
 .chat-actions {

@@ -1,7 +1,8 @@
 import { useEffect, type ReactNode } from 'react';
 import { agentStorage, forgetAgent } from '../../../agent/connection';
 import type { AgentLink } from '../../../agent/link';
-import { agentChat, agentLink } from '../../../app/agent';
+import { agentChat, agentLink, askAgent } from '../../../app/agent';
+import { AttachToggles, ChatSettings } from './AgentExtras';
 import { Icon } from '../../components/Icon';
 import { Composer } from './Composer';
 import { Transcript } from './Transcript';
@@ -62,7 +63,7 @@ function Welcome({ disabled }: { readonly disabled: boolean }) {
       <p>Ask the agent to build in your model. You see every brick as it goes in, and you can undo anything it does.</p>
       <div className="agent-suggestions">
         {SUGGESTIONS.map((suggestion) => (
-          <button key={suggestion} type="button" className="chip" disabled={disabled} onClick={() => agentChat.ask(suggestion)}>
+          <button key={suggestion} type="button" className="chip" disabled={disabled} onClick={() => askAgent(suggestion)}>
             {suggestion}
           </button>
         ))}
@@ -217,8 +218,13 @@ function AgentChat({ link, onClose }: Props & { readonly link: AgentLink }) {
   return (
     <PanelShell onClose={onClose} actions={newChat}>
       <StatusLine link={link} />
-      {status === 'connected' && <AgentPicker link={link} />}
-      {status === 'connected' && <TerminalAgents link={link} />}
+      {status === 'connected' && (
+        <div className="agent-options">
+          <AgentPicker link={link} />
+          <ChatSettings />
+          <TerminalAgents link={link} />
+        </div>
+      )}
       {status === 'unreachable' && <BridgeHelp />}
       {status === 'connected' && agent && !agent.available && (
         <div className="agent-help">
@@ -227,7 +233,7 @@ function AgentChat({ link, onClose }: Props & { readonly link: AgentLink }) {
         </div>
       )}
       {entries.length === 0 && !running ? <Welcome disabled={!ready} /> : <Transcript entries={entries} running={running} />}
-      <Composer disabled={!ready} running={running} onAsk={(prompt) => agentChat.ask(prompt)} onStop={() => agentChat.stop()} />
+      <Composer disabled={!ready} running={running} onAsk={(prompt) => askAgent(prompt)} onStop={() => agentChat.stop()} attachments={<AttachToggles />} />
     </PanelShell>
   );
 }

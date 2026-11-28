@@ -55,7 +55,7 @@ export async function createChooser(options: ChooserOptions): Promise<Chooser> {
     get running() {
       return current.running;
     },
-    start: (prompt, fresh, onEvent) => current.start(prompt, fresh, onEvent),
+    start: (prompt, fresh, onEvent, extra) => current.start(prompt, fresh, onEvent, extra),
     stop: () => current.stop(),
     close: () => current.close?.(),
   };

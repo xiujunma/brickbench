@@ -9,14 +9,14 @@ import { waitFor } from '../src/testing/helpers';
 import { CONNECTION_FILE, createAccess, newToken, readConnection, type Access } from './access';
 import { createAppLink, type AppLink } from './appLink';
 import { createBridgeHandlers, type BridgeAccess, type BridgeHandlers, type TabSocket } from './bridge';
-import { unavailableRunner, type ChatRunner } from './chat';
+import { unavailableRunner, type ChatRunner, type RequestExtra } from './chat';
 import { createChooser } from './chooser';
 import { serveWithNode, type NodeServer } from './nodeServer';
 
 const COMMAND = 'claude mcp add brickbench -e ELECTRON_RUN_AS_NODE=1 -- /app/BrickBench /agent/mcp.cjs';
 
 function scriptedRunner() {
-  const requests: { prompt: string; fresh: boolean }[] = [];
+  const requests: { prompt: string; fresh: boolean; extra?: RequestExtra }[] = [];
   let emit: ((event: AgentEvent) => void) | null = null;
   let stops = 0;
   const runner: ChatRunner = {
@@ -24,8 +24,8 @@ function scriptedRunner() {
     get running() {
       return emit !== null;
     },
-    start(prompt, fresh, onEvent) {
-      requests.push({ prompt, fresh });
+    start(prompt, fresh, onEvent, extra) {
+      requests.push({ prompt, fresh, ...(extra === undefined ? {} : { extra }) });
       emit = onEvent;
       onEvent({ type: 'started' });
     },
@@ -230,6 +230,17 @@ describe('the agent bridge', () => {
     // junk is ignored
     window.raw('not json');
     window.raw(JSON.stringify({ kind: 'active' }));
+    window.close();
+  });
+
+  it('gives the agent what went with the words after them, and the user’s own instructions', () => {
+    const script = scriptedRunner();
+    const window = openWindow(createBridgeHandlers(script.runner, { access: NOBODY }));
+    window.send({ kind: 'chat', prompt: 'Paint these blue', fresh: true, context: 'The user has 2 bricks selected', instructions: 'Use pastel colours' });
+    expect(script.requests).toEqual([{ prompt: 'Paint these blue\n\nThe user has 2 bricks selected', fresh: true, extra: { instructions: 'Use pastel colours' } }]);
+    script.finish('Done.');
+    window.send({ kind: 'chat', prompt: 'Thanks', fresh: false });
+    expect(script.requests.at(-1)).toStrictEqual({ prompt: 'Thanks', fresh: false });
     window.close();
   });
 

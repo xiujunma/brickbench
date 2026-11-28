@@ -5,7 +5,9 @@
  * what it does: echo (default), fail, old (an outdated CLI), hang, stubborn
  * (hangs and ignores SIGTERM), args, early (exits before reading the prompt),
  * split (sends a character in two pieces), or build, which really places
- * bricks through the MCP server named in --mcp-config.
+ * bricks through the MCP server named in --mcp-config; or, given selected
+ * bricks, paints them blue, looking from the user's view first when it came
+ * along. Build says back the user's own instructions.
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -29,7 +31,8 @@ if (mode === 'early') {
 }
 const prompt = (await new Response(Bun.stdin.stream()).text()).trim();
 
-async function build(): Promise<string> {
+/** BrickBench's MCP server, as --mcp-config names it. */
+async function connect(): Promise<Client> {
   // --mcp-config takes a file or JSON, as Claude Code's does; the bridge hands a file, with its token in a header
   const given = valueOf('--mcp-config') ?? '{}';
   const text = given.trimStart().startsWith('{') ? given : await Bun.file(given).text();
@@ -38,18 +41,50 @@ async function build(): Promise<string> {
   if (!server?.url) throw new Error('no brickbench MCP server in --mcp-config');
   const client = new Client({ name: 'fake-claude', version: '1.0.0' });
   await client.connect(new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers: server.headers ?? {} } }));
+  return client;
+}
+
+/** The ids of the bricks the user selected, from the lines that list them after the request's words. */
+const selectedIds = (): string[] =>
+  prompt
+    .split('\n')
+    .filter((line) => line.startsWith('{"id"'))
+    .map((line) => (JSON.parse(line) as { id: string }).id);
+
+/** What the user's own instructions said, after BrickBench's, in the file the runner hands over. */
+async function ownInstructions(): Promise<string | undefined> {
+  const file = valueOf('--append-system-prompt-file');
+  const told = file ? await Bun.file(file).text() : '';
+  return told.split("The user's own instructions for this chat:\n")[1];
+}
+
+/** Calls one of BrickBench's tools, telling of the call and its result as Claude Code does; says whether it failed. */
+async function use(client: Client, id: string, tool: string, input: Record<string, unknown>): Promise<boolean> {
+  say({ type: 'assistant', session_id: session, message: { content: [{ type: 'tool_use', id, name: `mcp__brickbench__${tool}`, input }] } });
+  const result = await client.callTool({ name: tool, arguments: input });
+  const failed = result.isError === true;
+  say({ type: 'user', session_id: session, message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: failed, content: result.content }] } });
+  return failed;
+}
+
+async function paint(ids: readonly string[]): Promise<string> {
+  const client = await connect();
+  // the user sent their view: see the bricks as they do first
+  if (prompt.includes('call look with view "user"')) await use(client, 't0', 'look', { view: 'user', highlight: ids });
+  const failed = await use(client, 't1', 'paint_bricks', { ids, color: 'Blue' });
+  await client.close();
+  return failed ? 'The bricks could not be painted.' : `Painted the ${ids.length} selected bricks blue.`;
+}
+
+async function build(): Promise<string> {
+  const client = await connect();
   // two calls, as a real agent makes: the user still undoes the whole request in one step
   const layers = [
     { bricks: [{ part: 'brick-2x4', color: 'Yellow', x: 0, y: 0, z: 0 }, { part: 'brick-2x4', color: 'Yellow', x: 0, y: 3, z: 0 }] },
     { bricks: [{ part: 'brick-2x4', color: 'Yellow', x: 0, y: 6, z: 0 }] },
   ];
   let failed = false;
-  for (const [i, input] of layers.entries()) {
-    say({ type: 'assistant', session_id: session, message: { content: [{ type: 'tool_use', id: `t${i}`, name: 'mcp__brickbench__place_bricks', input }] } });
-    const result = await client.callTool({ name: 'place_bricks', arguments: input });
-    failed ||= result.isError === true;
-    say({ type: 'user', session_id: session, message: { content: [{ type: 'tool_result', tool_use_id: `t${i}`, is_error: result.isError === true, content: result.content }] } });
-  }
+  for (const [i, input] of layers.entries()) failed = (await use(client, `t${i}`, 'place_bricks', input)) || failed;
   await client.close();
   // markdown, as real agents reply
   return failed ? 'The tower could not be built.' : 'Built a **yellow** tower of 3 bricks:\n\n- 3 × `brick-2x4`, stacked';
@@ -76,6 +111,13 @@ if (mode === 'split') {
   say({ type: 'result', subtype: 'success', is_error: false, result: 'Built', session_id: session, num_turns: 1, total_cost_usd: 0 });
   process.exit(0);
 }
-const reply = mode === 'args' ? JSON.stringify(args) : mode === 'build' ? await build() : `You said: ${prompt}`;
+async function work(): Promise<string> {
+  const ids = selectedIds();
+  const done = ids.length > 0 ? await paint(ids) : await build();
+  const own = await ownInstructions();
+  return own ? `${done}\n\nYou asked me to: ${own}` : done;
+}
+
+const reply = mode === 'args' ? JSON.stringify(args) : mode === 'build' ? await work() : `You said: ${prompt}`;
 say({ type: 'assistant', session_id: session, message: { content: [{ type: 'text', text: reply }] } });
 say({ type: 'result', subtype: 'success', is_error: false, result: reply, session_id: session, num_turns: 1, total_cost_usd: 0 });

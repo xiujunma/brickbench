@@ -40,7 +40,7 @@ export const TOOL_DESCRIPTIONS: Readonly<Record<ToolName, string>> = {
     'Move bricks named by id or reached by a region by dx and dz studs and dy plates. If any would overlap another brick or leave the build area, nothing moves.',
   clear_model: 'Remove every brick, for a fresh start. Only when the user asks for one; they can undo it.',
   set_model_name: 'Rename the model.',
-  look: 'Render a picture of the model: iso (front right, from above), front (from +z), back, left, right or top. highlight outlines bricks by id, such as those you just placed.',
+  look: 'Render a picture of the model: iso (front right, from above), front (from +z), back, left, right, top, or user (from where the user is looking). highlight outlines bricks by id, such as those you just placed.',
   undo: 'Undo the latest changes to the model, the user\'s as well as yours: one step per change.',
 };
 
@@ -52,3 +52,12 @@ export const CHAT_PROMPT = `You are building in BrickBench, a LEGO-style brick b
 
 /** Everything a model behind an API is told, which MCP clients such as Claude Code get as server instructions. */
 export const API_INSTRUCTIONS = `${SERVER_INSTRUCTIONS}\n\n${CHAT_PROMPT}`;
+
+/** The most of the user's own instructions an agent is given. */
+export const MAX_OWN_INSTRUCTIONS = 4000;
+
+/** An agent's instructions, with the user's own for the chat after them when they gave some. */
+export function withOwnInstructions(instructions: string, own: string | undefined): string {
+  const given = own?.trim().slice(0, MAX_OWN_INSTRUCTIONS) ?? '';
+  return given ? `${instructions}\n\nThe user's own instructions for this chat:\n${given}` : instructions;
+}

@@ -6,7 +6,7 @@
  */
 import type { AgentEvent, ToolOutcome } from '../../src/agent/protocol';
 import type { AgentStatus, ChatRunner } from '../chat';
-import { API_INSTRUCTIONS } from '../guide';
+import { API_INSTRUCTIONS, withOwnInstructions } from '../guide';
 import { summarizeTool } from '../toolSummary';
 import { ApiError, postJson } from './http';
 import { argumentsOf, runCall, TOOL_SPECS, type ToolRunner } from './tools';
@@ -52,6 +52,8 @@ export interface ApiRunnerOptions {
 
 interface Run {
   readonly controller: AbortController;
+  /** What the model is told for this request: BrickBench's instructions, and the user's own. */
+  readonly instructions: string;
   stopped: boolean;
 }
 
@@ -103,7 +105,7 @@ export function createApiRunner(options: ApiRunnerOptions): ChatRunner {
     postJson({
       url: `${options.baseUrl}${format.path}`,
       apiKey: options.apiKey,
-      body: format.body(model, API_INSTRUCTIONS, conversation, TOOL_SPECS, { encryptedReasoning: asksReasoning }),
+      body: format.body(model, run.instructions, conversation, TOOL_SPECS, { encryptedReasoning: asksReasoning }),
       signal: run.controller.signal,
       timeoutMs: options.timeoutMs ?? REQUEST_TIMEOUT_MS,
       retryDelaysMs: options.retryDelaysMs ?? RETRY_DELAYS_MS,
@@ -227,12 +229,12 @@ export function createApiRunner(options: ApiRunnerOptions): ChatRunner {
     get running() {
       return current !== null;
     },
-    start(prompt, fresh, onEvent) {
+    start(prompt, fresh, onEvent, extra) {
       if (current) {
         onEvent({ type: 'done', ok: false, error: BUSY });
         return;
       }
-      const run: Run = { controller: new AbortController(), stopped: false };
+      const run: Run = { controller: new AbortController(), instructions: withOwnInstructions(API_INSTRUCTIONS, extra?.instructions), stopped: false };
       current = run;
       // earlier pictures go but the last (they are heavy, and out of date), all of them if the last request failed
       const earlier = fresh ? [] : format.settled(format.withoutPictures(conversation, dropPictures ? 0 : PICTURES_KEPT));

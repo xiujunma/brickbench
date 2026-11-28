@@ -134,6 +134,9 @@ async function prompt(params: Record<string, unknown>): Promise<object> {
   const blocks = (params['prompt'] as readonly Block[] | undefined) ?? [];
   const told = systemPrompt !== '' || blocks.length > 1;
   const asked = blocks.at(-1)?.text ?? '';
+  // the user's own instructions, after BrickBench's, wherever they came
+  const given = blocks.length > 1 ? (blocks[0]?.text ?? '') : systemPrompt;
+  const own = given.split("The user's own instructions for this chat:\n")[1];
   if (mode === 'crash') {
     process.stderr.write('The fake agent fell over.\n');
     process.exit(3);
@@ -185,7 +188,7 @@ async function prompt(params: Record<string, unknown>): Promise<object> {
     });
     return { stopReason: 'cancelled' };
   }
-  const reply = mode === 'build' ? await build() : `You said: ${asked}.${told ? ' I was told how BrickBench works.' : ''} Session ${sessions}.`;
+  const reply = mode === 'build' ? await build() : `You said: ${asked}.${told ? ' I was told how BrickBench works.' : ''}${own ? ` I was asked: ${own}.` : ''} Session ${sessions}.`;
   say(reply);
   return { stopReason: 'end_turn' };
 }

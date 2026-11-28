@@ -177,6 +177,58 @@ test('chats with a coding agent over ACP, chosen in the panel, which builds thro
   await expect(panel).toHaveCount(0);
 });
 
+// the model is empty again
+test('sends the selected bricks, the user’s view and their own instructions with a request, and holds the agent to their cap on changes', async () => {
+  await page.getByRole('button', { name: 'Agent', exact: true }).click();
+  const panel = page.getByRole('complementary', { name: 'Agent' });
+  await expect(panel.getByRole('status').first()).toHaveText(/Claude Code 0\.0\.0/);
+  await panel.getByText('Chat settings', { exact: true }).click();
+  const instructions = panel.getByRole('textbox', { name: 'Your instructions for the agent' });
+  await instructions.fill('Use pastel colours');
+  const limit = panel.getByRole('checkbox', { name: 'Limit changes per request' });
+  await limit.check();
+  const cap = panel.getByRole('spinbutton', { name: 'Most changes per request' });
+  await expect(cap).toHaveValue('24');
+  await cap.fill('1');
+  await cap.press('Enter');
+
+  // the tower takes two changes; the agent may make one
+  const prompt = panel.getByRole('textbox', { name: 'Ask the agent to build something' });
+  await prompt.fill('Build a yellow tower');
+  await prompt.press('Enter');
+  const log = panel.getByRole('log', { name: 'Conversation with the agent' });
+  await expect(log).toContainText('The tower could not be built.');
+  await expect(log).toContainText('You asked me to: Use pastel colours');
+  await expect(page.getByTestId('status-counts')).toHaveText('2 bricks');
+
+  // the user selects what it built and asks about "these", with their view
+  await limit.uncheck();
+  await expect(cap).toHaveCount(0);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press('Control+a');
+  await expect(panel.getByRole('checkbox', { name: 'Selected bricks (2)' })).toBeChecked();
+  const view = panel.getByRole('checkbox', { name: 'My view' });
+  await view.check();
+  await prompt.fill('Paint these blue');
+  await prompt.press('Enter');
+  await expect(log).toContainText('With 2 selected bricks and your view.');
+  await expect(log).toContainText('Looking at the model from your view');
+  await expect(log).toContainText('Painting bricks Blue');
+  await expect(log).toContainText('Painted the 2 selected bricks blue.');
+
+  // each request is a step to undo: the paint, then the tower
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByTestId('status-counts')).toHaveText('2 bricks · 2 selected');
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByTestId('status-counts')).toHaveText('0 bricks');
+
+  // the settings as they started, for what follows
+  await view.uncheck();
+  await instructions.fill('');
+  await panel.getByRole('button', { name: 'Close the agent' }).click();
+  await expect(panel).toHaveCount(0);
+});
+
 test('opens a model file handed over by the desktop, as Finder does', async () => {
   const path = join(folder, 'wall.ldr');
   await writeFile(path, WALL);

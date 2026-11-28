@@ -6,7 +6,8 @@ import { createFinder } from '../core/parts/finder/finder';
 import { TOO_COSTLY_MESSAGE } from '../core/parts/pattern';
 import { createEditorStore } from '../state/store';
 import type { OwnedList } from '../core/inventory/stock';
-import { runTool, type AgentHost, type LookRequest } from './execute';
+import { NO_USER_VIEW_NOTE, runTool, type AgentHost, type LookRequest } from './execute';
+import { VIEW_DIRECTIONS } from './views';
 import { NO_LISTS_NOTE } from './owned';
 
 function setup(overrides: Partial<AgentHost> = {}) {
@@ -144,9 +145,35 @@ describe('running agent tools', () => {
       data: { view: 'front', brick_count: 2, highlighted: 1 },
       image: { data: 'aGVsbG8=', mimeType: 'image/jpeg' },
     });
-    expect(looks[0]?.view).toBe('front');
+    expect(looks[0]?.direction).toEqual(VIEW_DIRECTIONS.front);
     expect(looks[0]?.highlight.map((b) => b.id)).toEqual(ids.slice(0, 1));
     expect(looks[0]?.bricks).toHaveLength(2);
+  });
+
+  it('looks from where the user looks when asked, or as iso, saying why, without their view to go by', async () => {
+    const turned = { x: 0.5, y: -0.5, z: -0.7 };
+    const withCamera = setup({ userView: () => turned });
+    await runTool(withCamera.host, 'place_bricks', placeTwo);
+    const seen = await runTool(withCamera.host, 'look', { view: 'user' });
+    expect(seen).toMatchObject({ ok: true, data: { view: 'user', brick_count: 2 } });
+    expect(seen.ok && (seen.data as Record<string, unknown>)['note']).toBeUndefined();
+    expect(withCamera.looks[0]?.direction).toEqual(turned);
+    for (const without of [setup(), setup({ userView: () => null })]) {
+      await runTool(without.host, 'place_bricks', placeTwo);
+      expect(await runTool(without.host, 'look', { view: 'user' })).toMatchObject({ ok: true, data: { view: 'iso', note: NO_USER_VIEW_NOTE } });
+      expect(without.looks[0]?.direction).toEqual(VIEW_DIRECTIONS.iso);
+    }
+    // the fixed views never ask where the user looks
+    let asked = 0;
+    const fixed = setup({
+      userView: () => {
+        asked += 1;
+        return turned;
+      },
+    });
+    await runTool(fixed.host, 'place_bricks', placeTwo);
+    await runTool(fixed.host, 'look', { view: 'front' });
+    expect(asked).toBe(0);
   });
 
   it('says when there is nothing to look at, and when the picture fails', async () => {

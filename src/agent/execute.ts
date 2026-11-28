@@ -6,6 +6,7 @@
 import type { StoreApi } from 'zustand/vanilla';
 import { canUndo } from '../core/history';
 import type { OwnedList } from '../core/inventory/stock';
+import type { Vec3 } from '../core/grid';
 import type { SceneSettings } from '../core/io/modelFile';
 import { isLDrawPartId } from '../core/ldraw/catalogIndex';
 import type { IdFactory } from '../core/model/ids';
@@ -19,13 +20,15 @@ import type { EditorState } from '../state/types';
 import { BuildError, clearModel, describeModel, moveBricks, paintBricks, placeBricks, removeBricks, type Change } from './build';
 import { paletteList, resolveColour, searchParts } from './catalog';
 import { NO_LISTS_NOTE, overOwned, ownedColours, ownedLots, ownedPartIds, tally } from './owned';
-import { isToolName, parseToolInput, type ToolInput, type ToolName, type ToolOutcome, type View } from './protocol';
+import { isToolName, parseToolInput, type ToolInput, type ToolName, type ToolOutcome } from './protocol';
+import { directionFor } from './views';
 
 export interface LookRequest {
   readonly bricks: readonly Brick[];
   /** Bricks to outline, e.g. the ones the agent just placed. */
   readonly highlight: readonly Brick[];
-  readonly view: View;
+  /** Which way the camera looks. */
+  readonly direction: Vec3;
   readonly settings: SceneSettings;
 }
 
@@ -41,12 +44,15 @@ export interface AgentHost {
   readonly look: (request: LookRequest) => Promise<{ readonly data: string; readonly mimeType: 'image/jpeg' | 'image/png' }>;
   /** The parts lists of the sets the user owns; none when left out. */
   readonly ownedLists?: () => readonly OwnedList[];
+  /** Which way the user's camera looks, for the look tool's "user" view; none without one. */
+  readonly userView?: () => Vec3 | null;
 }
 
 type Handler<T extends ToolName> = (host: AgentHost, input: ToolInput<T>) => Promise<ToolOutcome> | ToolOutcome;
 
 const LIBRARY_NOTE = 'Only the basic parts were searched: the LDraw library is not available.';
 const EMPTY_NOTE = 'The model is empty: there is nothing to see yet.';
+export const NO_USER_VIEW_NOTE = 'The user has not shared their view, so this is the iso view.';
 
 const modelOf = (host: AgentHost): Model => host.store.getState().history.present;
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -72,9 +78,12 @@ async function lookAt(host: AgentHost, input: ToolInput<'look'>): Promise<ToolOu
   if (bricks.length === 0) return { ok: true, data: { view: input.view, brick_count: 0, note: EMPTY_NOTE } };
   const wanted = new Set(input.highlight);
   const highlight = bricks.filter((b) => wanted.has(b.id));
+  const user = input.view === 'user' ? (host.userView?.() ?? null) : null;
+  // asked for the user's view without one to go by: iso, and why
+  const shown = input.view === 'user' && user === null ? { view: 'iso', note: NO_USER_VIEW_NOTE } : { view: input.view };
   try {
-    const image = await host.look({ bricks, highlight, view: input.view, settings: host.store.getState().settings });
-    return { ok: true, data: { view: input.view, brick_count: bricks.length, highlighted: highlight.length }, image };
+    const image = await host.look({ bricks, highlight, direction: directionFor(input.view, user), settings: host.store.getState().settings });
+    return { ok: true, data: { ...shown, brick_count: bricks.length, highlighted: highlight.length }, image };
   } catch (error: unknown) {
     return { ok: false, error: `BrickBench could not draw the model: ${messageOf(error)}` };
   }

@@ -21,7 +21,8 @@ export interface ChatState {
 export const EMPTY_CHAT: ChatState = { entries: [], running: false, started: false, nextId: 1 };
 
 export type ChatAction =
-  | { readonly type: 'ask'; readonly text: string }
+  /** `note` says what went with the words, such as the selected bricks. */
+  | { readonly type: 'ask'; readonly text: string; readonly note?: string | null }
   /** A request that never reached the agent. */
   | { readonly type: 'undelivered'; readonly text: string; readonly reason: string }
   | { readonly type: 'event'; readonly event: AgentEvent }
@@ -65,8 +66,11 @@ function onEvent(state: ChatState, event: AgentEvent): ChatState {
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
-    case 'ask':
-      return state.running ? state : { ...append(state, 'user', action.text), running: true, started: true };
+    case 'ask': {
+      if (state.running) return state;
+      const asked = append(state, 'user', action.text);
+      return { ...(action.note ? append(asked, 'note', action.note) : asked), running: true, started: true };
+    }
     case 'undelivered':
       return { ...append(append(state, 'user', action.text), 'error', action.reason), running: false };
     case 'event':
@@ -76,9 +80,20 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   }
 }
 
+/** What goes with a request besides its words. */
+export interface AskExtra {
+  /** For the agent, after the words: the selected bricks, the user's view. */
+  readonly context?: string | null;
+  /** The user's own instructions for the agent. */
+  readonly instructions?: string;
+  /** For the chat, under the words. */
+  readonly note?: string | null;
+}
+
 export interface AgentChat {
   readonly store: StoreApi<ChatState>;
-  ask(prompt: string): void;
+  /** Sends a request, with what goes with it: the agent reads the context after the words; the chat shows the note. Says whether it went. */
+  ask(prompt: string, extra?: AskExtra): boolean;
   receive(event: AgentEvent): void;
   stop(): void;
   newConversation(): void;
@@ -104,14 +119,25 @@ export function createAgentChat(deps: AgentChatDeps): AgentChat {
   };
   return {
     store,
-    ask(prompt) {
+    ask(prompt, extra = {}) {
       const text = prompt.trim();
       const state = store.getState();
-      if (text === '' || state.running) return;
-      if (deps.send({ kind: 'chat', prompt: text, fresh: !state.started })) {
-        dispatch({ type: 'ask', text });
-        deps.onRunStart?.();
-      } else dispatch({ type: 'undelivered', text, reason: BRIDGE_NOT_RUNNING });
+      if (text === '' || state.running) return false;
+      const instructions = extra.instructions?.trim();
+      const message: AppMessage = {
+        kind: 'chat',
+        prompt: text,
+        fresh: !state.started,
+        ...(extra.context ? { context: extra.context } : {}),
+        ...(instructions ? { instructions } : {}),
+      };
+      if (!deps.send(message)) {
+        dispatch({ type: 'undelivered', text, reason: BRIDGE_NOT_RUNNING });
+        return false;
+      }
+      dispatch({ type: 'ask', text, note: extra.note ?? null });
+      deps.onRunStart?.();
+      return true;
     },
     receive,
     connectionLost() {

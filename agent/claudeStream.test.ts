@@ -59,6 +59,7 @@ describe('describing tool calls', () => {
     expect(toolSummary('mcp__brickbench__paint_bricks', { color: 'Red' })).toBe('Painting bricks Red');
     expect(toolSummary('mcp__brickbench__set_model_name', { name: 'Hut' })).toBe('Naming the model “Hut”');
     expect(toolSummary('mcp__brickbench__look', {})).toBe('Looking at the model');
+    expect(toolSummary('mcp__brickbench__look', { view: 'user' })).toBe('Looking at the model from your view');
     expect(toolSummary('mcp__brickbench__get_model', {})).toBe('Reading the model');
     expect(toolSummary('mcp__brickbench__move_bricks', {})).toBe('Moving bricks');
     expect(toolSummary('mcp__brickbench__remove_bricks', {})).toBe('Removing bricks');

@@ -5,12 +5,13 @@
  * processes start it, so this runs in Bun and in the desktop app alike.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentEvent } from '../src/agent/protocol';
 import type { AgentStatus, ChatRunner } from './chat';
 import { createStreamReader, type StreamReader } from './claudeStream';
-import { CHAT_PROMPT } from './guide';
+import { CHAT_PROMPT, withOwnInstructions } from './guide';
 
 /** The tail of Claude Code's error output worth showing. */
 const MAX_STDERR = 4000;
@@ -39,6 +40,20 @@ export async function writeMcpConfig(folder: string, server: McpServerAccess): P
   return path;
 }
 
+export const PROMPT_FILE = 'brickbench-prompt.md';
+
+/**
+ * Writes what Claude Code is told for a request, BrickBench's instructions
+ * with the user's own after them, in a file only the user can read: the
+ * user's own may be personal, and arguments anyone on the computer can list.
+ * Returns its path.
+ */
+export function writePromptFile(folder: string, own: string | undefined): string {
+  const path = join(folder, PROMPT_FILE);
+  writeFileSync(path, withOwnInstructions(CHAT_PROMPT, own), { mode: 0o600 });
+  return path;
+}
+
 export interface ClaudeRunnerOptions {
   /** How to start Claude Code, e.g. ['/opt/homebrew/bin/claude']; tests pass a fake. */
   readonly command: readonly string[];
@@ -54,7 +69,8 @@ export interface ClaudeRunnerOptions {
   readonly killAfterMs?: number;
 }
 
-export function claudeArgs(options: ClaudeRunnerOptions, resume: string | null): string[] {
+/** Claude Code's arguments for one request: resuming a conversation if there is one, told what `promptFile` says (writePromptFile). */
+export function claudeArgs(options: ClaudeRunnerOptions, resume: string | null, promptFile: string): string[] {
   return [
     '-p',
     '--output-format',
@@ -71,8 +87,8 @@ export function claudeArgs(options: ClaudeRunnerOptions, resume: string | null):
     'mcp__brickbench',
     '--permission-prompts',
     'none',
-    '--append-system-prompt',
-    CHAT_PROMPT,
+    '--append-system-prompt-file',
+    promptFile,
     ...(options.model ? ['--model', options.model] : []),
     ...(options.maxBudgetUsd ? ['--max-budget-usd', String(options.maxBudgetUsd)] : []),
     ...(resume ? ['--resume', resume] : []),
@@ -163,7 +179,7 @@ export function createClaudeRunner(options: ClaudeRunnerOptions): ChatRunner {
     get running() {
       return current !== null;
     },
-    start(prompt, fresh, onEvent) {
+    start(prompt, fresh, onEvent, extra) {
       if (current) {
         onEvent({ type: 'done', ok: false, error: 'The agent is still working on the last request.' });
         return;
@@ -171,7 +187,7 @@ export function createClaudeRunner(options: ClaudeRunnerOptions): ChatRunner {
       if (fresh) sessionId = null;
       let run: Run;
       try {
-        run = launch(options, claudeArgs(options, sessionId));
+        run = launch(options, claudeArgs(options, sessionId, writePromptFile(options.workDir, extra?.instructions)));
       } catch (error: unknown) {
         onEvent({ type: 'done', ok: false, error: `Could not start Claude Code: ${error instanceof Error ? error.message : String(error)}` });
         return;

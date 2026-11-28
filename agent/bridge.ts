@@ -9,7 +9,7 @@
  */
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
-import { appMessageSchema, clampEvent, parseMessage, TOOL_NAMES, type AgentEvent, type BridgeMessage, type ToolName } from '../src/agent/protocol';
+import { appMessageSchema, clampEvent, parseMessage, TOOL_NAMES, type AgentEvent, type AppMessage, type BridgeMessage, type ToolName } from '../src/agent/protocol';
 import type { Access } from './access';
 import { createAppLink, type AppLink } from './appLink';
 import type { AgentStatus, ChatRunner } from './chat';
@@ -122,6 +122,9 @@ async function answerCall(link: AppLink, request: Request): Promise<Response> {
   return Response.json(await link.call(call.data.tool, call.data.input));
 }
 
+/** A request from the window's chat. */
+type ChatRequest = Extract<AppMessage, { kind: 'chat' }>;
+
 export function createBridgeHandlers(runner: ChatRunner, options: HandlerOptions): BridgeHandlers {
   const { access, link = createAppLink(), terminalCommand, chooser } = options;
   let chatting: TabSocket | null = null;
@@ -143,7 +146,10 @@ export function createBridgeHandlers(runner: ChatRunner, options: HandlerOptions
     }
   };
 
-  const startChat = (socket: TabSocket, prompt: string, fresh: boolean): void => {
+  const startChat = (socket: TabSocket, request: ChatRequest): void => {
+    const { fresh } = request;
+    // the agent reads the words, then what went with them
+    const prompt = request.context ? `${request.prompt}\n\n${request.context}` : request.prompt;
     if (runner.running) {
       tell(socket, { type: 'done', ok: false, error: BUSY });
       return;
@@ -152,13 +158,18 @@ export function createBridgeHandlers(runner: ChatRunner, options: HandlerOptions
     // the agent builds where the user is chatting
     link.receive(socket, { kind: 'active' });
     link.pin(socket);
-    runner.start(prompt, fresh, (event) => {
-      tell(socket, event);
-      if (event.type === 'done' && chatting === socket) {
-        chatting = null;
-        link.pin(null);
-      }
-    });
+    runner.start(
+      prompt,
+      fresh,
+      (event) => {
+        tell(socket, event);
+        if (event.type === 'done' && chatting === socket) {
+          chatting = null;
+          link.pin(null);
+        }
+      },
+      request.instructions ? { instructions: request.instructions } : undefined,
+    );
   };
 
   /** Lets agents in a terminal in or out, as the window asks, then tells it how things stand. */
@@ -190,7 +201,7 @@ export function createBridgeHandlers(runner: ChatRunner, options: HandlerOptions
   const onMessage = (socket: TabSocket, text: string): void => {
     const message = parseMessage(appMessageSchema, text);
     if (!message) return;
-    if (message.kind === 'chat') startChat(socket, message.prompt, message.fresh);
+    if (message.kind === 'chat') startChat(socket, message);
     else if (message.kind === 'stop') {
       if (chatting === socket) runner.stop();
     } else if (message.kind === 'terminal') void setTerminal(socket, message.open);

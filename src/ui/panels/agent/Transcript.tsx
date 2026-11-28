@@ -45,11 +45,16 @@ export function Transcript({ entries, running }: Props) {
   const log = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   const latest = entries.at(-1);
+  // the newest request, which a note of what went with it may follow
+  const lastAsked = entries.findLast((entry) => entry.kind === 'user')?.id;
+
+  // a new request always brings the conversation back to its end
+  useEffect(() => {
+    following.current = true;
+  }, [lastAsked]);
 
   useEffect(() => {
     const element = log.current;
-    // a new request always brings the conversation back to its end
-    if (latest?.kind === 'user') following.current = true;
     if (element && following.current) element.scrollTop = element.scrollHeight;
   }, [latest, running]);
 

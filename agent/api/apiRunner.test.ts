@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import type { AgentEvent, ToolName, ToolOutcome } from '../../src/agent/protocol';
 import { waitFor } from '../../src/testing/helpers';
-import type { ChatRunner } from '../chat';
-import { API_INSTRUCTIONS } from '../guide';
+import type { ChatRunner, RequestExtra } from '../chat';
+import { API_INSTRUCTIONS, withOwnInstructions } from '../guide';
 import { createApiRunner, visibleText, type ApiRunnerOptions } from './apiRunner';
 import { chatCompletions } from './chatCompletions';
 import { responsesApi } from './responses';
@@ -48,13 +48,18 @@ function runner(baseUrl: string, tools: Pick<ReturnType<typeof fakeTools>, 'run'
   return createApiRunner({ label: 'Test AI', baseUrl, model: 'test-1', format: chatCompletions, tools: tools.run, retryDelaysMs: [], ...extra });
 }
 
-function ask(chat: ChatRunner, prompt: string, fresh = false): Promise<AgentEvent[]> {
+function ask(chat: ChatRunner, prompt: string, fresh = false, extra?: RequestExtra): Promise<AgentEvent[]> {
   return new Promise((resolve) => {
     const events: AgentEvent[] = [];
-    chat.start(prompt, fresh, (event) => {
-      events.push(event);
-      if (event.type === 'done') resolve(events);
-    });
+    chat.start(
+      prompt,
+      fresh,
+      (event) => {
+        events.push(event);
+        if (event.type === 'done') resolve(events);
+      },
+      extra,
+    );
   });
 }
 
@@ -125,6 +130,21 @@ describe('a chat with a model behind an API', () => {
     expect(second).toContain(PICTURE_REMOVED);
     await ask(chat, 'third', true);
     expect(messagesOf(api.bodies[4]).map((message) => message['content'])).toEqual([API_INSTRUCTIONS, 'third']);
+  });
+
+  it('gives the model the user’s own instructions with its own, as they are for each request', async () => {
+    const api = fakeApi(say('One.'), say('Two.'), say('Three.'));
+    const chat = runner(api.baseUrl);
+    await ask(chat, 'first', true, { instructions: 'Use pastel colours' });
+    expect(messagesOf(api.bodies[0])[0]).toEqual({ role: 'system', content: withOwnInstructions(API_INSTRUCTIONS, 'Use pastel colours') });
+    await ask(chat, 'second', false, { instructions: 'Use bright colours' });
+    expect(messagesOf(api.bodies[1])[0]).toEqual({ role: 'system', content: withOwnInstructions(API_INSTRUCTIONS, 'Use bright colours') });
+    await ask(chat, 'third');
+    expect(messagesOf(api.bodies[2])[0]).toEqual({ role: 'system', content: API_INSTRUCTIONS });
+
+    const responses = fakeApi({ status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Ok.' }] }] });
+    await ask(runner(responses.baseUrl, fakeTools(), { format: responsesApi }), 'Build', true, { instructions: 'Keep it small' });
+    expect(responses.bodies[0]?.['instructions']).toBe(withOwnInstructions(API_INSTRUCTIONS, 'Keep it small'));
   });
 
   it('works the same over the Responses API, sending back every output item as it came', async () => {

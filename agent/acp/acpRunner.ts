@@ -10,6 +10,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { TOOL_NAMES, type AgentEvent, type ToolName } from '../../src/agent/protocol';
 import type { AgentStatus, ChatRunner } from '../chat';
+import { withOwnInstructions } from '../guide';
 import { summarizeTool } from '../toolSummary';
 import { createRpc, RPC_ERRORS, RpcError, type RpcPeer } from './rpc';
 import {
@@ -269,12 +270,12 @@ export function createAcpRunner(options: AcpRunnerOptions): ChatRunner {
   };
 
   /** A new session, with BrickBench's MCP server as its tools, and the instructions where the agent takes them. */
-  const openSession = async (live: Agent): Promise<void> => {
+  const openSession = async (live: Agent, instructions: string): Promise<void> => {
     const result = newSessionResultSchema.parse(
       await live.rpc.request('session/new', {
         cwd: options.workDir,
         mcpServers: [options.mcpServer],
-        ...(live.systemPrompt ? { systemPrompt: { mode: 'append', content: [{ type: 'text', text: options.instructions }] } } : {}),
+        ...(live.systemPrompt ? { systemPrompt: { mode: 'append', content: [{ type: 'text', text: instructions }] } } : {}),
         // for Claude Code's adapter: none of Claude Code's own tools, and none of the user's settings files
         _meta: { claudeCode: { options: { tools: [], settingSources: [] } } },
       }),
@@ -307,15 +308,17 @@ export function createAcpRunner(options: AcpRunnerOptions): ChatRunner {
     return error instanceof Error ? error.message : String(error);
   };
 
-  const run = async (current: Turn, prompt: string, fresh: boolean): Promise<AgentEvent> => {
+  const run = async (current: Turn, prompt: string, fresh: boolean, own: string | undefined): Promise<AgentEvent> => {
+    // BrickBench's instructions and the user's own, as they are when a session begins
+    const instructions = withOwnInstructions(options.instructions, own);
     const live = agent?.ready ? agent : await startAgent();
     if (current.stopped) throw new Stopped();
-    if (fresh || live.sessionId === null) await openSession(live);
+    if (fresh || live.sessionId === null) await openSession(live, instructions);
     if (current.stopped) throw new Stopped();
     current.onEvent({ type: 'started' });
     current.costAtStart = live.costUsd;
     const instructing = !live.instructed;
-    const blocks = [...(instructing ? [{ type: 'text', text: options.instructions }] : []), { type: 'text', text: prompt }];
+    const blocks = [...(instructing ? [{ type: 'text', text: instructions }] : []), { type: 'text', text: prompt }];
     const result = promptResultSchema.parse(await live.rpc.request('session/prompt', { sessionId: live.sessionId, prompt: blocks }));
     // the agent has had the instructions once a request with them comes back, however it ended
     if (instructing) live.instructed = true;
@@ -353,14 +356,14 @@ export function createAcpRunner(options: AcpRunnerOptions): ChatRunner {
     get running() {
       return turn !== null;
     },
-    start(prompt, fresh, onEvent) {
+    start(prompt, fresh, onEvent, extra) {
       if (turn) {
         onEvent({ type: 'done', ok: false, error: BUSY });
         return;
       }
       const current: Turn = { onEvent, text: '', messageId: null, stopped: false, costAtStart: 0, costUsd: undefined, shown: new Set() };
       turn = current;
-      run(current, prompt, fresh).then(
+      run(current, prompt, fresh, extra?.instructions).then(
         (event) => finish(current, event),
         (error: unknown) => finish(current, { type: 'done', ok: false, error: error instanceof Stopped ? 'Stopped.' : describe(error) }),
       );
