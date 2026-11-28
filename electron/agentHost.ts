@@ -1,9 +1,9 @@
 /**
- * The agent bridge inside the desktop app, so its Agent panel needs no
- * `bun run agent`: it starts when the panel connects and stops when it
- * disconnects or the window goes. The window talks to it over IPC (main.ts
- * wires the channels here); agents, Claude Code among them, reach its MCP
- * server on this computer. Nothing here needs Electron, so tests run it.
+ * The agent bridge inside the desktop app, the only place the agent works:
+ * it starts when the Agent panel connects and stops when it disconnects or
+ * the window goes. The window talks to it over IPC (main.ts wires the
+ * channels here); agents, Claude Code among them, reach its MCP server on
+ * this computer. Nothing here needs Electron, so tests run it.
  */
 import { mkdtemp, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
@@ -12,15 +12,11 @@ import { createAppLink } from '../agent/appLink';
 import { createBridgeHandlers, type BridgeHandlers, type TabSocket } from '../agent/bridge';
 import { createChat } from '../agent/chatSetup';
 import { serveWithNode, type NodeServer } from '../agent/nodeServer';
-import { parseOrigins } from '../agent/origins';
-import { portOf, readSetting, type Environment } from '../agent/settings';
+import { portOf, type Environment } from '../agent/settings';
 import { isConnectionId, MAX_AGENT_MESSAGE, type AgentLinkEvent } from '../src/desktop/protocol';
 
 export const NO_CLAUDE =
   'Claude Code is not installed on this computer, so the chat cannot run. Install it from https://code.claude.com, then click Disconnect and Connect here. Other MCP agents can still connect.';
-
-/** The window has no WebSockets to upgrade to: it talks over IPC. */
-const NO_UPGRADE = { upgrade: () => false };
 
 export interface DesktopBridge {
   readonly handlers: BridgeHandlers;
@@ -39,7 +35,7 @@ export async function startDesktopBridge(env: Environment): Promise<DesktopBridg
   let handlers: BridgeHandlers | null = null;
   let server: NodeServer | null = null;
   try {
-    server = await serveWithNode((request) => (handlers ? handlers.fetch(request, NO_UPGRADE) : new Response('Starting.', { status: 503 })), portOf(env));
+    server = await serveWithNode((request) => (handlers ? handlers.fetch(request) : new Response('Starting.', { status: 503 })), portOf(env));
     const mcpUrl = `${server.url}/mcp`;
     const link = createAppLink();
     const { runner, notes } = await createChat({
@@ -51,7 +47,7 @@ export async function startDesktopBridge(env: Environment): Promise<DesktopBridg
       // its settings come from the app's environment, read again only when it opens
       restart: 'quit BrickBench and open it again',
     });
-    handlers = createBridgeHandlers(runner, { onlyOrigins: parseOrigins(readSetting(env, 'BRICKBENCH_AGENT_ORIGINS')), link, mcpUrl: () => mcpUrl });
+    handlers = createBridgeHandlers(runner, { link, mcpUrl: () => mcpUrl });
     const open = server;
     return {
       handlers,
@@ -121,7 +117,7 @@ export function createAgentHost(options: AgentHostOptions): AgentHost {
   const leave = (): Connection | null => {
     const current = connection;
     connection = null;
-    if (current && running) running.handlers.websocket.close(current.socket);
+    if (current && running) running.handlers.tabs.close(current.socket);
     return current;
   };
 
@@ -154,7 +150,7 @@ export function createAgentHost(options: AgentHostOptions): AgentHost {
     }
     if (connection !== current) return;
     tell(current.window, { type: 'open', id: current.id });
-    running.handlers.websocket.open(current.socket);
+    running.handlers.tabs.open(current.socket);
   };
 
   const isCurrent = (window: AgentWindow, id: unknown): boolean => connection?.window === window && connection.id === id;
@@ -178,7 +174,7 @@ export function createAgentHost(options: AgentHostOptions): AgentHost {
     send(window, id, text) {
       const current = connection;
       if (!current || !isCurrent(window, id) || typeof text !== 'string' || text.length > MAX_AGENT_MESSAGE || !running) return;
-      running.handlers.websocket.message(current.socket, text);
+      running.handlers.tabs.message(current.socket, text);
     },
     close(window, id) {
       if (isCurrent(window, id)) void stop();

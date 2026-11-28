@@ -1,59 +1,49 @@
 /**
- * The agent bridge: one local server that BrickBench tabs connect to over a
- * WebSocket (/app) and agents reach as an MCP server (/mcp). The app's chat
- * goes to a ChatRunner, which runs an agent that builds through /mcp too.
- * The handlers here run anywhere: startBridge serves them with Bun, and the
- * desktop app with Node, its window connecting over IPC instead.
+ * The agent bridge: the desktop app's window talks to it over IPC, and agents
+ * reach it as an MCP server (/mcp). The app's chat goes to a ChatRunner,
+ * which runs an agent that builds through /mcp too. Web pages never reach it:
+ * the agent works only in the desktop app. The handlers here need no
+ * Electron; the desktop app serves them with Node (agent/nodeServer.ts).
  */
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { appMessageSchema, clampEvent, parseMessage, type AgentEvent } from '../src/agent/protocol';
 import { createAppLink, type AppLink } from './appLink';
 import type { AgentStatus, ChatRunner } from './chat';
 import { createBrickBenchMcp, SERVER_VERSION } from './mcpServer';
-import { isAllowedOrigin, isLocalHost } from './origins';
+import { isLocalHost } from './origins';
 
 import { DEFAULT_PORT } from './settings';
 
 export { DEFAULT_PORT };
-/** A picture of the model must fit in one message. */
-const MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
 const BUSY = 'The agent is still working on the last request. Stop it first, or wait for it to finish.';
 
 export interface SocketData {
   readonly tab: number;
 }
 
-/** A connected BrickBench tab: a WebSocket from a browser, or the desktop app's window over IPC. */
+/** A connected BrickBench window: the desktop app's, over IPC. */
 export interface TabSocket {
   readonly data: SocketData;
   send(text: string): unknown;
 }
 
-/** What a WebSocket server offers a request (Bun.serve's upgrade); a server without WebSockets answers false. */
-export interface Upgrader {
-  upgrade(request: Request, options: { data: SocketData }): boolean;
-}
-
-/** What tabs say and do, from whichever socket they use. */
+/** What the window says and does, over its socket. */
 export interface TabHandlers {
-  readonly maxPayloadLength: number;
   open(socket: TabSocket): void;
-  message(socket: TabSocket, raw: string | Uint8Array): void;
+  message(socket: TabSocket, raw: string): void;
   close(socket: TabSocket): void;
 }
 
 export interface BridgeHandlers {
-  readonly fetch: (request: Request, server: Upgrader) => Response | Promise<Response> | undefined;
-  readonly websocket: TabHandlers;
+  readonly fetch: (request: Request) => Response | Promise<Response>;
+  readonly tabs: TabHandlers;
   readonly link: AppLink;
 }
 
 export interface HandlerOptions {
-  /** The only pages let in; any page from this computer otherwise. */
-  readonly onlyOrigins?: readonly string[];
-  /** The link to BrickBench tabs, made here unless given, as when the chat's runner calls tools through it too. */
+  /** The link to the window, made here unless given, as when the chat's runner calls tools through it too. */
   readonly link?: AppLink;
-  /** Where agents reach this bridge's MCP server, which each tab is told when it connects. */
+  /** Where agents reach this bridge's MCP server, which the window is told when it connects. */
   readonly mcpUrl?: () => string;
 }
 
@@ -84,15 +74,14 @@ async function answerMcp(link: AppLink, request: Request): Promise<Response> {
 }
 
 export function createBridgeHandlers(runner: ChatRunner, options: HandlerOptions = {}): BridgeHandlers {
-  const { onlyOrigins = [], link = createAppLink(), mcpUrl } = options;
+  const { link = createAppLink(), mcpUrl } = options;
   let chatting: TabSocket | null = null;
-  let tabs = 0;
 
   const tell = (socket: TabSocket, event: AgentEvent): void => {
     try {
       link.send(socket, { kind: 'agent', event: clampEvent(event) });
     } catch {
-      // the tab has gone; the run stops when its socket closes
+      // the window has gone; the run stops when its socket closes
     }
   };
 
@@ -102,7 +91,7 @@ export function createBridgeHandlers(runner: ChatRunner, options: HandlerOptions
       return;
     }
     chatting = socket;
-    // the agent builds in the tab the user is chatting in, whichever tab they look at meanwhile
+    // the agent builds where the user is chatting
     link.receive(socket, { kind: 'active' });
     link.pin(socket);
     runner.start(prompt, fresh, (event) => {
@@ -125,31 +114,24 @@ export function createBridgeHandlers(runner: ChatRunner, options: HandlerOptions
 
   return {
     link,
-    fetch(request, server) {
+    fetch(request) {
       if (!isLocalHost(request.headers.get('host'))) return forbidden('This bridge answers requests to localhost only.');
       const { pathname } = new URL(request.url);
-      const origin = request.headers.get('origin');
-      if (pathname === '/app') {
-        if (!isAllowedOrigin(origin, onlyOrigins)) return forbidden('Only BrickBench served from this machine may connect.');
-        tabs += 1;
-        return server.upgrade(request, { data: { tab: tabs } }) ? undefined : new Response('Expected a WebSocket.', { status: 426 });
-      }
       if (pathname === '/mcp') {
-        // agents send no Origin; a web page always does, and must be one of ours
-        if (origin !== null && !isAllowedOrigin(origin, onlyOrigins)) return forbidden('Web pages from other sites may not use this MCP server.');
+        // agents send no Origin; a web page always does, and none may build here
+        if (request.headers.get('origin') !== null) return forbidden('Web pages may not use this MCP server.');
         return answerMcp(link, request);
       }
       if (pathname === '/health') return Response.json({ ok: true, tabs: link.tabs, agent: agentInfo(runner.status()) });
-      return new Response('BrickBench agent bridge. Agents connect to /mcp; BrickBench connects to /app.', { status: 404 });
+      return new Response('BrickBench agent bridge. Agents connect to /mcp.', { status: 404 });
     },
-    websocket: {
-      maxPayloadLength: MAX_MESSAGE_BYTES,
+    tabs: {
       open(socket) {
         link.attach(socket);
         link.send(socket, { kind: 'hello', version: SERVER_VERSION, agent: agentInfo(runner.status()), ...(mcpUrl ? { mcp: mcpUrl() } : {}) });
       },
       message(socket, raw) {
-        onMessage(socket, typeof raw === 'string' ? raw : new TextDecoder().decode(raw));
+        onMessage(socket, raw);
       },
       close(socket) {
         link.detach(socket);
@@ -158,42 +140,6 @@ export function createBridgeHandlers(runner: ChatRunner, options: HandlerOptions
           runner.stop();
         }
       },
-    },
-  };
-}
-
-export interface BridgeOptions {
-  readonly runner: ChatRunner;
-  /** 0 picks a free port. */
-  readonly port?: number;
-  readonly onlyOrigins?: readonly string[];
-  /** The link to BrickBench tabs, when the runner needs it too. */
-  readonly link?: AppLink;
-}
-
-export interface Bridge {
-  readonly url: string;
-  readonly link: AppLink;
-  stop(): Promise<void>;
-}
-
-/** Starts the bridge on this machine only, with Bun. */
-export function startBridge(options: BridgeOptions): Bridge {
-  let url = '';
-  const handlers = createBridgeHandlers(options.runner, { onlyOrigins: options.onlyOrigins ?? [], link: options.link, mcpUrl: () => `${url}/mcp` });
-  const server = Bun.serve<SocketData>({
-    hostname: '127.0.0.1',
-    port: options.port ?? DEFAULT_PORT,
-    fetch: (request, srv) => handlers.fetch(request, srv),
-    websocket: handlers.websocket,
-  });
-  url = `http://127.0.0.1:${server.port}`;
-  return {
-    url,
-    link: handlers.link,
-    stop: async () => {
-      options.runner.stop();
-      await server.stop(true);
     },
   };
 }

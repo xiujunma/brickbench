@@ -24,7 +24,7 @@ function Entry({ entry }: { readonly entry: ChatEntry }) {
         </p>
       );
     case 'error':
-      // errors can name a command in backticks, as in "run `bun run agent`"
+      // errors can name a command in backticks, as in "run `claude mcp add …`"
       return (
         <div className="chat-error" role="alert">
           <Markdown text={entry.text} />

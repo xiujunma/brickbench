@@ -24,14 +24,13 @@ function fakeBridge(notes: readonly string[] = []) {
   const sockets: TabSocket[] = [];
   let stops = 0;
   const handlers = {
-    websocket: {
-      maxPayloadLength: 1,
+    tabs: {
       open: (socket: TabSocket) => {
         seen.push('open');
         sockets.push(socket);
         socket.send('{"kind":"hello"}');
       },
-      message: (_socket: TabSocket, raw: string | Uint8Array) => void seen.push(`message ${String(raw).slice(0, 40)}`),
+      message: (_socket: TabSocket, raw: string) => void seen.push(`message ${raw.slice(0, 40)}`),
       close: () => void seen.push('close'),
     },
   } as unknown as BridgeHandlers;
@@ -188,9 +187,9 @@ describe('the agent bridge in the desktop app', () => {
     try {
       expect(bridge.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
       expect(await (await fetch(`${bridge.url}/health`)).json()).toEqual({ ok: true, tabs: 0, agent: { available: false, name: 'No agent', detail: NO_CLAUDE } });
-      // no WebSockets here: the window talks over IPC
-      expect((await fetch(`${bridge.url}/app`, { headers: { Origin: 'http://localhost:5173' } })).status).toBe(426);
-      expect((await fetch(`${bridge.url}/app`)).status).toBe(403);
+      // no WebSockets here: the window talks over IPC, and no web page may use the MCP server
+      expect((await fetch(`${bridge.url}/app`)).status).toBe(404);
+      expect((await fetch(`${bridge.url}/mcp`, { method: 'POST', headers: { Origin: 'http://localhost:5173' } })).status).toBe(403);
     } finally {
       await bridge.stop();
     }

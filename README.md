@@ -16,7 +16,7 @@ A 3D brick-building workshop that runs in the browser. Pick parts and colours, s
   - **Mine** keeps your starred favourites, recent picks and the parts already in your model. Favourites and picks stay in this browser, shared by its tabs.
   - **Keyboard first:** press `/`, type, use ↑ ↓ and press Enter to build with the part.
 - **Build with the parts you own:** add the parts lists of your sets from Rebrickable or BrickLink, and BrickBench counts how many of each part you have left as you build. The parts list shows what's missing, and an agent can build from your parts too. See [Building with the parts you own](#building-with-the-parts-you-own).
-- **Build with an AI agent:** ask Claude Code, GPT, Grok or a model on your own computer, from a chat panel in the app (or Claude Code and other agents from your terminal), to build or change the model. It places, paints and moves bricks while you watch, checks its work with pictures of the model, and one undo takes back a whole request.
+- **Build with an AI agent:** in the desktop app, ask Claude Code, GPT, Grok or a model on your own computer, from a chat panel (or Claude Code and other agents from your terminal), to build or change the model. It places, paints and moves bricks while you watch, checks its work with pictures of the model, and one undo takes back a whole request.
 - **68 colours:** solid, transparent and metallic, following the LDraw palette, the newer ones included (Dark Purple, Light Aqua, Warm Tan, Reddish Orange and more).
 - **Grid snapping that understands bricks.** Point at a top face to stack, at a side to build beside it (lined up with that brick's courses), or underneath to hang below. Parts never overlap: the preview turns red when there's no room, and drops land on top of whatever is in the way. A part put on a jumper plate's stud sits half a stud over, and what you build against it lines up with it.
 - **Sideways and upside down (SNOT).** Point at a stud on a part's side, as on a brick with studs on its sides or a bracket, and the part you build turns to face out from it, its underside on the stud; `R` spins it about its top. Build on the studs of a part on its side the same way, and under studs facing down. `T` tips the part you build over, on its side or upside down, to lay it anywhere. Parts off the grid like these are placed exactly, to the LDraw unit, and collide by the space they really fill.
@@ -181,7 +181,7 @@ BrickBench also runs as a desktop app, built with [Electron](https://www.electro
 - **A native menu** with File, Edit and View. The keys work as in the browser: ⌘Z undoes in the scene, and undoes your typing in a text box.
 - **Saving** asks where to save, as other desktop apps do, then says where the file went (and nothing if you cancel).
 - **Your work stays in the app:** autosave, favourites and your parts lists are kept in the app's own storage, apart from your browser's.
-- **The agent chat** needs no `bun run agent`: the app runs the agent bridge itself while the Agent panel is connected, and uses Claude Code if it is installed. It finds Claude Code where its installers put it, since an app opened from the Finder or the Start menu has no terminal's PATH; on Windows, that is the native installer's `claude.exe`. Agents in a terminal reach the app's MCP server at the address the Agent panel shows. Opened from a terminal, the app takes the same settings as `bun run agent`, such as `BRICKBENCH_AGENT_PROVIDER`.
+- **The agent works here, and only here** (see [Building with an AI agent](#building-with-an-ai-agent)): the app runs the agent bridge itself while the Agent panel is connected, and uses Claude Code if it is installed. It finds Claude Code where its installers put it, since an app opened from the Finder or the Start menu has no terminal's PATH; on Windows, that is the native installer's `claude.exe`. Agents in a terminal reach the app's MCP server at the address the Agent panel shows. Opened from a terminal, the app takes the agent's settings, such as `BRICKBENCH_AGENT_PROVIDER`.
 
 To run it from this repository, `bun run desktop` builds the web app and opens it in Electron (`bun scripts/desktop.ts start --skip-web` reuses the last build). To make an installer, `bun run desktop:dist` builds everything and writes it to `release/`: a `.dmg` on macOS, an installer on Windows and an AppImage on Linux. Build each on its own system; `bun scripts/desktop.ts dist --dir` makes just the app, unpacked, which is quicker to try. The installers aren't signed with a developer certificate yet (that needs an Apple Developer ID and a Windows code-signing certificate). The macOS app is signed ad hoc, so the first time you open a downloaded copy, macOS needs **right-click › Open**; Windows asks before running the installer.
 
@@ -189,21 +189,18 @@ To run it from this repository, `bun run desktop` builds the web app and opens i
 
 ## Building with an AI agent
 
-An AI agent can build in BrickBench: Claude Code, GPT, Grok or a model on your own computer from the **Agent** panel in the app, or Claude Code (or any other agent that speaks [MCP](https://modelcontextprotocol.io)) from a terminal. It places, paints, moves and removes bricks while you watch, looks at pictures of the model to check its work, and whatever it does for one request is one step you can undo.
+An AI agent can build in BrickBench's [desktop app](#desktop-app): Claude Code, GPT, Grok or a model on your own computer from the **Agent** panel, or Claude Code (or any other agent that speaks [MCP](https://modelcontextprotocol.io)) from a terminal. It places, paints, moves and removes bricks while you watch, looks at pictures of the model to check its work, and whatever it does for one request is one step you can undo.
+
+The agent works only in the desktop app. Web pages, the hosted site's or one served from this repository, never connect to agents on your computer, so your login and API keys stay out of reach of every web page; their Agent panel points to the desktop app instead.
 
 ![The Agent panel: Claude Code making a house's roof dark grey and putting a white fence around its garden](docs/agent-panel.png)
 
-1. Start the agent bridge, a small server on your computer, in a terminal in the BrickBench folder (the [desktop app](#desktop-app) runs it itself, so skip this there):
+1. Open the desktop app (from this repository, `bun run desktop`).
+2. Click **Agent** in the top bar. Ask for something: "build a small red house with a door and two windows", "make the roof dark grey", "put a fence around it".
 
-   ```bash
-   bun run agent
-   ```
+Unless you choose another model (below), the chat runs [Claude Code](https://code.claude.com) on your computer with your own login, so Claude Code has to be installed. It gets the BrickBench tools and nothing else: no shell, no files, and none of your Claude Code hooks, plugins or settings files. That use of your login is meant for you on your own computer; if other people will use the chat, set `ANTHROPIC_API_KEY` for the app so it runs on an API key instead.
 
-2. Open BrickBench and click **Agent** in the top bar. Ask for something: "build a small red house with a door and two windows", "make the roof dark grey", "put a fence around it".
-
-Unless you choose another model (below), the chat runs [Claude Code](https://code.claude.com) on your computer with your own login, so Claude Code has to be installed. It gets the BrickBench tools and nothing else: no shell, no files, and none of your Claude Code hooks, plugins or settings files. That use of your login is meant for you on your own computer; if other people will use the chat, set `ANTHROPIC_API_KEY` for the bridge so it runs on an API key instead.
-
-**Other models: GPT, Grok, OpenRouter, or a model on your computer.** Start the bridge with `BRICKBENCH_AGENT_PROVIDER` set, and the chat runs that model instead. It gets the same tools and instructions as Claude Code, calls them by function calling, and sees the pictures `look` draws (a model that cannot see pictures carries on without them, and the chat says so). One request is still one step to undo.
+**Other models: GPT, Grok, OpenRouter, or a model on your computer.** Open the app from a terminal with `BRICKBENCH_AGENT_PROVIDER` set, and the chat runs that model instead. It gets the same tools and instructions as Claude Code, calls them by function calling, and sees the pictures `look` draws (a model that cannot see pictures carries on without them, and the chat says so). One request is still one step to undo.
 
 | Provider | `BRICKBENCH_AGENT_PROVIDER` | API key | Model, unless `BRICKBENCH_AGENT_MODEL` says otherwise |
 |---|---|---|---|
@@ -216,21 +213,21 @@ Unless you choose another model (below), the chat runs [Claude Code](https://cod
 
 ```bash
 # Grok, with the API key from your xAI console in XAI_API_KEY
-BRICKBENCH_AGENT_PROVIDER=xai bun run agent
+BRICKBENCH_AGENT_PROVIDER=xai bun run desktop
 
-# or a model on this computer, through Ollama
-BRICKBENCH_AGENT_PROVIDER=ollama BRICKBENCH_AGENT_MODEL=qwen3.5:9b bun run agent
+# or a model on this computer, through Ollama, in an installed app (on a Mac)
+BRICKBENCH_AGENT_PROVIDER=ollama BRICKBENCH_AGENT_MODEL=qwen3.5:9b /Applications/BrickBench.app/Contents/MacOS/BrickBench
 ```
 
 Choose a model that handles tool calls well and can see pictures; small models on your computer manage simple builds. What you ask, and the model being built, go to the provider under your API key (with Ollama or LM Studio, only to wherever you run it). The bridge asks OpenAI and xAI not to store the conversation, and sends it whole with each request instead. There is no spending cap as there is for Claude Code; instead, a request stops after 60 rounds of tool calls.
 
-**From a terminal.** With the bridge running and BrickBench open, add BrickBench to Claude Code once:
+**From a terminal.** With the desktop app open and its Agent panel connected, add BrickBench to Claude Code once:
 
 ```bash
 claude mcp add --transport http brickbench http://127.0.0.1:7425/mcp
 ```
 
-then ask Claude Code to build something in BrickBench. Any MCP client can use the same address. Agents build in the BrickBench tab you used last, and once the Agent panel has connected, BrickBench reconnects by itself on later visits (until you click Disconnect).
+then ask Claude Code to build something in BrickBench. Any MCP client can use the same address, which the Agent panel shows. Once the Agent panel has connected, the app connects by itself whenever it opens (until you click Disconnect).
 
 **The tools agents get:**
 
@@ -245,11 +242,11 @@ then ask Claude Code to build something in BrickBench. Any MCP client can use th
 | `look` | A picture of the model from any side, with bricks outlined if asked |
 | `set_model_name`, `undo`, `clear_model` | Rename, undo steps, or start afresh (only when you ask) |
 
-**Settings** (environment variables for `bun run agent`, or for the desktop app when you open it from a terminal):
+**Settings** (environment variables for the desktop app: open it from a terminal with them set):
 
 | Variable | What it sets |
 |---|---|
-| `BRICKBENCH_AGENT_PORT` | The bridge's port, 7425 by default. Open BrickBench with `?agentPort=` and the same number to match. |
+| `BRICKBENCH_AGENT_PORT` | The bridge's port, 7425 by default; when another program has it, the app takes a free one, and the Agent panel shows which |
 | `BRICKBENCH_AGENT_PROVIDER` | Who runs the chat's model: `claude` (Claude Code, the default), `openai`, `xai`, `openrouter`, `ollama`, `lmstudio` or `custom` |
 | `BRICKBENCH_AGENT_MODEL` | The model the chat uses: for Claude Code, such as `sonnet` or `opus` (its default otherwise); for the others, as the provider names it |
 | `BRICKBENCH_AGENT_BUDGET_USD` | For Claude Code, the most one chat request may spend: $5 unless you set it, or `none` for no cap |
@@ -257,9 +254,8 @@ then ask Claude Code to build something in BrickBench. Any MCP client can use th
 | `BRICKBENCH_AGENT_API_KEY_VAR` | The name of the environment variable that holds the API key, if not the provider's usual one (as in the table above) |
 | `BRICKBENCH_AGENT_BASE_URL` | The API's address, ending in `/v1`: needed for `custom`, or to reach Ollama or LM Studio on another computer |
 | `BRICKBENCH_AGENT_API` | `responses` or `chat`, to override how the bridge talks to the API: OpenAI and xAI use the Responses API, the rest Chat Completions |
-| `BRICKBENCH_AGENT_ORIGINS` | The only pages that may connect, comma-separated, such as `http://localhost:5173` |
 
-The bridge listens on this computer only (127.0.0.1) and answers only pages served from this computer. Any of them could start the chat, so if you run other web servers you do not trust, set `BRICKBENCH_AGENT_ORIGINS` to BrickBench's own address.
+The bridge listens on this computer only (127.0.0.1), answers only requests addressed to this computer (which stops DNS rebinding), and refuses every request that comes from a web page. While it runs, other programs on your computer can reach its MCP server, as with any MCP server on your computer.
 
 ## Scripts
 
@@ -268,7 +264,6 @@ The bridge listens on this computer only (127.0.0.1) and answers only pages serv
 | `bun run dev` | Start the dev server (Vite) |
 | `bun run build` | Type-check, build the LDraw library if it is missing, and build to `dist/` |
 | `bun run ldraw` | Download and convert the LDraw parts library into `public/ldraw/` |
-| `bun run agent` | Start the agent bridge, so the Agent panel's chat and other MCP agents can build in BrickBench |
 | `bun run api` | Run the accounts and gallery API on this computer, on SQLite ([Accounts and the gallery](#accounts-and-the-gallery)) |
 | `bun test` | Run the unit tests (`bun test`, about a second) |
 | `bun run coverage` | Run the unit tests with coverage; fails if any file drops below 80% of its lines or functions |
@@ -304,9 +299,9 @@ The first file checks each part's size, origin and slope direction. The second e
 GitHub Actions runs `.github/workflows/test.yml` on every push to `main` and on every pull request, in two jobs, plus a third that deploys the site once it is [set up](#hosting):
 
 - **Type check and unit tests:** `bun run typecheck` and `bun run coverage`, about a minute.
-- **LDraw checks and browser tests:** builds the LDraw library, runs `bun test verify` against it, builds the app, then runs `bun run e2e` against that build in headless Chromium. The library download and the converted library are cached, so only the first run, or one after the converter changes, spends a few minutes converting. Traces of failed browser tests are kept for a week as a `playwright-traces` artifact.
+- **LDraw checks, browser and desktop tests:** builds the LDraw library, runs `bun test verify` against it, builds the app, then runs `bun run e2e` against that build in headless Chromium, and `bun run e2e:desktop` in Electron on a virtual display (the agent works only in the desktop app, so its tests are there). The library download and the converted library are cached, so only the first run, or one after the converter changes, spends a few minutes converting. Traces of failed tests are kept for a week as a `playwright-traces` artifact.
 
-The runners have no GPU, so WebGL is drawn on the CPU: with `CI` set, Playwright tests the production build (`vite preview`, which sends the hosted site's headers and security policy; any test whose page breaks the policy fails) one test at a time, gives each test two minutes, retries once, and stops after three failures. Run the same way locally with `bunx --bun vite build && CI=1 bun run e2e`. The browser tests also start the agent bridge, on port 7499, with a stand-in for Claude Code that builds through MCP, so they spend nothing on a real model, and the accounts and gallery API, on port 7490, on a database that lasts as long as the tests.
+The runners have no GPU, so WebGL is drawn on the CPU: with `CI` set, Playwright tests the production build (`vite preview`, which sends the hosted site's headers and security policy; any test whose page breaks the policy fails) one test at a time, gives each test two minutes, retries once, and stops after three failures. Run the same way locally with `bunx --bun vite build && CI=1 bun run e2e`. The browser tests also start the accounts and gallery API, on port 7490, on a database that lasts as long as the tests. The desktop tests give the app's chat a stand-in for Claude Code that builds through MCP, and a stand-in for a model behind an API, so they spend nothing on a real model.
 
 To pick up a newer LDraw release in CI, bump `ldraw-download-v1` in the workflow.
 
@@ -331,7 +326,7 @@ The deploy also uploads the API, from `functions/`. It answers only once the sit
 4. Name the moderators in `ADMINS`: provider and account number, comma-separated, such as `github:1234567`. A GitHub account's number is the `id` at `https://api.github.com/users/<login>`; a Google account's is the `sub` it signs in with. Never set `TEST_SIGN_IN` on a hosted site (the API ignores it there anyway).
 5. Add a rate limiting rule for `/api/` (Security › WAF; the free plan has one), say 100 requests a minute from one address. The API limits what each account and visitor may change, but not how often anyone reads, and a gallery search reads every published model.
 
-`public/_headers` sets the hosted site's response headers: a Content Security Policy, other security headers, and how long browsers keep files (the app's own for good, since their names change with every build; library files for a day). The agent chat on a hosted site still talks to the bridge on each visitor's own computer: start it with `BRICKBENCH_AGENT_ORIGINS=https://your-domain bun run agent` to let the site's page in.
+`public/_headers` sets the hosted site's response headers: a Content Security Policy, other security headers, and how long browsers keep files (the app's own for good, since their names change with every build; library files for a day). Its policy lets the page connect only to its own site: the agent works only in the desktop app, so the hosted page's Agent panel points there instead.
 
 ## The LDraw parts library
 
@@ -388,8 +383,8 @@ src/
   desktop/    what the desktop app and the page say to each other
   samples/    the sample cottage
 scripts/ldraw/  the LDraw library converter (run straight from TypeScript by Bun)
-agent/        the agent bridge: an MCP server for agents, a WebSocket for BrickBench tabs,
-              and the chat's agent: Claude Code run headless, or a model behind an API (api/)
+agent/        the agent bridge the desktop app runs: an MCP server for agents, the link to the
+              app's window, and the chat's agent: Claude Code run headless, or a model behind an API (api/)
 electron/     the desktop app's main process and preload script, and the agent bridge it runs
 server/       the accounts and gallery API, as Cloudflare runs it, and on SQLite here (local.ts)
 functions/    the Cloudflare Pages Function that runs the API

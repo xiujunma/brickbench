@@ -17,7 +17,9 @@ describe('site headers', () => {
   it('gives the site’s own headers for every path, with a security policy among them', () => {
     const headers = headersForEveryPath(new URL('../public/_headers', import.meta.url).pathname);
     expect(headers['Content-Security-Policy']).toContain("default-src 'self'");
-    expect(headers['Content-Security-Policy']).toContain('ws://127.0.0.1:*');
+    // the page connects to its own site only: the agent works only in the desktop app
+    expect(headers['Content-Security-Policy']).toContain("connect-src 'self';");
+    expect(headers['Content-Security-Policy']).not.toContain('127.0.0.1');
     expect(headers['X-Content-Type-Options']).toBe('nosniff');
     expect(headers['Cache-Control']).toBeUndefined();
   });

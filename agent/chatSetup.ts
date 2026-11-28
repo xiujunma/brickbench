@@ -1,8 +1,8 @@
 /**
  * The agent behind the app's chat, set up from the environment: a model
  * behind an API if one is chosen, else Claude Code if it is installed, else
- * a runner that says why the chat cannot run. Shared by `bun run agent` and
- * the desktop app, which runs the bridge itself.
+ * a runner that says why the chat cannot run. The desktop app runs the
+ * bridge and sets this up when its Agent panel connects.
  */
 import { createApiRunner } from './api/apiRunner';
 import { chatCompletions } from './api/chatCompletions';

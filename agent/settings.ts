@@ -1,6 +1,6 @@
 /**
- * The bridge's settings, read from an environment: the terminal's for
- * `bun run agent`, the desktop app's when it runs the bridge itself.
+ * The bridge's settings, read from the desktop app's environment (set them
+ * by opening the app from a terminal).
  */
 
 export type Environment = Readonly<Record<string, string | undefined>>;

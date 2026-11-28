@@ -7,7 +7,6 @@ class FakeSocket implements SocketLike {
   readonly sent: AppMessage[] = [];
   private readonly listeners = new Map<string, ((event: { data?: unknown }) => void)[]>();
   closed = false;
-  constructor(readonly url: string) {}
   addEventListener(type: 'open' | 'message' | 'close' | 'error', listener: (event: { data?: unknown }) => void): void {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
   }
@@ -34,9 +33,8 @@ function setup(
   const events: AgentEvent[] = [];
   const timers: (() => void)[] = [];
   const link = createAgentLink({
-    url: 'ws://127.0.0.1:7425/app',
-    createSocket: (url) => {
-      const socket = new FakeSocket(url);
+    createSocket: () => {
+      const socket = new FakeSocket();
       sockets.push(socket);
       return socket;
     },

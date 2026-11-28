@@ -85,6 +85,12 @@
   color: var(--ink);
 }
 
+.agent-help a {
+  justify-self: start;
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .agent-command {
   display: block;
   padding: 7px 10px;

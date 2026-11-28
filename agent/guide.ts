@@ -2,7 +2,7 @@
 import { GRID_LIMIT, MAX_LAYER } from '../src/core/grid';
 import { MAX_BATCH, type ToolName } from '../src/agent/protocol';
 
-export const SERVER_INSTRUCTIONS = `BrickBench is a LEGO-style brick builder open in the user's browser. These tools build in it live: each change shows at once, and the user can undo it.
+export const SERVER_INSTRUCTIONS = `BrickBench is a LEGO-style brick builder the user has open in its desktop app. These tools build in it live: each change shows at once, and the user can undo it.
 
 The grid
 - x runs left to right and z from back to front, in studs. y is height, in plates: a brick is 3 plates tall, a plate or tile 1.
@@ -45,7 +45,7 @@ export const TOOL_DESCRIPTIONS: Readonly<Record<ToolName, string>> = {
 };
 
 /** How the agent behind the app's chat should work and reply, whichever model it is. */
-export const CHAT_PROMPT = `You are building in BrickBench, a LEGO-style brick builder the user has open in their browser, using the brickbench tools. The user is chatting with you from inside BrickBench and sees every change as you make it.
+export const CHAT_PROMPT = `You are building in BrickBench, a LEGO-style brick builder the user has open in its desktop app, using the brickbench tools. The user is chatting with you from inside BrickBench and sees every change as you make it.
 - Plan briefly, then build. Look at your work with the look tool before you say you are done, and fix what is off.
 - If a request is unclear, make a sensible choice and say what you chose instead of asking.
 - Keep replies short and plain: what you built and anything the user should know. No code, and no talk of tool names.`;

@@ -156,7 +156,7 @@ describe('parseMarkdown', () => {
   });
 
   it('keeps fenced code exactly, even unclosed', () => {
-    expect(md('Run:\n```bash\nbun run agent\n  **as is**\n```\nThen ask.')).toBe('<p>Run:</p><pre>bun run agent\n  **as is**</pre><p>Then ask.</p>');
+    expect(md('Run:\n```bash\nbun run desktop\n  **as is**\n```\nThen ask.')).toBe('<p>Run:</p><pre>bun run desktop\n  **as is**</pre><p>Then ask.</p>');
     expect(md('~~~\nopen')).toBe('<pre>open</pre>');
   });
 

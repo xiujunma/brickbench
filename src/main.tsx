@@ -47,7 +47,8 @@ async function boot(): Promise<void> {
   retryWhenOnline();
   startPartPicks(editorStore);
   startInventoryMatching(partLibrary.store);
-  startAgent({ link: agentLink, storage: agentStorage(), target: window });
+  // only the desktop app has an agent
+  if (agentLink) startAgent({ link: agentLink, storage: agentStorage(), target: window });
   createRoot(container).render(
     <StrictMode>
       <App />

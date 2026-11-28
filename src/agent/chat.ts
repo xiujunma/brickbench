@@ -32,11 +32,8 @@ const MAX_ENTRIES = 400;
 
 export const CONNECTION_LOST = 'Lost the connection to the agent bridge, so the agent stopped. Ask again once it is back.';
 
-export const BRIDGE_NOT_RUNNING =
-  'The agent bridge is not running. In a terminal in the BrickBench folder, run `bun run agent`, then ask again.';
-
-/** The same, in the desktop app, which starts the bridge itself when the Agent panel connects. */
-export const DESKTOP_BRIDGE_NOT_RUNNING = 'The agent bridge has not started yet. Wait a moment, then ask again.';
+/** When there is no bridge to ask yet: the desktop app starts it when the Agent panel connects. */
+export const BRIDGE_NOT_RUNNING = 'The agent bridge has not started yet. Wait a moment, then ask again.';
 
 function append(state: ChatState, kind: ChatEntryKind, text: string): ChatState {
   const entries = [...state.entries, { id: state.nextId, kind, text }].slice(-MAX_ENTRIES);
@@ -95,8 +92,6 @@ export interface AgentChatDeps {
   readonly onRunStart?: () => void;
   /** The agent has finished with it, however it ended. */
   readonly onRunEnd?: () => void;
-  /** What to say when there is no bridge to ask: how to start one differs in a browser and in the desktop app. */
-  readonly notRunning?: string;
 }
 
 export function createAgentChat(deps: AgentChatDeps): AgentChat {
@@ -116,7 +111,7 @@ export function createAgentChat(deps: AgentChatDeps): AgentChat {
       if (deps.send({ kind: 'chat', prompt: text, fresh: !state.started })) {
         dispatch({ type: 'ask', text });
         deps.onRunStart?.();
-      } else dispatch({ type: 'undelivered', text, reason: deps.notRunning ?? BRIDGE_NOT_RUNNING });
+      } else dispatch({ type: 'undelivered', text, reason: BRIDGE_NOT_RUNNING });
     },
     receive,
     connectionLost() {

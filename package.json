@@ -13,7 +13,6 @@
     "dev": "bunx --bun vite",
     "build": "bun run typecheck && bun run ldraw --if-missing && bunx --bun vite build",
     "preview": "bunx --bun vite preview",
-    "agent": "bun agent/main.ts",
     "api": "bun server/local.ts",
     "typecheck": "bun check -p tsconfig.app.json && bun check -p tsconfig.test.json && bun check -p tsconfig.node.json && bun check -p tsconfig.scripts.json && bun check -p tsconfig.electron.json && bun check -p tsconfig.server.json",
     "ldraw": "bun scripts/ldraw/build.ts",

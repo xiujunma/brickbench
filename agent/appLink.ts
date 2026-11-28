@@ -13,7 +13,7 @@ export interface AppSocket {
 export const CALL_TIMEOUT_MS = 60_000;
 
 export const NOT_OPEN =
-  'BrickBench is not open. Ask the user to open BrickBench in their browser (it connects to this bridge by itself) and try again.';
+  'BrickBench is not open. Ask the user to open the BrickBench desktop app and its Agent panel (it connects to this bridge by itself), then try again.';
 
 interface Pending {
   readonly socket: AppSocket;

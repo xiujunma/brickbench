@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Stands in for a model behind an API in the browser tests, as GPT, Grok or a
+ * Stands in for a model behind an API in the desktop tests, as GPT, Grok or a
  * model on Ollama are, over both wire formats: the Responses API and Chat
  * Completions. Each request it builds a small red wall in two rounds of tool
  * calls, looks at it, then says how many pictures it was shown. Like the real

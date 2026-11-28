@@ -1,12 +1,13 @@
 /**
- * The app's end of the link to the agent bridge: a WebSocket that runs the
- * tool calls agents make, passes on chat events, and keeps reconnecting
- * while the user wants it.
+ * The app's end of the link to the agent bridge, which only the desktop app
+ * runs: a socket (the app's IPC, see desktopSocket.ts) that runs the tool
+ * calls agents make, passes on chat events, and keeps reconnecting while the
+ * user wants it.
  */
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { bridgeMessageSchema, parseMessage, type AgentEvent, type AppMessage, type ToolOutcome } from './protocol';
 
-/** The part of a WebSocket the link needs. */
+/** What the link needs of its socket: the part of a WebSocket the desktop app's IPC socket copies. */
 export interface SocketLike {
   send(text: string): void;
   close(): void;
@@ -31,8 +32,7 @@ export interface AgentLinkState {
 }
 
 export interface AgentLinkDeps {
-  readonly url: string;
-  readonly createSocket: (url: string) => SocketLike;
+  readonly createSocket: () => SocketLike;
   readonly runTool: (tool: string, input: unknown) => Promise<ToolOutcome>;
   readonly onAgentEvent: (event: AgentEvent) => void;
   /** Whether the user is looking at this tab; one in the background connects without taking over. */
@@ -97,7 +97,7 @@ export function createAgentLink(deps: AgentLinkDeps): AgentLink {
 
   const attempt = (): void => {
     cancelRetry = null;
-    const current = deps.createSocket(deps.url);
+    const current = deps.createSocket();
     socket = current;
     open = false;
     current.addEventListener('open', () => {

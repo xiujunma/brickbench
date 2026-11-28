@@ -1,8 +1,8 @@
 /**
  * Serves the bridge's HTTP side (the MCP server and /health) with Node's
- * http module, as the desktop app's main process does: the same handlers as
- * `bun run agent`, minus WebSockets, which the app's window has no need of.
- * Requests for other hosts, and large ones, are refused before they are read.
+ * http module, as the desktop app's main process does; its window talks to
+ * the bridge over IPC instead. Requests for other hosts, and large ones, are
+ * refused before they are read.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -100,7 +100,7 @@ function listenOn(server: Server, port: number, hostname: string): Promise<void>
 
 /**
  * Serves `handler` on this computer only: on `port` when it is free, else on
- * any free port (a bridge from `bun run agent` may have the usual one).
+ * any free port (another program, or a second copy of the app, may have it).
  */
 export async function serveWithNode(handler: FetchHandler, port: number, hostname = '127.0.0.1'): Promise<NodeServer> {
   let origin = '';

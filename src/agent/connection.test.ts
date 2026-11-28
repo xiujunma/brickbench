@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { createStore } from 'zustand/vanilla';
 import type { AgentLinkState } from './link';
-import { bridgeUrl, forgetAgent, REMEMBER_KEY, startAgent } from './connection';
+import { forgetAgent, REMEMBER_KEY, startAgent } from './connection';
 
 function memory(initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial));
@@ -29,13 +29,6 @@ function fakeWindow() {
 }
 
 describe('the agent in the app', () => {
-  it('finds the bridge on this computer', () => {
-    expect(bridgeUrl('')).toBe('ws://127.0.0.1:7425/app');
-    expect(bridgeUrl('?agentPort=7499')).toBe('ws://127.0.0.1:7499/app');
-    expect(bridgeUrl('?agentPort=80')).toBe('ws://127.0.0.1:7425/app');
-    expect(bridgeUrl('?agentPort=lots')).toBe('ws://127.0.0.1:7425/app');
-  });
-
   it('reconnects on later visits once the bridge has answered', () => {
     const link = fakeLink();
     const storage = memory();

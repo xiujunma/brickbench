@@ -83,7 +83,7 @@ describe('serving the bridge with Node', () => {
   it('serves the bridge’s MCP server to agents, as the desktop app does', async () => {
     const link = createAppLink();
     const handlers = createBridgeHandlers(unavailableRunner('none here'), { link });
-    const server = await serve((request) => handlers.fetch(request, { upgrade: () => false }), 0);
+    const server = await serve((request) => handlers.fetch(request), 0);
     expect(await (await fetch(`${server.url}/health`)).json()).toEqual({ ok: true, tabs: 0, agent: { available: false, name: 'No agent', detail: 'none here' } });
     const client = new Client({ name: 'test-agent', version: '1.0.0' });
     await client.connect(new StreamableHTTPClientTransport(new URL(`${server.url}/mcp`)));

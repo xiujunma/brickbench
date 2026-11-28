@@ -1,16 +1,8 @@
-/** Connecting this tab to the agent bridge: where it is, when to connect, and remembering that. */
+/** Connecting the desktop app's window to its agent bridge: when to connect, and remembering that. */
 import type { AgentLink } from './link';
 
-export const AGENT_PORT = 7425;
 /** Set once the bridge has answered, so later visits reconnect by themselves. */
 export const REMEMBER_KEY = 'brickbench:agent:v1';
-
-/** The bridge on this computer: the default port, or ?agentPort= in the page's address. */
-export function bridgeUrl(search: string): string {
-  const asked = Number(new URLSearchParams(search).get('agentPort'));
-  const port = Number.isInteger(asked) && asked >= 1024 && asked <= 65_535 ? asked : AGENT_PORT;
-  return `ws://127.0.0.1:${port}/app`;
-}
 
 type Storage = Pick<globalThis.Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
