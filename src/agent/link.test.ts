@@ -58,7 +58,8 @@ function setup(
   return { link, sockets, socket, events, timers, state: () => link.store.getState() };
 }
 
-const hello: BridgeMessage = { kind: 'hello', version: '1.0.0', agent: { available: true, name: 'Claude Code 2.1' }, mcp: 'http://127.0.0.1:7425/mcp' };
+const COMMAND = 'claude mcp add brickbench -e ELECTRON_RUN_AS_NODE=1 -- /Applications/BrickBench.app/Contents/MacOS/BrickBench /agent/mcp.cjs';
+const hello: BridgeMessage = { kind: 'hello', version: '1.0.0', agent: { available: true, name: 'Claude Code 2.1' }, terminal: { command: COMMAND, open: false } };
 
 describe('the link to the agent bridge', () => {
   it('connects when asked, says this tab is in use, and learns which agent answers', () => {
@@ -69,10 +70,27 @@ describe('the link to the agent bridge', () => {
     expect(state().status).toBe('connecting');
     socket().emit('open');
     socket().deliver(hello);
-    expect(state()).toEqual({ status: 'connected', agent: { available: true, name: 'Claude Code 2.1' }, mcpUrl: 'http://127.0.0.1:7425/mcp' });
+    expect(state()).toEqual({ status: 'connected', agent: { available: true, name: 'Claude Code 2.1' }, terminal: { command: COMMAND, open: false } });
     expect(socket().sent).toEqual([{ kind: 'active' }]);
     link.markActive();
     expect(socket().sent).toHaveLength(2);
+  });
+
+  it('asks the bridge to let agents in a terminal in, and shows they are once it says so', () => {
+    const { link, socket, state } = setup();
+    // not connected: nothing to ask
+    expect(link.setTerminal(true)).toBe(false);
+    link.connect();
+    socket().emit('open');
+    // a terminal message before hello changes nothing: there is nothing to change yet
+    socket().deliver({ kind: 'terminal', open: true });
+    expect(state().terminal).toBeNull();
+    socket().deliver(hello);
+    expect(link.setTerminal(true)).toBe(true);
+    expect(socket().sent.at(-1)).toEqual({ kind: 'terminal', open: true });
+    expect(state().terminal?.open).toBe(false);
+    socket().deliver({ kind: 'terminal', open: true });
+    expect(state().terminal).toEqual({ command: COMMAND, open: true });
   });
 
   it('lets a tab in the background connect without taking over', () => {
@@ -132,7 +150,7 @@ describe('the link to the agent bridge', () => {
     socket().deliver(hello);
     socket().emit('close');
     // it was connected: try again, and show it
-    expect(state()).toEqual({ status: 'connecting', agent: null, mcpUrl: null });
+    expect(state()).toEqual({ status: 'connecting', agent: null, terminal: null });
     timers[0]?.();
     socket().emit('open');
     link.disconnect();

@@ -30,11 +30,14 @@ if (mode === 'early') {
 const prompt = (await new Response(Bun.stdin.stream()).text()).trim();
 
 async function build(): Promise<string> {
-  const config = JSON.parse(valueOf('--mcp-config') ?? '{}') as { mcpServers?: { brickbench?: { url?: string } } };
-  const url = config.mcpServers?.brickbench?.url;
-  if (!url) throw new Error('no brickbench MCP server in --mcp-config');
+  // --mcp-config takes a file or JSON, as Claude Code's does; the bridge hands a file, with its token in a header
+  const given = valueOf('--mcp-config') ?? '{}';
+  const text = given.trimStart().startsWith('{') ? given : await Bun.file(given).text();
+  const config = JSON.parse(text) as { mcpServers?: { brickbench?: { url?: string; headers?: Record<string, string> } } };
+  const server = config.mcpServers?.brickbench;
+  if (!server?.url) throw new Error('no brickbench MCP server in --mcp-config');
   const client = new Client({ name: 'fake-claude', version: '1.0.0' });
-  await client.connect(new StreamableHTTPClientTransport(new URL(url)));
+  await client.connect(new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers: server.headers ?? {} } }));
   // two calls, as a real agent makes: the user still undoes the whole request in one step
   const layers = [
     { bricks: [{ part: 'brick-2x4', color: 'Yellow', x: 0, y: 0, z: 0 }, { part: 'brick-2x4', color: 'Yellow', x: 0, y: 3, z: 0 }] },

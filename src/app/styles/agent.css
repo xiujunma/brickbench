@@ -137,6 +137,13 @@
   cursor: default;
 }
 
+.agent-terminal {
+  margin: 0 16px 10px;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
 .agent-terminal summary {
   color: var(--ink-2);
   font-weight: 600;
@@ -145,6 +152,15 @@
 
 .agent-terminal p {
   margin: 6px 0;
+}
+
+.agent-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 6px;
+  color: var(--ink);
+  cursor: pointer;
 }
 
 /* The conversation: requests as bubbles, replies as prose, actions as a build log. */

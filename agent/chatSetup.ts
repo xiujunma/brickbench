@@ -10,7 +10,7 @@ import { responsesApi } from './api/responses';
 import type { AppLink } from './appLink';
 import { unavailableRunner, type ChatRunner } from './chat';
 import { claudeEnv, claudeVersion, findClaude, findClaudeShim, type ClaudeLookup } from './claudeCli';
-import { createClaudeRunner } from './claudeRunner';
+import { createClaudeRunner, writeMcpConfig, type McpServerAccess } from './claudeRunner';
 import { chooseAgent, type ApiSettings } from './providers';
 import { budgetOf, readSetting } from './settings';
 
@@ -19,8 +19,8 @@ export interface ChatSetup {
   readonly lookup: ClaudeLookup;
   /** Runs the tools in BrickBench, for a model behind an API. */
   readonly link: Pick<AppLink, 'call'>;
-  /** The bridge's MCP server, which Claude Code builds through. */
-  readonly mcpUrl: string;
+  /** The bridge's MCP server, which Claude Code builds through, and the token the chat's agent shows it. */
+  readonly mcp: McpServerAccess;
   /** An empty folder for Claude Code to run in. */
   readonly workDir: string;
   /** What the chat says when Claude Code is not installed: how to try again differs in a terminal and in the app. */
@@ -63,7 +63,7 @@ async function claudeRunner(setup: ChatSetup): Promise<ChatRunner> {
   if ('failure' in answer) return unavailableRunner(`Claude Code is at ${command}, but it did not start: ${answer.failure}`);
   return createClaudeRunner({
     command: [command],
-    mcpUrl: setup.mcpUrl,
+    mcpConfig: await writeMcpConfig(setup.workDir, setup.mcp),
     workDir: setup.workDir,
     name: `Claude Code ${answer.version}`,
     model: readSetting(lookup.env, 'BRICKBENCH_AGENT_MODEL'),

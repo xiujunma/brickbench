@@ -11,7 +11,7 @@ import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { OPENABLE_EXTENSIONS } from '../src/core/io/openable';
 import { APP_ORIGIN, APP_SCHEME, CHANNELS, MAX_OPEN_BYTES, type MenuCommand, type OpenFilePayload, type SavedPayload } from '../src/desktop/protocol';
-import { createAgentHost, startDesktopBridge } from './agentHost';
+import { createAgentHost, MCP_SCRIPT, startDesktopBridge } from './agentHost';
 import { filesToOpen } from './launchFiles';
 import { menuTemplate } from './menu';
 import { resolveAppFile } from './webRoot';
@@ -25,7 +25,13 @@ const START_URL = DEV_URL ?? `${APP_ORIGIN}/index.html`;
 let window: BrowserWindow | null = null;
 /** The Agent panel's bridge: started when the panel connects, with this app's environment. */
 const agent = createAgentHost({
-  start: () => startDesktopBridge(process.env),
+  start: () =>
+    startDesktopBridge(process.env, {
+      folder: join(app.getPath('userData'), 'agent'),
+      // an AppImage's mount moves each time it opens; the AppImage itself stays put
+      executable: process.env['APPIMAGE'] ?? process.execPath,
+      serverScript: join(app.getAppPath(), MCP_SCRIPT),
+    }),
   channel: CHANNELS.agentEvent,
   report: (message) => void process.stderr.write(`BrickBench: ${message}\n`),
 });

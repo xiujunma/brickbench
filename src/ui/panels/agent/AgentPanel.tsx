@@ -14,10 +14,7 @@ const SUGGESTIONS = [
 ];
 
 /** Where to read about the desktop app, the only place the agent works. */
-export const DESKTOP_APP_URL = 'https://github.com/xiujunma/brickbench#desktop-app';
-
-/** The command that adds BrickBench to Claude Code, for the bridge's MCP server where the bridge says it is. */
-const mcpCommand = (mcpUrl: string): string => `claude mcp add --transport http brickbench ${mcpUrl}`;
+const DESKTOP_APP_URL = 'https://github.com/xiujunma/brickbench#desktop-app';
 
 function StatusLine({ link }: { readonly link: AgentLink }) {
   const status = useAgentLink((s) => s.status);
@@ -60,7 +57,6 @@ function BridgeHelp() {
 }
 
 function Welcome({ disabled }: { readonly disabled: boolean }) {
-  const mcpUrl = useAgentLink((s) => s.mcpUrl);
   return (
     <div className="agent-welcome">
       <p>Ask the agent to build in your model. You see every brick as it goes in, and you can undo anything it does.</p>
@@ -71,14 +67,31 @@ function Welcome({ disabled }: { readonly disabled: boolean }) {
           </button>
         ))}
       </div>
-      {mcpUrl && (
-        <details className="agent-terminal">
-          <summary>Build from a terminal instead</summary>
-          <p>Add BrickBench to Claude Code once, then ask it to build in BrickBench while the app is open:</p>
-          <code className="agent-command">{mcpCommand(mcpUrl)}</code>
-        </details>
-      )}
     </div>
+  );
+}
+
+/** Agents in a terminal: the switch that lets them in, and once it is on, how to add BrickBench to them. */
+function TerminalAgents({ link }: { readonly link: AgentLink }) {
+  const terminal = useAgentLink((s) => s.terminal);
+  if (!terminal) return null;
+  return (
+    <details className="agent-terminal">
+      <summary>Agents in a terminal</summary>
+      <label className="agent-check">
+        <input type="checkbox" checked={terminal.open} onChange={(event) => link.setTerminal(event.target.checked)} />
+        Let agents in a terminal build here
+      </label>
+      {terminal.open ? (
+        <>
+          <p>Add BrickBench to Claude Code once, then ask it to build in BrickBench while the app is open:</p>
+          <code className="agent-command">{terminal.command}</code>
+          <p>Other MCP clients start the same command.</p>
+        </>
+      ) : (
+        <p>They then get a key to build here, kept in a file only you can read, which changes whenever BrickBench opens.</p>
+      )}
+    </details>
   );
 }
 
@@ -157,6 +170,7 @@ function AgentChat({ link, onClose }: Props & { readonly link: AgentLink }) {
   return (
     <PanelShell onClose={onClose} actions={newChat}>
       <StatusLine link={link} />
+      {status === 'connected' && <TerminalAgents link={link} />}
       {status === 'unreachable' && <BridgeHelp />}
       {status === 'connected' && agent && !agent.available && (
         <div className="agent-help">

@@ -1,10 +1,16 @@
 import { mkdtemp, rm } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test';
 
 /** A packaged app to test instead of the built one, e.g. release/mac-arm64/BrickBench.app/Contents/MacOS/BrickBench. */
 const PACKAGED = process.env['BRICKBENCH_DESKTOP_APP'];
+
+/** The app's executable, in full as the app names itself: the packaged app's, or Electron's own (the electron package's default export is its path). */
+export function appExecutable(): string {
+  return PACKAGED ? resolve(PACKAGED) : (createRequire(import.meta.url)('electron') as string);
+}
 
 /** The chat's settings, every one given, so none comes from the shell running the tests: one set there could reach a real model, and spend money. */
 const NO_CHAT_SETTINGS: Readonly<Record<string, string>> = {

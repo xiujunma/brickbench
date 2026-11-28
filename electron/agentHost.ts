@@ -5,15 +5,17 @@
  * channels here); agents, Claude Code among them, reach its MCP server on
  * this computer. Nothing here needs Electron, so tests run it.
  */
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createAccess, type Access } from '../agent/access';
 import { createAppLink } from '../agent/appLink';
 import { createBridgeHandlers, type BridgeHandlers, type TabSocket } from '../agent/bridge';
 import { createChat } from '../agent/chatSetup';
 import { serveWithNode, type NodeServer } from '../agent/nodeServer';
 import { portOf, type Environment } from '../agent/settings';
 import { isConnectionId, MAX_AGENT_MESSAGE, type AgentLinkEvent } from '../src/desktop/protocol';
+import { claudeAddCommand } from './terminalCommand';
 
 export const NO_CLAUDE =
   'Claude Code is not installed on this computer, so the chat cannot run. Install it from https://code.claude.com, then click Disconnect and Connect here. Other MCP agents can still connect.';
@@ -24,42 +26,79 @@ export interface DesktopBridge {
   readonly url: string;
   /** For the person, when the bridge starts: settings it cannot keep, for one. */
   readonly notes: readonly string[];
-  /** Stops the agent at once, then the server. */
+  /** Stops the agent at once, lets agents in a terminal out, then stops the server. */
   stop(): Promise<void>;
 }
 
-/** Starts the bridge: its MCP server first, on this computer only, so Claude Code can be told where it is. */
-export async function startDesktopBridge(env: Environment): Promise<DesktopBridge> {
+export interface BridgeSetup {
+  /** The app's folder for the bridge, in its user data: the connection file for agents in a terminal, their setting, and their server. */
+  readonly folder: string;
+  /** The app's executable, which runs the server for agents in a terminal as plain Node. */
+  readonly executable: string;
+  /** That server, bundled (mcp.cjs, in the app): copied into the folder each time the bridge starts. */
+  readonly serverScript: string;
+}
+
+/** The server for agents in a terminal, in the app's folder for the bridge. */
+export const MCP_SCRIPT = 'mcp.cjs';
+
+/**
+ * Puts a fresh copy of the server for agents in a terminal beside the
+ * connection file, and says how to add it to Claude Code, or why it cannot:
+ * then the panel offers agents in a terminal nothing.
+ */
+async function terminalServer(setup: BridgeSetup): Promise<{ readonly command: string } | { readonly failure: string }> {
+  const script = join(setup.folder, MCP_SCRIPT);
+  try {
+    const source = await readFile(setup.serverScript);
+    await rm(script, { force: true });
+    await writeFile(script, source, { mode: 0o600 });
+  } catch (error: unknown) {
+    return { failure: `Agents in a terminal cannot connect: the server for them could not be put in place (${error instanceof Error ? error.message : String(error)}).` };
+  }
+  return { command: claudeAddCommand({ executable: setup.executable, script }, process.platform) };
+}
+
+/** Starts the bridge: its server first, on this computer only, so the chat's agent can be told where it is and with which token. */
+export async function startDesktopBridge(env: Environment, setup: BridgeSetup): Promise<DesktopBridge> {
   const workDir = await mkdtemp(join(tmpdir(), 'brickbench-agent-'));
   const cleanUp = (): Promise<void> => rm(workDir, { recursive: true, force: true }).catch(() => undefined);
   let handlers: BridgeHandlers | null = null;
   let server: NodeServer | null = null;
+  let access: Access | null = null;
   try {
     server = await serveWithNode((request) => (handlers ? handlers.fetch(request) : new Response('Starting.', { status: 503 })), portOf(env));
-    const mcpUrl = `${server.url}/mcp`;
+    access = await createAccess({ folder: setup.folder, url: server.url });
+    const terminal = await terminalServer(setup);
+    // with no server for them, and no switch in the panel, agents in a terminal stay out, however the box was left
+    if ('failure' in terminal) await access.close();
     const link = createAppLink();
-    const { runner, notes } = await createChat({
+    const chat = await createChat({
       lookup: { env, platform: process.platform, home: homedir(), cwd: process.cwd() },
       link,
-      mcpUrl,
+      mcp: { url: `${server.url}/mcp`, token: access.chatToken },
       workDir,
       noClaude: NO_CLAUDE,
       // its settings come from the app's environment, read again only when it opens
       restart: 'quit BrickBench and open it again',
     });
-    handlers = createBridgeHandlers(runner, { link, mcpUrl: () => mcpUrl });
+    const { runner } = chat;
+    handlers = createBridgeHandlers(runner, { access, link, ...('command' in terminal ? { terminalCommand: terminal.command } : {}) });
     const open = server;
+    const opened = access;
     return {
       handlers,
       url: open.url,
-      notes,
+      notes: 'failure' in terminal ? [...chat.notes, terminal.failure] : chat.notes,
       stop: async () => {
         runner.stop();
+        await opened.close().catch(() => undefined);
         await open.close();
         await cleanUp();
       },
     };
   } catch (error: unknown) {
+    await access?.close().catch(() => undefined);
     await server?.close();
     await cleanUp();
     throw error;

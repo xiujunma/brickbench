@@ -12,7 +12,7 @@ const FAKE_CLAUDE = join(import.meta.dir, 'fixtures', 'fakeClaude.ts');
 function fakeRunner(mode: string, extra: Partial<ClaudeRunnerOptions> = {}): ChatRunner {
   return createClaudeRunner({
     command: [process.execPath, FAKE_CLAUDE],
-    mcpUrl: 'http://127.0.0.1:1/mcp',
+    mcpConfig: '/nowhere/brickbench-mcp.json',
     workDir: mkdtempSync(join(tmpdir(), 'brickbench-agent-test-')),
     env: { FAKE_CLAUDE_MODE: mode },
     ...extra,
@@ -75,7 +75,7 @@ describe('running Claude Code for the chat', () => {
       ok: false,
       error: 'Claude Code stopped: Invalid API key · Please run /login',
     });
-    const missing = createClaudeRunner({ command: ['/nonexistent/claude'], mcpUrl: 'http://127.0.0.1:1/mcp', workDir: tmpdir() });
+    const missing = createClaudeRunner({ command: ['/nonexistent/claude'], mcpConfig: '/nowhere/brickbench-mcp.json', workDir: tmpdir() });
     expect((await ask(missing, 'Build', true)).at(-1)).toMatchObject({ type: 'done', ok: false, error: expect.stringContaining('Could not start Claude Code') });
   });
 
@@ -114,14 +114,15 @@ describe('running Claude Code for the chat', () => {
 
 describe('the Claude Code command line', () => {
   it('allows the BrickBench tools and nothing else, with the user’s login', () => {
-    const args = claudeArgs({ command: ['claude'], mcpUrl: 'http://127.0.0.1:7425/mcp', workDir: '/tmp', model: 'opus', maxBudgetUsd: 2 }, 'sess-9');
+    const args = claudeArgs({ command: ['claude'], mcpConfig: '/tmp/work/brickbench-mcp.json', workDir: '/tmp/work', model: 'opus', maxBudgetUsd: 2 }, 'sess-9');
     const after = (flag: string): string | undefined => args[args.indexOf(flag) + 1];
     expect(args).toContain('-p');
     expect(args).toContain('--restricted');
     expect(args).toContain('--strict-mcp-config');
     expect(args).not.toContain('--bare');
     expect(after('--tools')).toBe('');
-    expect(JSON.parse(after('--mcp-config') ?? '')).toEqual({ mcpServers: { brickbench: { type: 'http', url: 'http://127.0.0.1:7425/mcp' } } });
+    // a file, so the token in it is not in the arguments anyone can list
+    expect(after('--mcp-config')).toBe('/tmp/work/brickbench-mcp.json');
     expect(after('--allowedTools')).toBe('mcp__brickbench');
     expect(after('--permission-prompts')).toBe('none');
     expect(after('--output-format')).toBe('stream-json');

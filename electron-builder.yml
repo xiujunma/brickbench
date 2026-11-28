@@ -16,6 +16,9 @@ files:
   - package.json
   - main.cjs
   - preload.cjs
+  # the MCP server for agents in a terminal: the app's executable runs it as plain Node with
+  # ELECTRON_RUN_AS_NODE, so Electron's RunAsNode fuse must stay on (it is, by default)
+  - mcp.cjs
   - from: ../dist
     to: web
 # no dependencies to install, rebuild or collect: see the hook

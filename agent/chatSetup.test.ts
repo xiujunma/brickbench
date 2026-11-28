@@ -1,11 +1,13 @@
 import { afterAll, describe, expect, it } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAppLink } from './appLink';
 import { createChat, type ChatSetup } from './chatSetup';
+import { MCP_CONFIG_FILE } from './claudeRunner';
 
 const root = mkdtempSync(join(tmpdir(), 'brickbench-chat-setup-'));
+const TOKEN = 'a'.repeat(43);
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 const fakeClaude = join(root, 'claude');
@@ -15,17 +17,22 @@ chmodSync(fakeClaude, 0o755);
 const setup = (env: Record<string, string>): ChatSetup => ({
   lookup: { env, platform: process.platform, home: join(root, 'home'), cwd: root },
   link: createAppLink(),
-  mcpUrl: 'http://127.0.0.1:7425/mcp',
+  mcp: { url: 'http://127.0.0.1:7425/mcp', token: TOKEN },
   workDir: root,
   noClaude: 'Install Claude Code, then try again.',
   restart: 'try again',
 });
 
 describe('setting up the chat', () => {
-  it('runs Claude Code when it is installed, as its own version', async () => {
+  it('runs Claude Code when it is installed, as its own version, with the chat’s token in a file only the user can read', async () => {
     const chat = await createChat(setup({ BRICKBENCH_CLAUDE: fakeClaude }));
     expect(chat.runner.status()).toMatchObject({ available: true, name: 'Claude Code 9.9.9' });
     expect(chat.notes).toEqual([]);
+    const config = join(root, MCP_CONFIG_FILE);
+    expect(JSON.parse(readFileSync(config, 'utf8'))).toEqual({
+      mcpServers: { brickbench: { type: 'http', url: 'http://127.0.0.1:7425/mcp', headers: { Authorization: `Bearer ${TOKEN}` } } },
+    });
+    if (process.platform !== 'win32') expect(statSync(config).mode & 0o777).toBe(0o600);
   });
 
   it('says how to put it right when Claude Code is not installed', async () => {

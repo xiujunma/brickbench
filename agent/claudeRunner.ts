@@ -5,6 +5,8 @@
  * processes start it, so this runs in Bun and in the desktop app alike.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { AgentEvent } from '../src/agent/protocol';
 import type { AgentStatus, ChatRunner } from './chat';
 import { createStreamReader, type StreamReader } from './claudeStream';
@@ -16,11 +18,32 @@ const MAX_FAILURE = 600;
 /** How long Stop waits for Claude Code to exit before ending it outright. */
 const KILL_AFTER_MS = 3000;
 
+/** The bridge's MCP server, and the token that lets the chat's agent in. */
+export interface McpServerAccess {
+  /** Such as http://127.0.0.1:7425/mcp. */
+  readonly url: string;
+  readonly token: string;
+}
+
+export const MCP_CONFIG_FILE = 'brickbench-mcp.json';
+
+/**
+ * Writes the MCP config Claude Code reads: the bridge's server, with the
+ * chat's token, in a file only the user can read (not in its arguments,
+ * which anyone on the computer can list). Returns its path.
+ */
+export async function writeMcpConfig(folder: string, server: McpServerAccess): Promise<string> {
+  const path = join(folder, MCP_CONFIG_FILE);
+  const config = { mcpServers: { brickbench: { type: 'http', url: server.url, headers: { Authorization: `Bearer ${server.token}` } } } };
+  await writeFile(path, JSON.stringify(config), { mode: 0o600 });
+  return path;
+}
+
 export interface ClaudeRunnerOptions {
   /** How to start Claude Code, e.g. ['/opt/homebrew/bin/claude']; tests pass a fake. */
   readonly command: readonly string[];
-  /** The bridge's MCP endpoint, which Claude Code builds through. */
-  readonly mcpUrl: string;
+  /** The MCP config file (writeMcpConfig) naming the bridge's server, which Claude Code builds through. */
+  readonly mcpConfig: string;
   /** An empty folder to run in, so no project's files or CLAUDE.md come along. */
   readonly workDir: string;
   /** Shown in the chat, e.g. "Claude Code 2.1.323". */
@@ -32,7 +55,6 @@ export interface ClaudeRunnerOptions {
 }
 
 export function claudeArgs(options: ClaudeRunnerOptions, resume: string | null): string[] {
-  const mcpConfig = JSON.stringify({ mcpServers: { brickbench: { type: 'http', url: options.mcpUrl } } });
   return [
     '-p',
     '--output-format',
@@ -44,7 +66,7 @@ export function claudeArgs(options: ClaudeRunnerOptions, resume: string | null):
     '',
     '--strict-mcp-config',
     '--mcp-config',
-    mcpConfig,
+    options.mcpConfig,
     '--allowedTools',
     'mcp__brickbench',
     '--permission-prompts',
@@ -76,7 +98,7 @@ async function* lines(chunks: AsyncIterable<Uint8Array | string>): AsyncGenerato
 
 /** Why a run ended without a result, from what Claude Code printed. */
 function failure(stderr: string, code: number): string {
-  if (/unknown option/i.test(stderr)) return 'This Claude Code is too old for the chat: update it with `claude update`, then restart the bridge.';
+  if (/unknown option/i.test(stderr)) return 'This Claude Code is too old for the chat: update it with `claude update`, then ask again.';
   const last = stderr.trim().split('\n').filter(Boolean).slice(-3).join(' ').slice(-MAX_FAILURE);
   return last ? `Claude Code stopped: ${last}` : `Claude Code stopped unexpectedly (exit code ${code}).`;
 }

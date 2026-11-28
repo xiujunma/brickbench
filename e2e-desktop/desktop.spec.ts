@@ -1,9 +1,10 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { launchApp, type RunningApp } from './launch';
+import { claudeAddCommand } from '../electron/terminalCommand';
+import { appExecutable, launchApp, type RunningApp } from './launch';
 import { AGENT_PORT } from './ports';
 
 /** Two red bricks, stacked, as an LDraw file. */
@@ -44,8 +45,6 @@ test('chats with Claude Code in the Agent panel, with no bridge to start by hand
   await page.getByRole('button', { name: 'Agent', exact: true }).click();
   const panel = page.getByRole('complementary', { name: 'Agent' });
   await expect(panel.getByRole('status').first()).toHaveText(/Claude Code 0\.0\.0/);
-  // agents in a terminal are told where the app's MCP server is
-  await expect(panel).toContainText(`claude mcp add --transport http brickbench http://127.0.0.1:${AGENT_PORT}/mcp`);
   const prompt = panel.getByRole('textbox', { name: 'Ask the agent to build something' });
   await prompt.fill('Build a yellow tower');
   await prompt.press('Enter');
@@ -87,11 +86,32 @@ test('chats with Claude Code in the Agent panel, with no bridge to start by hand
   await expect(page.getByRole('button', { name: 'Agent', exact: true })).toBeFocused();
 });
 
+/** The text of a tool's reply. */
+const textOf = (result: Awaited<ReturnType<Client['callTool']>>): string => (result.content as { type: string; text?: string }[]).map((part) => part.text ?? '').join('');
+
 // the model is empty again, and the agent stays connected with the panel put away
-test('lets an agent in a terminal build in the app, and see the model, through MCP', async () => {
+test('lets agents in a terminal build in the app once the user lets them in, through its own MCP server', async () => {
+  // started as an agent's MCP client starts it, from the command the panel shows: the app's executable runs the server as plain Node
+  // the app names its folder by its real path (on a Mac, /var is a link to /private/var)
+  const script = join(await realpath(join(folder, 'profile')), 'agent', 'mcp.cjs');
   const client = new Client({ name: 'e2e-agent', version: '1.0.0' });
-  await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${AGENT_PORT}/mcp`)));
+  await client.connect(new StdioClientTransport({ command: appExecutable(), args: [script], env: { ...getDefaultEnvironment(), ELECTRON_RUN_AS_NODE: '1' } }));
+  const panel = page.getByRole('complementary', { name: 'Agent' });
+  const letIn = panel.getByRole('checkbox', { name: 'Let agents in a terminal build here' });
   try {
+    // not let in yet: the call says how, so the agent can tell the user
+    const refused = await client.callTool({ name: 'get_model', arguments: {} });
+    expect(refused.isError).toBe(true);
+    expect(textOf(refused)).toContain('Let agents in a terminal build here');
+
+    await page.getByRole('button', { name: 'Agent', exact: true }).click();
+    await panel.getByText('Agents in a terminal', { exact: true }).click();
+    await expect(letIn).not.toBeChecked();
+    await letIn.click();
+    await expect(letIn).toBeChecked();
+    // exactly the command to paste, which starts the server as this test did
+    await expect(panel.locator('.agent-command')).toHaveText(claudeAddCommand({ executable: appExecutable(), script }, process.platform));
+
     const placed = await client.callTool({
       name: 'place_bricks',
       arguments: { bricks: [{ part: 'brick-2x4', color: 'Blue', x: 0, y: 0, z: 0 }, { part: 'plate-2x2', color: 'White', x: 0, y: 3, z: 0 }] },
@@ -106,12 +126,22 @@ test('lets an agent in a terminal build in the app, and see the model, through M
 
     const model = await client.callTool({ name: 'get_model', arguments: {} });
     expect(JSON.parse((model.content as { text: string }[])[0]?.text ?? '{}')).toMatchObject({ brick_count: 2 });
+
+    // an agent without the token gets nowhere, even on this computer
+    const initialize = { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} };
+    expect((await fetch(`http://127.0.0.1:${AGENT_PORT}/mcp`, { method: 'POST', body: JSON.stringify(initialize) })).status).toBe(401);
+
+    // let out again: calls say so once more
+    await letIn.click();
+    await expect(letIn).not.toBeChecked();
+    expect((await client.callTool({ name: 'get_model', arguments: {} })).isError).toBe(true);
   } finally {
     await client.close();
   }
   // one call, one step to undo
   await page.getByRole('button', { name: 'Undo' }).click();
   await expect(page.getByTestId('status-counts')).toHaveText('0 bricks');
+  await page.keyboard.press('Escape');
 });
 
 test('opens a model file handed over by the desktop, as Finder does', async () => {

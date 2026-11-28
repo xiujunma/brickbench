@@ -30,6 +30,8 @@ async function buildDesktop(): Promise<void> {
   mkdirSync(APP_DIR, { recursive: true });
   await bundle('electron/main.ts', 'main.cjs');
   await bundle('electron/preload.ts', 'preload.cjs');
+  // the MCP server for agents in a terminal, which the app's executable runs as plain Node
+  await bundle('electron/mcp.ts', 'mcp.cjs');
   const own = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { readonly version: string; readonly description: string; readonly license: string };
   // a name of its own: electron-builder looks the app's dependencies up by name, and must not take
   // the web project's (bundled already) for them

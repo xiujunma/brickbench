@@ -106,6 +106,12 @@ export type ToolOutcome =
 
 const imageSchema = z.object({ data: z.string().max(12_000_000), mimeType: z.enum(['image/jpeg', 'image/png']) });
 
+/** A tool's outcome as it travels, checked on arrival: from the app's bridge to `BrickBench --mcp`. */
+export const toolOutcomeSchema: z.ZodType<ToolOutcome> = z.union([
+  z.object({ ok: z.literal(true), data: z.unknown(), image: imageSchema.optional() }),
+  z.object({ ok: z.literal(false), error: z.string().max(4000) }),
+]);
+
 /** The longest each field of an agent event may be. */
 const EVENT_LIMITS = { model: 80, text: 100_000, tool: 80, summary: 400, error: 2000 } as const;
 
@@ -146,11 +152,24 @@ export const bridgeMessageSchema = z.discriminatedUnion('kind', [
     kind: z.literal('hello'),
     version: z.string().max(40),
     agent: z.object({ available: z.boolean(), name: z.string().max(80), detail: z.string().max(400).optional() }),
-    /** Where agents in a terminal reach this bridge's MCP server: shown as a command to copy, so only a plain local address. */
-    mcp: z.string().regex(/^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d{1,5}\/mcp$/).optional(),
+    /**
+     * Agents in a terminal: whether they are let in, and the command that
+     * starts BrickBench as their MCP server (`BrickBench --mcp`), shown to copy.
+     */
+    terminal: z
+      .object({
+        command: z
+          .string()
+          .max(2000)
+          .regex(/^claude mcp add brickbench -e ELECTRON_RUN_AS_NODE=1 -- [^\r\n]+$/),
+        open: z.boolean(),
+      })
+      .optional(),
   }),
   z.object({ kind: z.literal('call'), id: z.string().min(1).max(64), tool: z.string().max(64), input: z.unknown() }),
   z.object({ kind: z.literal('agent'), event: agentEventSchema }),
+  /** Whether agents in a terminal are let in, once a change the app asked for is done. */
+  z.object({ kind: z.literal('terminal'), open: z.boolean() }),
 ]);
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>;
 
@@ -168,6 +187,8 @@ export const appMessageSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('stop') }),
   /** This tab is the one the user is looking at: calls go here. */
   z.object({ kind: z.literal('active') }),
+  /** Let agents in a terminal in, or out. */
+  z.object({ kind: z.literal('terminal'), open: z.boolean() }),
 ]);
 export type AppMessage = z.infer<typeof appMessageSchema>;
 

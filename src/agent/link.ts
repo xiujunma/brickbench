@@ -23,12 +23,18 @@ export interface AgentInfo {
   readonly detail?: string | undefined;
 }
 
+/** Agents in a terminal: whether the bridge lets them in, and the command that starts BrickBench as their MCP server. */
+export interface TerminalAccess {
+  readonly command: string;
+  readonly open: boolean;
+}
+
 export interface AgentLinkState {
   readonly status: LinkStatus;
   /** The agent behind the bridge's chat, once the bridge has said. */
   readonly agent: AgentInfo | null;
-  /** Where agents in a terminal reach the bridge's MCP server, once it has said. */
-  readonly mcpUrl: string | null;
+  /** Agents in a terminal, once the bridge has said; null where it offers them nothing. */
+  readonly terminal: TerminalAccess | null;
 }
 
 export interface AgentLinkDeps {
@@ -49,6 +55,8 @@ export interface AgentLink {
   send(message: AppMessage): boolean;
   /** Tells the bridge this is the tab the user is using, so agents build here. */
   markActive(): void;
+  /** Asks the bridge to let agents in a terminal in, or out; the state changes once it has. Says whether it was asked. */
+  setTerminal(open: boolean): boolean;
 }
 
 const FIRST_RETRY_MS = 2000;
@@ -65,7 +73,7 @@ function resultMessage(id: string, outcome: ToolOutcome): AppMessage {
 }
 
 export function createAgentLink(deps: AgentLinkDeps): AgentLink {
-  const store = createStore<AgentLinkState>(() => ({ status: 'off', agent: null, mcpUrl: null }));
+  const store = createStore<AgentLinkState>(() => ({ status: 'off', agent: null, terminal: null }));
   const schedule = deps.schedule ?? defaultSchedule;
   let socket: SocketLike | null = null;
   let open = false;
@@ -90,9 +98,12 @@ export function createAgentLink(deps: AgentLinkDeps): AgentLink {
     if (typeof data !== 'string') return;
     const message = parseMessage(bridgeMessageSchema, data);
     if (!message) return;
-    if (message.kind === 'hello') store.setState({ status: 'connected', agent: message.agent, mcpUrl: message.mcp ?? null });
+    if (message.kind === 'hello') store.setState({ status: 'connected', agent: message.agent, terminal: message.terminal ?? null });
     else if (message.kind === 'call') answer(message.id, message.tool, message.input);
-    else deps.onAgentEvent(message.event);
+    else if (message.kind === 'terminal') {
+      const { terminal } = store.getState();
+      if (terminal) store.setState({ terminal: { ...terminal, open: message.open } });
+    } else deps.onAgentEvent(message.event);
   };
 
   const attempt = (): void => {
@@ -115,7 +126,7 @@ export function createAgentLink(deps: AgentLinkDeps): AgentLink {
       const wasOpen = open;
       socket = null;
       open = false;
-      store.setState({ status: wasOpen ? 'connecting' : 'unreachable', agent: null, mcpUrl: null });
+      store.setState({ status: wasOpen ? 'connecting' : 'unreachable', agent: null, terminal: null });
       cancelRetry = schedule(attempt, retryMs);
       retryMs = Math.min(retryMs * 2, MAX_RETRY_MS);
     });
@@ -137,9 +148,10 @@ export function createAgentLink(deps: AgentLinkDeps): AgentLink {
       socket = null;
       open = false;
       current?.close();
-      store.setState({ status: 'off', agent: null, mcpUrl: null });
+      store.setState({ status: 'off', agent: null, terminal: null });
     },
     send,
     markActive: () => void send({ kind: 'active' }),
+    setTerminal: (open) => send({ kind: 'terminal', open }),
   };
 }

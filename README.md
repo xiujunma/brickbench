@@ -181,7 +181,7 @@ BrickBench also runs as a desktop app, built with [Electron](https://www.electro
 - **A native menu** with File, Edit and View. The keys work as in the browser: ⌘Z undoes in the scene, and undoes your typing in a text box.
 - **Saving** asks where to save, as other desktop apps do, then says where the file went (and nothing if you cancel).
 - **Your work stays in the app:** autosave, favourites and your parts lists are kept in the app's own storage, apart from your browser's.
-- **The agent works here, and only here** (see [Building with an AI agent](#building-with-an-ai-agent)): the app runs the agent bridge itself while the Agent panel is connected, and uses Claude Code if it is installed. It finds Claude Code where its installers put it, since an app opened from the Finder or the Start menu has no terminal's PATH; on Windows, that is the native installer's `claude.exe`. Agents in a terminal reach the app's MCP server at the address the Agent panel shows. Opened from a terminal, the app takes the agent's settings, such as `BRICKBENCH_AGENT_PROVIDER`.
+- **The agent works here, and only here** (see [Building with an AI agent](#building-with-an-ai-agent)): the app runs the agent bridge itself while the Agent panel is connected, and uses Claude Code if it is installed. It finds Claude Code where its installers put it, since an app opened from the Finder or the Start menu has no terminal's PATH; on Windows, that is the native installer's `claude.exe`. Agents in a terminal build here too, once you let them in from the Agent panel. Opened from a terminal, the app takes the agent's settings, such as `BRICKBENCH_AGENT_PROVIDER`.
 
 To run it from this repository, `bun run desktop` builds the web app and opens it in Electron (`bun scripts/desktop.ts start --skip-web` reuses the last build). To make an installer, `bun run desktop:dist` builds everything and writes it to `release/`: a `.dmg` on macOS, an installer on Windows and an AppImage on Linux. Build each on its own system; `bun scripts/desktop.ts dist --dir` makes just the app, unpacked, which is quicker to try. The installers aren't signed with a developer certificate yet (that needs an Apple Developer ID and a Windows code-signing certificate). The macOS app is signed ad hoc, so the first time you open a downloaded copy, macOS needs **right-click › Open**; Windows asks before running the installer.
 
@@ -221,13 +221,13 @@ BRICKBENCH_AGENT_PROVIDER=ollama BRICKBENCH_AGENT_MODEL=qwen3.5:9b /Applications
 
 Choose a model that handles tool calls well and can see pictures; small models on your computer manage simple builds. What you ask, and the model being built, go to the provider under your API key (with Ollama or LM Studio, only to wherever you run it). The bridge asks OpenAI and xAI not to store the conversation, and sends it whole with each request instead. There is no spending cap as there is for Claude Code; instead, a request stops after 60 rounds of tool calls.
 
-**From a terminal.** With the desktop app open and its Agent panel connected, add BrickBench to Claude Code once:
+**From a terminal.** Agents in a terminal can build in the desktop app once you let them in: in the Agent panel, open **Agents in a terminal** and tick **Let agents in a terminal build here**. The panel then shows the command that adds BrickBench to Claude Code, such as (on a Mac):
 
 ```bash
-claude mcp add --transport http brickbench http://127.0.0.1:7425/mcp
+claude mcp add brickbench -e ELECTRON_RUN_AS_NODE=1 -- /Applications/BrickBench.app/Contents/MacOS/BrickBench "$HOME/Library/Application Support/BrickBench/agent/mcp.cjs"
 ```
 
-then ask Claude Code to build something in BrickBench. Any MCP client can use the same address, which the Agent panel shows. Once the Agent panel has connected, the app connects by itself whenever it opens (until you click Disconnect).
+then ask Claude Code to build something in BrickBench. The app's own executable runs BrickBench's MCP server as plain Node, with no window, so there is nothing else to install; any MCP client can start the same command. The server finds the app through a file the app writes in its own folder, readable only by you, holding the bridge's address and a token: the token is new each time the app opens, and the file goes when you untick the box or close the app. While agents in a terminal are not let in, every call says how to let them in, so an agent can tell you. The app remembers the box, and once the Agent panel has connected, the app connects by itself whenever it opens (until you click Disconnect).
 
 **The tools agents get:**
 
@@ -246,7 +246,7 @@ then ask Claude Code to build something in BrickBench. Any MCP client can use th
 
 | Variable | What it sets |
 |---|---|
-| `BRICKBENCH_AGENT_PORT` | The bridge's port, 7425 by default; when another program has it, the app takes a free one, and the Agent panel shows which |
+| `BRICKBENCH_AGENT_PORT` | The bridge's port, 7425 by default; when another program has it, the app takes a free one (agents in a terminal find it through the connection file) |
 | `BRICKBENCH_AGENT_PROVIDER` | Who runs the chat's model: `claude` (Claude Code, the default), `openai`, `xai`, `openrouter`, `ollama`, `lmstudio` or `custom` |
 | `BRICKBENCH_AGENT_MODEL` | The model the chat uses: for Claude Code, such as `sonnet` or `opus` (its default otherwise); for the others, as the provider names it |
 | `BRICKBENCH_AGENT_BUDGET_USD` | For Claude Code, the most one chat request may spend: $5 unless you set it, or `none` for no cap |
@@ -255,7 +255,7 @@ then ask Claude Code to build something in BrickBench. Any MCP client can use th
 | `BRICKBENCH_AGENT_BASE_URL` | The API's address, ending in `/v1`: needed for `custom`, or to reach Ollama or LM Studio on another computer |
 | `BRICKBENCH_AGENT_API` | `responses` or `chat`, to override how the bridge talks to the API: OpenAI and xAI use the Responses API, the rest Chat Completions |
 
-The bridge listens on this computer only (127.0.0.1), answers only requests addressed to this computer (which stops DNS rebinding), and refuses every request that comes from a web page. While it runs, other programs on your computer can reach its MCP server, as with any MCP server on your computer.
+The bridge listens on this computer only (127.0.0.1), answers only requests addressed to this computer (which stops DNS rebinding), refuses every request that comes from a web page, and takes tool calls only with a token: the chat's own agent gets one from the app, in a file only you can read rather than on its command line, and agents in a terminal get theirs from the file above while you let them in. Each token lasts as long as the bridge.
 
 ## Scripts
 
@@ -385,7 +385,8 @@ src/
 scripts/ldraw/  the LDraw library converter (run straight from TypeScript by Bun)
 agent/        the agent bridge the desktop app runs: an MCP server for agents, the link to the
               app's window, and the chat's agent: Claude Code run headless, or a model behind an API (api/)
-electron/     the desktop app's main process and preload script, and the agent bridge it runs
+electron/     the desktop app's main process and preload script, the agent bridge it runs, and
+              the MCP server for agents in a terminal (mcp.ts, which the app's executable runs as Node)
 server/       the accounts and gallery API, as Cloudflare runs it, and on SQLite here (local.ts)
 functions/    the Cloudflare Pages Function that runs the API
 e2e/          Playwright tests (e2e-desktop/: the desktop app's)

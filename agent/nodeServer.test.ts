@@ -3,9 +3,12 @@ import { request as httpRequest } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { createAppLink } from './appLink';
-import { createBridgeHandlers } from './bridge';
+import { createBridgeHandlers, type BridgeAccess } from './bridge';
 import { unavailableRunner } from './chat';
 import { serveWithNode, type NodeServer } from './nodeServer';
+
+/** Lets every agent in: this is about serving the handlers, not about tokens (bridge.test.ts). */
+const EVERYONE: BridgeAccess = { allows: () => true, terminalOpen: false, setTerminal: async () => undefined };
 
 const servers: NodeServer[] = [];
 afterEach(async () => {
@@ -82,7 +85,7 @@ describe('serving the bridge with Node', () => {
 
   it('serves the bridge’s MCP server to agents, as the desktop app does', async () => {
     const link = createAppLink();
-    const handlers = createBridgeHandlers(unavailableRunner('none here'), { link });
+    const handlers = createBridgeHandlers(unavailableRunner('none here'), { link, access: EVERYONE });
     const server = await serve((request) => handlers.fetch(request), 0);
     expect(await (await fetch(`${server.url}/health`)).json()).toEqual({ ok: true, tabs: 0, agent: { available: false, name: 'No agent', detail: 'none here' } });
     const client = new Client({ name: 'test-agent', version: '1.0.0' });
